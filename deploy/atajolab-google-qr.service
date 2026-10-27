@@ -1,0 +1,26 @@
+[Unit]
+Description=AtajoLab Google QR
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=atajolab
+Group=atajolab
+WorkingDirectory=/opt/atajolab-google-qr
+Environment=NODE_ENV=production
+EnvironmentFile=/etc/atajolab-google-qr.env
+ExecStart=/usr/bin/node node_modules/next/dist/bin/next start --hostname 127.0.0.1 --port 3000
+Restart=on-failure
+RestartSec=5
+StartLimitIntervalSec=0
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/atajolab-google-qr/.next
+UMask=0077
+MemoryMax=2500M
+
+[Install]
+WantedBy=multi-user.target

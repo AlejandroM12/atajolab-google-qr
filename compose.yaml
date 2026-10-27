@@ -1,0 +1,25 @@
+# Base local de este proyecto. No reutiliza volúmenes ni contenedores de otros proyectos.
+name: atajolab-google-qr
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    container_name: atajolab-google-qr-postgres
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:54329:5432"
+    environment:
+      POSTGRES_USER: atajolab
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+      POSTGRES_DB: atajolab_google_qr
+    volumes:
+      - atajolab-google-qr-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U atajolab -d atajolab_google_qr"]
+      interval: 2s
+      timeout: 5s
+      retries: 20
+
+volumes:
+  atajolab-google-qr-pgdata:
+    name: atajolab-google-qr-pgdata

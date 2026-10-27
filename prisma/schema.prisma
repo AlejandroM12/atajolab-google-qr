@@ -1,0 +1,60 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+/// Solo un aviso de pago confirmado, del lado del servidor, puede salir de PENDING.
+enum OrderStatus {
+  PENDING
+  PAID
+  CANCELLED
+}
+
+model Order {
+  id                      String      @id
+  status                  OrderStatus @default(PENDING)
+  amountArs               Int
+  currency                String      @default("ARS")
+  artworkVersion          Int
+  artwork                 Json
+  createdAt               DateTime    @default(now())
+  updatedAt               DateTime    @updatedAt
+  deliveryKeyHash          String?
+  mercadoPagoPreferenceId  String?     @unique
+  mercadoPagoPaymentId     String?     @unique
+  mercadoPagoPaymentStatus String?
+  paymentCheckedAt         DateTime?
+  paidAt                   DateTime?
+  /// Correo normalizado. Los pedidos anteriores quedan en null.
+  buyerEmail               String?
+  accessLinks              DownloadAccessLink[]
+  accessCredentials        DownloadAccessCredential[]
+
+  @@index([buyerEmail])
+}
+
+/// El id es el hash del token. El token en claro no se guarda.
+model DownloadAccessLink {
+  tokenHash String    @id
+  orderId   String
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+  order     Order     @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([orderId, usedAt])
+}
+
+/// Clave extra de descarga. No reemplaza deliveryKeyHash del pedido.
+model DownloadAccessCredential {
+  keyHash   String   @id
+  orderId   String
+  createdAt DateTime @default(now())
+  order     Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([orderId])
+}
