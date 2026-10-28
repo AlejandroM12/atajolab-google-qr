@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import { artworkExportFormats, artworkTemplates, buildProductArtwork } from "./artwork.ts";
 import { assessContrast, contrastRatio } from "./color.ts";
-import { validateGoogleLink, type GoogleLinkGoal, type LinkIssue } from "./google-link.ts";
+import { linkIssueMessage, validateGoogleLink, type GoogleLinkGoal, type LinkIssue } from "./google-link.ts";
+import { guides } from "./product.ts";
 
 function expectOk(input: string, goal: GoogleLinkGoal, hostname: string) {
   const result = validateGoogleLink(input, goal);
@@ -84,6 +85,25 @@ expectIssue("https://maps.app.goo.gl/ab", "ubicacion", "incomplete-short-link");
 expectIssue("https://goo.gl/abcdEF12", "ubicacion", "unsupported-short-link");
 expectIssue(reviewUrl, "ubicacion", "review-instead-of-location");
 expectIssue("https://www.google.com/maps?q=test", "resena", "location-instead-of-review");
+assert.equal(
+  linkIssueMessage["location-instead-of-review"],
+  "Esta URL de Google Maps abre la ficha del negocio, aunque se vea el panel de reseñas. El enlace directo se copia en el Perfil de Empresa: Solicitar reseñas, también llamada Pedir reseñas u Obtener más reseñas, y después Copiar enlace.",
+);
+assert.equal(
+  guides.resena.note,
+  "En Google Maps, «Escribir una reseña» puede abrir un panel al costado sin cambiar la dirección del navegador. Copiar esa URL no crea el enlace directo de reseñas: abre la ficha del negocio.",
+);
+assert.deepEqual(guides.resena.steps, [
+  "Entrá al Perfil de Empresa de Google con la cuenta que administra la ficha.",
+  "Abrí Solicitar reseñas. En algunas cuentas se llama Pedir reseñas u Obtener más reseñas.",
+  "Tocá Copiar enlace.",
+  "Pegá ese enlace en el campo de abajo.",
+]);
+assert.equal(guides.resena.profileUrl, "https://business.google.com/");
+assert.deepEqual(guides.resena.examples, [
+  "https://g.page/r/…/review",
+  "https://search.google.com/local/writereview?placeid=…",
+]);
 expectIssue("https://maps.app.goo.gl/abcDEF12", "resena", "location-instead-of-review");
 expectIssue("https://g.page/r/CabcDEF123", "resena", "gpage-not-review");
 expectIssue("https://search.google.com/local/writereview", "resena", "missing-place-id");

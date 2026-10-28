@@ -374,12 +374,40 @@ export function QrStudio() {
           <h2 id="guia-enlace" className="text-base font-semibold">
             {guide.title}
           </h2>
+          <p className="mt-3 text-sm leading-relaxed text-muted">{guide.note}</p>
+          {guide.profileUrl ? (
+            <p className="mt-3 text-sm leading-relaxed">
+              <a
+                href={guide.profileUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="font-semibold text-accent-strong underline decoration-accent/40 underline-offset-2"
+              >
+                Abrir el Perfil de Empresa
+              </a>
+            </p>
+          ) : null}
           <ol className="mt-3 list-decimal space-y-2 pl-5 text-sm leading-relaxed">
             {guide.steps.map((step) => (
               <li key={step}>{step}</li>
             ))}
           </ol>
-          <p className="mt-3 text-sm leading-relaxed text-muted">{guide.note}</p>
+          <div className="mt-4 border-t border-line pt-4">
+            <p className="text-sm font-semibold">Formatos de referencia</p>
+            <p className="mt-1 text-sm leading-relaxed text-muted">
+              Sirven para reconocer el enlace. No son direcciones reales para copiar.
+            </p>
+            <ul className="mt-3 space-y-2">
+              {guide.examples.map((example) => (
+                <li
+                  key={example}
+                  className="break-all rounded-xl bg-background px-3 py-2 font-mono text-sm leading-relaxed"
+                >
+                  {example}
+                </li>
+              ))}
+            </ul>
+          </div>
         </section>
 
         <div>

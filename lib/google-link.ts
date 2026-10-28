@@ -152,7 +152,7 @@ export const linkIssueMessage: Record<LinkIssue, string> = {
   "review-instead-of-location":
     "Este enlace abre el formulario de reseña. Cambiá el objetivo a reseña, o pegá el enlace de la ubicación.",
   "location-instead-of-review":
-    "Este enlace abre una ubicación en Google Maps. No abre el formulario para escribir una reseña. Copiá el enlace desde “Pedir reseñas” en el Perfil de Empresa.",
+    "Esta URL de Google Maps abre la ficha del negocio, aunque se vea el panel de reseñas. El enlace directo se copia en el Perfil de Empresa: Solicitar reseñas, también llamada Pedir reseñas u Obtener más reseñas, y después Copiar enlace.",
   "not-review": "Este enlace de Google no abre el formulario para escribir una reseña.",
   "gpage-not-review":
     "Este enlace de g.page no termina en /review, así que no lo tomamos como formulario de reseña.",
