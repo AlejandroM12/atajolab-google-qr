@@ -29,7 +29,7 @@ export type LinkIssue =
   | "invalid-place-id";
 
 export type LinkResult =
-  | { ok: true; href: string; goal: GoogleLinkGoal }
+  | { ok: true; href: string; goal: GoogleLinkGoal; unverified?: boolean }
   | { ok: false; issue: LinkIssue };
 
 const MAX_URL_LENGTH = 1500;
@@ -220,7 +220,7 @@ function decision(kind: LinkKind, goal: GoogleLinkGoal, href: string): LinkResul
     return { ok: false, issue: "not-google" };
   }
 
-  if (kind.type === "review") return { ok: true, href, goal };
+  if (kind.type === "review") return { ok: true, href, goal, unverified: true };
   if (kind.type === "review-incomplete") return { ok: false, issue: kind.issue };
   if (
     kind.type === "location" ||

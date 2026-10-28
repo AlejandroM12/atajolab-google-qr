@@ -13,7 +13,7 @@ export function SiteFooter() {
           </div>
           <p className="mt-4 text-sm leading-relaxed text-muted">
             Herramienta para diseñar una tarjeta o un cartel a partir de un enlace de Google que pegás
-            vos. La vista previa se arma en tu navegador. Si continuás al pago, el pedido queda
+            vos. La vista previa usa la misma escena que la descarga. Si continuás al pago, el pedido queda
             pendiente hasta que Mercado Pago lo confirme. Esta versión no tiene cuentas ni habilita
             cobros reales.
           </p>

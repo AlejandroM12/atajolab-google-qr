@@ -14,11 +14,11 @@ export function Hero() {
             Para comercios y profesionales
           </p>
           <h1 className="mt-4 max-w-xl text-4xl font-semibold leading-[1.05] text-foreground sm:text-6xl">
-            Una pieza para tu ubicación o tus reseñas en Google
+            Un cartel o un sticker para pedir reseñas en Google
           </h1>
           <p className="mt-5 max-w-xl text-lg leading-relaxed text-muted">
-            Diseñá la tarjeta o el cartel completo, con el enlace oficial de Google Maps o el
-            formulario de reseña. La vista previa muestra la pieza entera y el QR se puede escanear.
+            Armá un QR que abre el formulario de reseña. También podés usarlo para la ubicación.
+            La vista previa es la pieza que después se descarga para imprimir.
           </p>
           <div className="mt-8 flex flex-col gap-3 sm:flex-row">
             <ButtonLink href="/crear">Diseñar la pieza</ButtonLink>
@@ -31,22 +31,21 @@ export function Hero() {
           <h2 className="text-lg font-semibold">Qué podés diseñar hoy</h2>
           <ul className="mt-4 space-y-3 text-sm leading-relaxed">
             <li className="rounded-2xl bg-ok-bg px-4 py-3">
-              <span className="block font-semibold text-accent-strong">Ubicación</span>
+              <span className="block font-semibold text-accent-strong">Reseña</span>
               <span className="mt-1 block text-foreground/80">
-                Un QR con el enlace de tu ficha o dirección en Google Maps.
+                Un cartel o un sticker cuyo QR abre el formulario para dejar una opinión.
               </span>
             </li>
             <li className="rounded-2xl bg-background px-4 py-3">
-              <span className="block font-semibold">Reseña</span>
+              <span className="block font-semibold">Ubicación</span>
               <span className="mt-1 block text-muted">
-                Un QR aparte, solo si pegás el enlace del formulario para escribir la reseña.
+                El mismo tipo de pieza, si el enlace es el de Google Maps.
               </span>
             </li>
           </ul>
           <p className="mt-4 text-sm leading-relaxed text-muted">
-            La vista previa muestra la tarjeta o el cartel terminados. Antes de pagar te pedimos un correo, sin
-            crear una cuenta. Podés dejar un pedido y seguir a Mercado Pago en modo de prueba. Si el pago queda
-            confirmado, descargás PNG, SVG y PDF desde el pedido. Esta versión no habilita cobros reales.
+            La vista previa es el archivo que se imprime. No incluye un chip. Antes de pagar te pedimos un correo,
+            sin crear una cuenta. El pago de prueba queda en Mercado Pago. Si se confirma, descargás PNG, SVG y PDF.
           </p>
         </aside>
       </Container>
