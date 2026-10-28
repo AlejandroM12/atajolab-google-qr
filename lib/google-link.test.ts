@@ -96,6 +96,28 @@ expectIssue("https://business.google.com/", "resena", "business-profile");
 expectIssue("https://www.google.com/maps?q=test%0a", "ubicacion", "unsafe-characters");
 expectIssue("   ", "ubicacion", "empty");
 expectIssue(`https://evil.com/maps?q=${encodeURIComponent(reviewUrl)}`, "resena", "not-google");
+expectIssue("https://maps.app.goo.gl/abcDEF12", "resena", "location-instead-of-review");
+expectIssue("https://goo.gl/maps/abcDEF12", "resena", "location-instead-of-review");
+expectIssue(
+  "https://www.google.com/maps/place/Local/@-34.6037,-58.3816,17z",
+  "resena",
+  "location-instead-of-review",
+);
+expectIssue(
+  `https://search.google.com/local/reviews?placeid=${placeId}`,
+  "resena",
+  "not-review",
+);
+
+const verifiedReview = validateGoogleLink(reviewUrl, "resena");
+assert.equal(verifiedReview.ok, true);
+if (verifiedReview.ok) assert.equal(verifiedReview.unverified, true);
+const verifiedPage = validateGoogleLink("https://g.page/r/CabcDEF123/review", "resena");
+assert.equal(verifiedPage.ok, true);
+if (verifiedPage.ok) assert.equal(verifiedPage.unverified, true);
+const verifiedLocation = validateGoogleLink("https://maps.app.goo.gl/abcDEF12", "ubicacion");
+assert.equal(verifiedLocation.ok, true);
+if (verifiedLocation.ok) assert.equal(verifiedLocation.unverified, undefined);
 
 for (const sneaky of [
   "https://www.google.com%2eevil.com/maps?q=1",

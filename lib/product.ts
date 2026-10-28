@@ -14,6 +14,23 @@ export const QR_SIZES = [
 
 export type QrSize = (typeof QR_SIZES)[number]["value"];
 
+export const objectives: Array<{
+  id: "review" | "location";
+  title: string;
+  description: string;
+}> = [
+  {
+    id: "review",
+    title: "Reseña en Google",
+    description: "El QR abre Google para que dejen una opinión sobre el negocio.",
+  },
+  {
+    id: "location",
+    title: "Ubicación en Google Maps",
+    description: "El QR abre el mapa para llegar al local.",
+  },
+];
+
 export const goals: Array<{
   id: GoogleLinkGoal;
   title: string;
@@ -68,10 +85,6 @@ export const upcoming = [
     detail: "Checkout Pro queda en modo de prueba. Los cobros de producción siguen deshabilitados.",
   },
   {
-    title: "Kits físicos con QR y NFC",
-    detail: "El mismo enlace en una pieza impresa y en una etiqueta NFC.",
-  },
-  {
     title: "Gestión de pedidos",
     detail: "Seguimiento de compras digitales y de kits físicos.",
   },
@@ -79,10 +92,11 @@ export const upcoming = [
 
 export const availableNow = [
   "Editor de la pieza completa, sin cuenta.",
-  "Tres plantillas: Minimal Elegance, Dark Premium y Brand Identity.",
-  "Título, subtítulo, colores, tipografía y logo opcional.",
-  "Frases para reseñas y para la ubicación en Google Maps.",
-  "Vista previa en vivo de la tarjeta o el cartel, con un QR escaneable.",
+  "Carteles A6 y stickers cuadrados para pedir reseñas en Google.",
+  "Tres plantillas: Review Clean, Review Dark y Review Brand.",
+  "Nombre del negocio, logo opcional y colores con contraste.",
+  "También puede armar un QR de ubicación, como uso secundario.",
+  "Vista previa de la misma pieza que se descarga en PNG, SVG y PDF.",
   "Control del enlace antes de armar el QR.",
   "Pedido pendiente, con el precio definido en el servidor.",
   "Pago de prueba con Mercado Pago, cuando hay credenciales de sandbox.",

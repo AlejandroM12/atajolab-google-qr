@@ -1,8 +1,10 @@
+import { isDatabaseUnavailable } from "@/lib/db-error";
+import { findOrder, findPaymentRecord, savePreferenceId } from "@/lib/orders";
 import { readOrderAccess } from "@/lib/payments/access";
 import { createPreferenceLimiter, sandboxCredentialState } from "@/lib/payments/checkout-policy";
 import { readAppOrigin, startCheckout } from "@/lib/payments/checkout-service";
 import { gatewayForRequest, paymentAccessToken } from "@/lib/payments/mercadopago";
-import { findPaymentRecord, savePreferenceId } from "@/lib/orders";
+import { compositionChecked, pieceComposes } from "@/lib/print/layout";
 
 const limiter = createPreferenceLimiter();
 
@@ -16,6 +18,20 @@ export async function POST(
 
   if (sandboxCredentialState(paymentAccessToken()) === "production") {
     console.error("checkout refused production-token");
+  }
+
+  try {
+    const stored = await findOrder(publicId);
+    if (
+      stored?.artwork &&
+      compositionChecked(stored.artwork) &&
+      !pieceComposes(stored.artwork)
+    ) {
+      return paymentError(409, "composition-invalid");
+    }
+  } catch (error) {
+    if (isDatabaseUnavailable(error)) return paymentError(503, "database-unavailable");
+    throw error;
   }
 
   const result = await startCheckout({

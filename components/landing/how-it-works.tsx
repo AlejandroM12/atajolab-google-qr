@@ -5,17 +5,17 @@ const steps = [
   {
     title: "Elegí el objetivo",
     detail:
-      "Ubicación en Google Maps o enlace para dejar una reseña. Pegá el enlace HTTPS oficial: el editor no mezcla los dos destinos.",
+      "Reseña en Google, o ubicación en el mapa. El objetivo define qué enlace aceptamos. No cambia la plantilla.",
   },
   {
-    title: "Elegí la plantilla",
+    title: "Elegí el formato y la plantilla",
     detail:
-      "Minimal Elegance, Dark Premium o Brand Identity. Escribí el título, el subtítulo y, si querés, sumá el logo.",
+      "Cartel A6 o sticker de 80 × 80 mm. Review Clean, Review Dark o Review Brand.",
   },
   {
     title: "Revisá la pieza completa",
     detail:
-      "La vista previa muestra la tarjeta o el cartel, no solo el QR. Escaneá el código para confirmar el enlace.",
+      "La vista previa es la misma escena que el PNG, el SVG y el PDF. El archivo se imprime: no trae un chip.",
   },
 ];
 

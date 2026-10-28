@@ -1,60 +1,41 @@
-import { templateSpec, type ProductArtwork, type ProductArtworkV1, type ProductArtworkV2 } from "@/lib/artwork";
+import { COMMERCIAL_ARTWORK_VERSION, COUNTER_ARTWORK_VERSION, PRESS_ARTWORK_VERSION, SIGNAGE_ARTWORK_VERSION, templateSpec, type ProductArtwork, type ProductArtworkV1, type ProductArtworkV2 } from "@/lib/artwork";
 import { isDarkColor } from "@/lib/color";
 import { readPngLogo } from "@/lib/logo-image";
 import type { QrSize } from "@/lib/product";
+import { layoutCommercial } from "@/lib/print/commercial";
+import { layoutCounter } from "@/lib/print/counter";
+import { layoutPress } from "@/lib/print/press";
+import { layoutSignage } from "@/lib/print/signage";
 import { measureText, type PrintFontRole } from "@/lib/print/fonts";
+import type { ArtworkScene, DrawCommand } from "@/lib/print/scene";
+
+export type { ArtworkScene, DrawCommand } from "@/lib/print/scene";
 
 export const PAPER = "#fffcf8";
 const INK = "#14221f";
 
-export type DrawCommand =
-  | { type: "rect"; x: number; y: number; w: number; h: number; fill: string; radius?: number; opacity?: number }
-  | {
-      type: "stroke";
-      x: number;
-      y: number;
-      w: number;
-      h: number;
-      color: string;
-      width: number;
-      radius?: number;
-      opacity?: number;
-    }
-  | {
-      type: "circle";
-      cx: number;
-      cy: number;
-      r: number;
-      fill?: string;
-      stroke?: string;
-      strokeWidth?: number;
-      opacity?: number;
-    }
-  | {
-      type: "text";
-      text: string;
-      x: number;
-      y: number;
-      width: number;
-      size: number;
-      role: PrintFontRole;
-      color: string;
-      align: "left" | "center";
-      letterSpacing?: number;
-      opacity?: number;
-    }
-  | { type: "image"; x: number; y: number; w: number; h: number; data: string; radius: number }
-  | { type: "qr"; x: number; y: number; size: number; foreground: string; background: string; href: string };
-
-export type ArtworkScene = {
-  widthMm: number;
-  heightMm: number;
-  clipRadius?: number;
-  commands: DrawCommand[];
-};
-
 export function layoutArtwork(artwork: ProductArtwork): ArtworkScene {
   if (!artwork.href) throw new Error("artwork-href");
+  if (artwork.version === PRESS_ARTWORK_VERSION) {
+    const composed = layoutPress(artwork);
+    if (!composed.ok) throw new Error("artwork-composition");
+    return composed.scene;
+  }
+  if (artwork.version === SIGNAGE_ARTWORK_VERSION) {
+    const composed = layoutSignage(artwork);
+    if (!composed.ok) throw new Error("artwork-composition");
+    return composed.scene;
+  }
+  if (artwork.version === COUNTER_ARTWORK_VERSION) {
+    const composed = layoutCounter(artwork);
+    if (!composed.ok) throw new Error("artwork-composition");
+    return composed.scene;
+  }
+  if (artwork.version === COMMERCIAL_ARTWORK_VERSION) {
+    const composed = layoutCommercial(artwork);
+    if (!composed.ok) throw new Error("artwork-composition");
+    return composed.scene;
+  }
   if (artwork.version === 2) return layoutStudio(artwork);
   paint(artwork.foreground);
   paint(artwork.background);
@@ -62,6 +43,24 @@ export function layoutArtwork(artwork: ProductArtwork): ArtworkScene {
   if (artwork.templateId === "tarjeta-resena") return reviewCard(artwork);
   if (artwork.templateId === "cartel-ubicacion") return locationSign(artwork);
   return sticker(artwork);
+}
+
+export function pieceComposes(artwork: ProductArtwork): boolean {
+  try {
+    layoutArtwork(artwork);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export function compositionChecked(artwork: ProductArtwork): boolean {
+  return (
+    artwork.version === COMMERCIAL_ARTWORK_VERSION ||
+    artwork.version === COUNTER_ARTWORK_VERSION ||
+    artwork.version === SIGNAGE_ARTWORK_VERSION ||
+    artwork.version === PRESS_ARTWORK_VERSION
+  );
 }
 
 function reviewCard(artwork: ProductArtworkV1): ArtworkScene {

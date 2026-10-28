@@ -1,5 +1,5 @@
 import { Prisma } from "@prisma/client";
-import { ARTWORK_VERSION, STUDIO_ARTWORK_VERSION } from "@/lib/artwork";
+import { ARTWORK_VERSION, COMMERCIAL_ARTWORK_VERSION, COUNTER_ARTWORK_VERSION, PRESS_ARTWORK_VERSION, SIGNAGE_ARTWORK_VERSION, STUDIO_ARTWORK_VERSION } from "@/lib/artwork";
 import { prisma } from "@/lib/db";
 import { orderStatuses, type OrderStatus } from "@/lib/delivery";
 import { readArtworkSnapshot, type OrderDraft } from "@/lib/order-draft";
@@ -38,7 +38,12 @@ export async function savePendingOrder(
     throw new Error("order-price");
   }
   if (
-    (draft.artwork.version !== ARTWORK_VERSION && draft.artwork.version !== STUDIO_ARTWORK_VERSION) ||
+    (draft.artwork.version !== ARTWORK_VERSION &&
+      draft.artwork.version !== STUDIO_ARTWORK_VERSION &&
+      draft.artwork.version !== COMMERCIAL_ARTWORK_VERSION &&
+      draft.artwork.version !== COUNTER_ARTWORK_VERSION &&
+      draft.artwork.version !== SIGNAGE_ARTWORK_VERSION &&
+      draft.artwork.version !== PRESS_ARTWORK_VERSION) ||
     !draft.artwork.href
   ) {
     throw new Error("order-artwork");

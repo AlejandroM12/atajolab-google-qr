@@ -8,6 +8,7 @@ export type LogoPrepareError = "type" | "size" | "read";
 
 export async function prepareLogoFile(
   file: File,
+  fit: "cover" | "contain" = "cover",
 ): Promise<{ ok: true; logo: ArtworkLogo } | { ok: false; error: LogoPrepareError }> {
   if (!ACCEPTED.has(file.type) || file.size < 32 || file.size > 2_000_000) {
     return { ok: false, error: file.size > 2_000_000 ? "size" : "type" };
@@ -25,7 +26,7 @@ export async function prepareLogoFile(
 
   try {
     for (const size of SIZES) {
-      const blob = await renderSquare(bitmap, size);
+      const blob = fit === "contain" ? await renderContained(bitmap, size) : await renderSquare(bitmap, size);
       if (!blob || blob.size > 160_000) continue;
       const data = await blobToBase64(blob);
       const logo = readPngLogo(data);
@@ -46,6 +47,23 @@ function magicMatches(type: string, header: Uint8Array): boolean {
     ascii(header, 0, 4) === "RIFF" &&
     ascii(header, 8, 4) === "WEBP"
   );
+}
+
+function renderContained(bitmap: ImageBitmap, maxSide: number): Promise<Blob | null> {
+  const longest = Math.max(bitmap.width, bitmap.height);
+  if (longest < 1) return Promise.resolve(null);
+  const scale = maxSide / longest;
+  const width = Math.round(bitmap.width * scale);
+  const height = Math.round(bitmap.height * scale);
+  if (width < 16 || height < 16 || width > 512 || height > 512) return Promise.resolve(null);
+
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+  const context = canvas.getContext("2d");
+  if (!context) return Promise.resolve(null);
+  context.drawImage(bitmap, 0, 0, width, height);
+  return new Promise((resolve) => canvas.toBlob((blob) => resolve(blob), "image/png"));
 }
 
 function renderSquare(bitmap: ImageBitmap, size: number): Promise<Blob | null> {

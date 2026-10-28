@@ -15,6 +15,7 @@ const errors: Record<string, string> = {
   "invalid-body": "La solicitud de pago no es válida.",
   "order-failed": "No se pudo preparar el pago.",
   "order-price": "El precio del pedido no coincide con el catálogo.",
+  "composition-invalid": "La pieza no entra en la plantilla. Volvé al editor y acortá el texto antes de pagar.",
   "not-found": "No encontramos el pedido.",
 };
 

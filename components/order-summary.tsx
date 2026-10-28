@@ -1,13 +1,16 @@
 import { ProductArtworkView } from "@/components/product-artwork";
+import { ScenePreview } from "@/components/scene-preview";
 import { StudioPiece } from "@/components/studio-piece";
 import { QrSlot } from "@/components/qr-slot";
 import { ButtonLink } from "@/components/button-link";
 import { OrderAccessLink } from "@/components/order-access-link";
 import { OrderPaymentActions } from "@/components/order-payment-actions";
-import { artworkExportFormats, templateSpec } from "@/lib/artwork";
+import { artworkExportFormats, signageFormatSpec, templateSpec } from "@/lib/artwork";
 import { formatArs } from "@/lib/pricing";
 import type { PaymentView } from "@/lib/payments/checkout-policy";
 import type { StoredOrder } from "@/lib/orders";
+import { pieceComposes } from "@/lib/print/layout";
+import { renderArtworkSvg } from "@/lib/print/preview";
 
 const viewLabel: Record<PaymentView, string> = {
   pending: "Pendiente de pago",
@@ -44,12 +47,30 @@ export function OrderSummary({
   downloads: boolean;
 }) {
   const spec = templateSpec(order.artwork.templateId);
-  const phrase = order.artwork.version === 2 ? order.artwork.subtitle : order.artwork.headline;
+  const phrase =
+    order.artwork.version === 1
+      ? order.artwork.headline
+      : order.artwork.version === 5 || order.artwork.version === 6
+        ? order.artwork.message
+        : order.artwork.subtitle;
+  const sceneVersion =
+    order.artwork.version === 3 || order.artwork.version === 4 || order.artwork.version === 5 || order.artwork.version === 6;
+  const printSize =
+    order.artwork.version === 5 || order.artwork.version === 6
+      ? signageFormatSpec(order.artwork.format)
+      : { widthMm: spec.widthMm, heightMm: spec.heightMm };
+  const compositionOk = !sceneVersion || pieceComposes(order.artwork);
+  const sceneSvg = sceneVersion && compositionOk ? safeScene(order.artwork) : null;
   const created = new Intl.DateTimeFormat("es-AR", {
     dateStyle: "long",
     timeStyle: "short",
   }).format(order.createdAt);
-  const canPay = sandboxReady && order.status === "PENDING" && (view === "pending" || view === "rejected");
+  const canPay =
+    sandboxReady &&
+    order.status === "PENDING" &&
+    (view === "pending" || view === "rejected") &&
+    compositionOk &&
+    (!sceneVersion || sceneSvg !== null);
   const canVerify = sandboxReady && view === "verifying";
 
   return (
@@ -72,7 +93,7 @@ export function OrderSummary({
           <div>
             <dt className="font-semibold">Pieza</dt>
             <dd className="mt-1 text-muted">
-              {spec.name} · {order.artwork.businessName}
+              {spec.name} · {order.artwork.businessName} · {printSize.widthMm} × {printSize.heightMm} mm
             </dd>
           </div>
           <div>
@@ -126,6 +147,11 @@ export function OrderSummary({
             </ButtonLink>
           </div>
         ) : null}
+        {sceneVersion && !compositionOk ? (
+          <p role="alert" className="mt-4 rounded-2xl bg-danger-bg px-4 py-3 text-sm leading-relaxed text-danger">
+            Esta pieza no entra en la plantilla. Volvé al editor y acortá el texto antes de pagar.
+          </p>
+        ) : null}
         {canPay ? <OrderPaymentActions publicId={order.publicId} mode="pay" /> : null}
         {canVerify ? <OrderPaymentActions publicId={order.publicId} mode="verify" /> : null}
         <div className="mt-8">
@@ -150,6 +176,12 @@ export function OrderSummary({
             }
           />
         </ProductArtworkView>
+      ) : (order.artwork.version === 3 || order.artwork.version === 4 || order.artwork.version === 5 || order.artwork.version === 6) && sceneSvg ? (
+        <ScenePreview svg={sceneSvg} />
+      ) : order.artwork.version === 3 || order.artwork.version === 4 || order.artwork.version === 5 || order.artwork.version === 6 ? (
+        <p role="alert" className="rounded-2xl bg-danger-bg px-4 py-6 text-sm leading-relaxed text-danger">
+          No se puede mostrar esta pieza porque el texto no entra en la plantilla.
+        </p>
       ) : (
         <StudioPiece artwork={order.artwork}>
           <QrSlot
@@ -169,4 +201,12 @@ export function OrderSummary({
       )}
     </div>
   );
+}
+
+function safeScene(artwork: StoredOrder["artwork"]): string | null {
+  try {
+    return renderArtworkSvg(artwork);
+  } catch {
+    return null;
+  }
 }
