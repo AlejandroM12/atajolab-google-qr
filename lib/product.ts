@@ -50,7 +50,7 @@ export const goals: Array<{
 
 export const guides: Record<
   GoogleLinkGoal,
-  { title: string; steps: string[]; examples: string[]; note: string }
+  { title: string; steps: string[]; examples: string[]; note: string; profileUrl?: string }
 > = {
   ubicacion: {
     title: "Cómo conseguir el enlace de ubicación",
@@ -67,15 +67,16 @@ export const guides: Record<
     title: "Cómo conseguir el enlace de reseña",
     steps: [
       "Entrá al Perfil de Empresa de Google con la cuenta que administra la ficha.",
-      "Buscá la opción Pedir reseñas u Obtener más reseñas.",
-      "Copiá el enlace que Google genera para escribir una reseña.",
-      "Pegalo abajo. No uses el enlace de Compartir del mapa.",
+      "Abrí Solicitar reseñas. En algunas cuentas se llama Pedir reseñas u Obtener más reseñas.",
+      "Tocá Copiar enlace.",
+      "Pegá ese enlace en el campo de abajo.",
     ],
     examples: [
       "https://g.page/r/…/review",
       "https://search.google.com/local/writereview?placeid=…",
     ],
-    note: "Un enlace de ubicación abre el mapa. No abre el formulario para escribir la reseña.",
+    note: "En Google Maps, «Escribir una reseña» puede abrir un panel al costado sin cambiar la dirección del navegador. Copiar esa URL no crea el enlace directo de reseñas: abre la ficha del negocio.",
+    profileUrl: "https://business.google.com/",
   },
 };
 
