@@ -18,8 +18,8 @@ import { reconcilePayment } from "@/lib/payments/checkout-service";
 import { paymentRuntime } from "@/lib/payments/mercadopago";
 
 export const metadata: Metadata = {
-  title: "Pedido",
-  description: "Resumen de un pedido de la pieza digital.",
+  title: "Tu compra",
+  description: "Estado de tu compra y descarga de los archivos para imprimir.",
 };
 
 type SearchParams = Record<string, string | string[] | undefined>;

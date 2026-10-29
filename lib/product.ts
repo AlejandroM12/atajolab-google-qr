@@ -21,13 +21,13 @@ export const objectives: Array<{
 }> = [
   {
     id: "review",
-    title: "Reseña en Google",
-    description: "El QR abre Google para que dejen una opinión sobre el negocio.",
+    title: "Recibir reseñas en Google",
+    description: "Tus clientes escanean el código y pueden dejar una opinión sobre su experiencia.",
   },
   {
     id: "location",
-    title: "Ubicación en Google Maps",
-    description: "El QR abre el mapa para llegar al local.",
+    title: "Compartir mi ubicación",
+    description: "Tus clientes escanean el código y encuentran tu negocio en Google Maps.",
   },
 ];
 
@@ -66,37 +66,17 @@ export const guides: Record<
   resena: {
     title: "Cómo conseguir el enlace de reseña",
     steps: [
-      "Entrá al Perfil de Empresa de Google con la cuenta que administra la ficha.",
-      "Abrí Solicitar reseñas. En algunas cuentas se llama Pedir reseñas u Obtener más reseñas.",
-      "Tocá Copiar enlace.",
-      "Pegá ese enlace en el campo de abajo.",
+      "Entrá al Perfil de Empresa de Google.",
+      "Buscá la opción para solicitar o compartir reseñas. En algunas cuentas se llama Solicitar reseñas, Pedir reseñas u Obtener más reseñas.",
+      "Copiá el enlace.",
+      "Pegá el enlace en AtajoLab.",
     ],
     examples: [
       "https://g.page/r/…/review",
       "https://search.google.com/local/writereview?placeid=…",
     ],
-    note: "En Google Maps, «Escribir una reseña» puede abrir un panel al costado sin cambiar la dirección del navegador. Copiar esa URL no crea el enlace directo de reseñas: abre la ficha del negocio.",
+    note: "Antes de continuar, comprobá que el enlace abra el formulario para dejar una reseña.",
     profileUrl: "https://business.google.com/",
   },
 };
 
-export const upcoming = [
-  {
-    title: "Gestión de pedidos",
-    detail: "Seguimiento de compras digitales y de kits físicos.",
-  },
-] as const;
-
-export const availableNow = [
-  "Editor de la pieza completa, sin cuenta.",
-  "Carteles A6 y stickers cuadrados para pedir reseñas en Google.",
-  "Cuatro plantillas: Clásico, Vivo, Nocturno y Mi negocio.",
-  "Nombre y logo opcionales. En Mi negocio, la franja se puede colorear si el contraste alcanza.",
-  "También puede armar un QR de ubicación, como uso secundario.",
-  "Vista previa de la misma pieza que se descarga en PNG, SVG y PDF.",
-  "Control del enlace antes de armar el QR.",
-  "Pedido pendiente, con el precio definido en el servidor.",
-  "Pago con Mercado Pago Checkout Pro. El pedido se acredita cuando la API confirma el pago.",
-  "Descarga de PNG, SVG y PDF cuando el pedido está pagado.",
-  "Enlace privado para recuperar las descargas desde otro dispositivo.",
-] as const;

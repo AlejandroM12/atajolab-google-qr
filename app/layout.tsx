@@ -28,7 +28,14 @@ export const metadata: Metadata = {
     template: "%s · AtajoLab Google QR",
   },
   description:
-    "Creá un QR con el enlace de tu ubicación en Google Maps o con el enlace para que tus clientes dejen una reseña. Vista previa escaneable, sin cuenta.",
+    "Creá un cartel o sticker QR para que tus clientes dejen una reseña en Google o encuentren tu negocio. Descargalo listo para imprimir.",
+  openGraph: {
+    title: "AtajoLab Google QR",
+    description:
+      "Creá un cartel o sticker QR para que tus clientes dejen una reseña en Google o encuentren tu negocio. Descargalo listo para imprimir.",
+    locale: "es_AR",
+    type: "website",
+  },
   applicationName: "AtajoLab Google QR",
 };
 

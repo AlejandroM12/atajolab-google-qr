@@ -28,7 +28,7 @@ export function SiteHeader() {
           <Suspense
             fallback={
               <ButtonLink href="/crear" className="h-10 px-4">
-                Diseñar
+                Crear mi cartel QR
               </ButtonLink>
             }
           >

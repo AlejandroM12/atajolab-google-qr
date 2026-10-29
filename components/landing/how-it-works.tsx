@@ -3,19 +3,16 @@ import { SectionHeading } from "@/components/section-heading";
 
 const steps = [
   {
-    title: "Elegí el objetivo",
-    detail:
-      "Reseña en Google, o ubicación en el mapa. El objetivo define qué enlace aceptamos. No cambia la plantilla.",
+    title: "Elegí",
+    detail: "Seleccioná si querés recibir reseñas en Google o compartir la ubicación de tu negocio.",
   },
   {
-    title: "Elegí el formato y la plantilla",
-    detail:
-      "Cartel A6 o sticker de 80 × 80 mm. Clásico, Vivo, Nocturno o Mi negocio.",
+    title: "Personalizá",
+    detail: "Elegí el diseño, el tamaño y el mensaje. También podés agregar el nombre y logo de tu negocio.",
   },
   {
-    title: "Revisá la pieza completa",
-    detail:
-      "La vista previa es la misma escena que el PNG, el SVG y el PDF. El archivo se imprime: no trae un chip.",
+    title: "Descargá",
+    detail: "Completá tu compra y descargá los archivos listos para imprimir.",
   },
 ];
 
@@ -24,7 +21,7 @@ export function HowItWorks() {
     <section id="como-funciona" className="scroll-mt-24 border-t border-line py-16 sm:py-20">
       <Container>
         <SectionHeading eyebrow="Uso" title="Cómo funciona">
-          Tres pasos, en el navegador. No hace falta crear una cuenta. El correo del pedido sirve para recuperar las descargas en otro dispositivo.
+          Tres pasos, sin crear una cuenta.
         </SectionHeading>
         <ol className="mt-10 grid gap-4 md:grid-cols-3">
           {steps.map((step, index) => (

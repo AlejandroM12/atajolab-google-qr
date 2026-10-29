@@ -9,16 +9,10 @@ export function SiteFooter() {
         <div className="max-w-xl">
           <div className="flex items-center gap-2.5">
             <LogoMark />
-            <p className="text-sm font-semibold">AtajoLab Google QR</p>
+            <p className="text-sm font-semibold">AtajoLab</p>
           </div>
           <p className="mt-4 text-sm leading-relaxed text-muted">
-            Herramienta para diseñar una tarjeta o un cartel a partir de un enlace de Google que pegás
-            vos. La vista previa usa la misma escena que la descarga. Si continuás al pago, el pedido queda
-            pendiente hasta que Mercado Pago lo confirme. Esta versión no tiene cuentas.
-          </p>
-          <p className="mt-3 text-sm leading-relaxed text-muted">
-            AtajoLab no está afiliado a Google. Google Maps y el Perfil de Empresa son servicios de
-            Google.
+            Creá carteles y stickers QR personalizados para tu negocio. Descargalos listos para imprimir.
           </p>
         </div>
         <nav aria-label="Pie de página" className="flex flex-col gap-2 text-sm font-semibold">
@@ -29,7 +23,7 @@ export function SiteFooter() {
             Formatos
           </Link>
           <Link href="/crear" className="hover:text-accent-strong">
-            Diseñar la pieza
+            Crear mi cartel QR
           </Link>
           <Link href="/recuperar" className="hover:text-accent-strong">
             Recuperar descargas
