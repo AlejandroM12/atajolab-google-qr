@@ -6,16 +6,19 @@ import { deliveryKeysMatch } from "@/lib/payments/access";
 import {
   amountsMatch,
   appOrigin,
+  credentialOwnerMatches,
+  credentialShape,
   isMercadoPagoCheckoutUrl,
+  MAX_RECONCILE_PAYMENTS,
   parseCheckoutBody,
   parsePaymentHint,
   paymentEnvironmentMode,
   priceIsCatalog,
-  sandboxCredentialState,
   type CheckoutBodyError,
 } from "@/lib/payments/checkout-policy";
 import { decidePayment, type PaymentEnvironment, type VerifiedPayment } from "@/lib/payments/decision";
 import type { CheckoutPreference, PaymentGateway } from "@/lib/payments/gateway";
+import type { AccountKind } from "@/lib/payments/test-accounts";
 
 const CHECKOUT_TITLE = "Pieza digital con QR";
 
@@ -64,13 +67,19 @@ export async function startCheckout(input: {
   gateway: PaymentGateway;
   limiter: Limiter;
   store: Pick<PaymentStore, "find" | "savePreference">;
+  environment?: string;
+  owner?: AccountKind | null;
 }): Promise<CheckoutResponse> {
   const bodyError = parseCheckoutBody(input.body);
   if (bodyError) return failure(400, bodyError);
   if (!isPublicId(input.publicId)) return failure(404, "not-found");
   if (!input.origin) return failure(503, "payments-not-configured");
 
-  if (sandboxCredentialState(input.accessToken) !== "ready") {
+  const environment = input.environment ?? process.env.MERCADOPAGO_ENV;
+  if (credentialShape(input.accessToken, environment) !== "ready") {
+    return failure(503, "payments-not-configured");
+  }
+  if (input.owner !== undefined && !credentialOwnerMatches(environment, input.owner)) {
     return failure(503, "payments-not-configured");
   }
 
@@ -140,7 +149,8 @@ export async function reconcilePayment(input: {
     return { ok: false, status: 403, error: "checkout-unauthorized" };
   }
   if (order.status !== "PENDING") return { ok: true, status: order.status };
-  if (sandboxCredentialState(input.accessToken) !== "ready") {
+  const environment = input.environment ?? process.env.MERCADOPAGO_ENV;
+  if (credentialShape(input.accessToken, environment) !== "ready") {
     return { ok: false, status: 503, error: "payments-not-configured" };
   }
 
@@ -160,6 +170,7 @@ export async function reconcilePayment(input: {
   const seen = new Set<string>();
   for (const payment of payments) {
     if (seen.has(payment.id)) continue;
+    if (seen.size >= MAX_RECONCILE_PAYMENTS) break;
     seen.add(payment.id);
     const decision = decidePayment(
       order,

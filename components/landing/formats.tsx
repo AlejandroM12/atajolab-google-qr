@@ -7,8 +7,8 @@ export function Formats() {
     <section id="formatos" className="scroll-mt-24 border-t border-line py-16 sm:py-20">
       <Container>
         <SectionHeading eyebrow="Formatos" title="Digital ahora. Kits físicos más adelante.">
-          Hoy podés diseñar tres plantillas, dejar un pedido y, si el pago queda confirmado, descargar
-          la pieza. Los kits con NFC todavía no están disponibles.
+          Hoy podés diseñar un cartel o un sticker, dejar un pedido y, si el pago queda confirmado,
+          descargar el archivo para imprimir. La descarga no incluye un chip NFC.
         </SectionHeading>
         <div className="mt-10 grid gap-4 lg:grid-cols-2">
           <article className="rounded-3xl border border-accent/30 bg-ok-bg p-6 sm:p-8">

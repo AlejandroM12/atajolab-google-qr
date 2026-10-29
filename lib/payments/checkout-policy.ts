@@ -3,6 +3,11 @@ import { PIECE_CURRENCY, PIECE_PRICE_ARS } from "@/lib/pricing";
 const WINDOW_MS = 15 * 60 * 1000;
 const MAX_PER_ORDER = 3;
 const MAX_GLOBAL = 30;
+const RECONCILE_PER_ORDER = 6;
+const RECONCILE_GLOBAL = 60;
+
+/** Payments classified on one reconciliation. Newer search results come first. */
+export const MAX_RECONCILE_PAYMENTS = 8;
 
 export type CheckoutBodyError = "invalid-body" | "unexpected-field";
 
@@ -45,19 +50,36 @@ export function paymentEnvironmentMode(
   return environment?.trim().toLowerCase() === "test" ? "test" : "production";
 }
 
-export function sandboxCredentialState(
+/**
+ * The APP_USR- prefix is shared by test and production Checkout Pro tokens.
+ * This check only rejects shapes that cannot belong to the selected mode.
+ * The account behind the token is verified with GET /users/me before a preference is created.
+ */
+export function credentialShape(
   accessToken: string | undefined,
   environment: string | undefined = process.env.MERCADOPAGO_ENV,
-): "ready" | "missing" | "production" {
+): "ready" | "missing" | "mismatch" {
   const token = accessToken?.trim() ?? "";
   const mode = environment?.trim().toLowerCase() ?? "";
 
   if (!token) return "missing";
-  if (mode === "production" || mode === "live") return "production";
+  if (mode === "production" || mode === "live") {
+    return token.startsWith("APP_USR-") ? "ready" : "mismatch";
+  }
   if (token.startsWith("TEST-")) return "ready";
   if (token.startsWith("APP_USR-") && mode === "test") return "ready";
 
-  return "production";
+  return "mismatch";
+}
+
+export function credentialOwnerMatches(
+  environment: string | undefined,
+  owner: "test-user" | "real" | "unverified" | null,
+): boolean {
+  const mode = environment?.trim().toLowerCase() ?? "";
+  if (mode === "production" || mode === "live") return owner === "real";
+  if (mode === "test") return owner === "test-user";
+  return false;
 }
 
 export function isMercadoPagoCheckoutUrl(value: string): boolean {
@@ -151,6 +173,31 @@ export function createPreferenceLimiter(now: () => number = Date.now) {
       const recent = (byOrder.get(publicId) ?? []).filter((hit) => moment - hit < WINDOW_MS);
 
       if (recent.length >= MAX_PER_ORDER || recentGlobal.length >= MAX_GLOBAL) {
+        byOrder.set(publicId, recent);
+        return false;
+      }
+
+      recent.push(moment);
+      globalHits.push(moment);
+      byOrder.set(publicId, recent);
+      return true;
+    },
+  };
+}
+
+export function createReconcileLimiter(now: () => number = Date.now) {
+  const byOrder = new Map<string, number[]>();
+  const globalHits: number[] = [];
+
+  return {
+    allow(publicId: string): boolean {
+      const moment = now();
+      const recentGlobal = globalHits.filter((hit) => moment - hit < WINDOW_MS);
+      globalHits.splice(0, globalHits.length, ...recentGlobal);
+
+      const recent = (byOrder.get(publicId) ?? []).filter((hit) => moment - hit < WINDOW_MS);
+
+      if (recent.length >= RECONCILE_PER_ORDER || recentGlobal.length >= RECONCILE_GLOBAL) {
         byOrder.set(publicId, recent);
         return false;
       }

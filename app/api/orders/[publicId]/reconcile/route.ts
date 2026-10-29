@@ -1,6 +1,6 @@
 import { readOrderAccess } from "@/lib/payments/access";
 import { reconcilePayment } from "@/lib/payments/checkout-service";
-import { gatewayForRequest, paymentAccessToken } from "@/lib/payments/mercadopago";
+import { paymentRuntime } from "@/lib/payments/mercadopago";
 import { applyVerifiedPayment, findPaymentRecord } from "@/lib/orders";
 
 export async function POST(
@@ -22,12 +22,13 @@ export async function POST(
     return paymentError(400, "invalid-body");
   }
 
+  const runtime = await paymentRuntime();
   const result = await reconcilePayment({
     publicId,
     body,
     deliveryKey: readOrderAccess(request.headers.get("cookie"), publicId),
-    accessToken: paymentAccessToken(),
-    gateway: gatewayForRequest(),
+    accessToken: runtime.token,
+    gateway: runtime.gateway,
     store: { find: findPaymentRecord, apply: applyVerifiedPayment },
   });
 

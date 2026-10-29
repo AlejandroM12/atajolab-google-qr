@@ -29,7 +29,7 @@ export type LinkIssue =
   | "invalid-place-id";
 
 export type LinkResult =
-  | { ok: true; href: string; goal: GoogleLinkGoal }
+  | { ok: true; href: string; goal: GoogleLinkGoal; unverified?: boolean }
   | { ok: false; issue: LinkIssue };
 
 const MAX_URL_LENGTH = 1500;
@@ -152,7 +152,7 @@ export const linkIssueMessage: Record<LinkIssue, string> = {
   "review-instead-of-location":
     "Este enlace abre el formulario de reseña. Cambiá el objetivo a reseña, o pegá el enlace de la ubicación.",
   "location-instead-of-review":
-    "Este enlace abre una ubicación en Google Maps. No abre el formulario para escribir una reseña. Copiá el enlace desde “Pedir reseñas” en el Perfil de Empresa.",
+    "Esta URL de Google Maps abre la ficha del negocio, aunque se vea el panel de reseñas. El enlace directo se copia en el Perfil de Empresa: Solicitar reseñas, también llamada Pedir reseñas u Obtener más reseñas, y después Copiar enlace.",
   "not-review": "Este enlace de Google no abre el formulario para escribir una reseña.",
   "gpage-not-review":
     "Este enlace de g.page no termina en /review, así que no lo tomamos como formulario de reseña.",
@@ -220,7 +220,7 @@ function decision(kind: LinkKind, goal: GoogleLinkGoal, href: string): LinkResul
     return { ok: false, issue: "not-google" };
   }
 
-  if (kind.type === "review") return { ok: true, href, goal };
+  if (kind.type === "review") return { ok: true, href, goal, unverified: true };
   if (kind.type === "review-incomplete") return { ok: false, issue: kind.issue };
   if (
     kind.type === "location" ||

@@ -1,36 +1,38 @@
 "use client";
 
-import { useId, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { StudioPiece } from "@/components/studio-piece";
-import { QrSlot, type QrPayload } from "@/components/qr-slot";
+import { ScenePreview } from "@/components/scene-preview";
+import { type QrPayload } from "@/components/qr-slot";
 import {
   BUSINESS_NAME_MAX,
-  SUBTITLE_MAX,
   artworkFonts,
-  buildStudioArtwork,
-  defaultHeadline,
-  phraseLibrary,
-  studioTemplates,
+  PRESS_ARTWORK_VERSION,
+  pressCopy,
+  signageFormats,
+  signageGoal,
+  signageTemplates,
   type ArtworkFontId,
   type ArtworkLogo,
-  type StudioTemplateId,
+  type SignageFormat,
+  type SignageObjective,
+  type SignageTemplateId,
 } from "@/lib/artwork";
 import { assessContrast, formatContrastRatio, isHexColor } from "@/lib/color";
 import {
   isIncompleteHttpsPrefix,
   linkIssueMessage,
   validateGoogleLink,
-  type GoogleLinkGoal,
   type LinkIssue,
 } from "@/lib/google-link";
 import { parseBuyerEmail } from "@/lib/buyer-email";
 import { prepareLogoFile } from "@/lib/logo-prepare";
+import { commercialIssueMessage, isCommercialIssue } from "@/lib/print/commercial-issues";
 import { formatArs, PIECE_PRICE_ARS } from "@/lib/pricing";
-import { QR_DEFAULTS, QR_SIZES, goals, guides, type QrSize } from "@/lib/product";
+import { QR_DEFAULTS, QR_SIZES, guides, objectives, type QrSize } from "@/lib/product";
 
 const palettes: Record<
-  StudioTemplateId,
+  SignageTemplateId,
   {
     surface: string;
     ink: string;
@@ -40,58 +42,61 @@ const palettes: Record<
     fontId: ArtworkFontId;
   }
 > = {
-  "minimal-elegance": {
-    surface: "#f7f4ee",
-    ink: "#1c1915",
-    accent: "#8d7350",
-    foreground: "#1c1915",
+  "review-clean": {
+    surface: "#ffffff",
+    ink: "#202124",
+    accent: "#1a73e8",
+    foreground: "#202124",
     background: "#ffffff",
-    fontId: "fraunces",
-  },
-  "dark-premium": {
-    surface: "#161311",
-    ink: "#f6f1e7",
-    accent: "#c6a36a",
-    foreground: "#1a1612",
-    background: "#f7f1e6",
     fontId: "sora",
   },
-  "brand-identity": {
-    surface: "#fbfaf7",
-    ink: "#14221f",
+  "review-dark": {
+    surface: "#101114",
+    ink: "#f5f6f7",
+    accent: "#d2d6dc",
+    foreground: "#101114",
+    background: "#ffffff",
+    fontId: "sora",
+  },
+  "review-brand": {
+    surface: "#f7f5f2",
+    ink: "#1a1a1a",
     accent: "#0f6e62",
-    foreground: "#14221f",
+    foreground: "#1a1a1a",
     background: "#ffffff",
-    fontId: "sora",
+    fontId: "source",
   },
 };
 
 export function QrStudio() {
-  const [goal, setGoal] = useState<GoogleLinkGoal>("ubicacion");
+  const [objective, setObjective] = useState<SignageObjective>("review");
   const [url, setUrl] = useState("");
   const [touched, setTouched] = useState(false);
-  const [templateId, setTemplateId] = useState<StudioTemplateId>("minimal-elegance");
+  const [formatId, setFormatId] = useState<SignageFormat>("poster");
+  const [templateId, setTemplateId] = useState<SignageTemplateId>("review-clean");
   const [businessName, setBusinessName] = useState("");
   const [email, setEmail] = useState("");
-  const [subtitle, setSubtitle] = useState(defaultHeadline("ubicacion"));
-  const [subtitleEdited, setSubtitleEdited] = useState(false);
-  const [fontId, setFontId] = useState<ArtworkFontId>(palettes["minimal-elegance"].fontId);
-  const [surface, setSurface] = useState(palettes["minimal-elegance"].surface);
-  const [ink, setInk] = useState(palettes["minimal-elegance"].ink);
-  const [accent, setAccent] = useState(palettes["minimal-elegance"].accent);
-  const [foreground, setForeground] = useState(palettes["minimal-elegance"].foreground);
-  const [background, setBackground] = useState(palettes["minimal-elegance"].background);
+  const [reviewChecked, setReviewChecked] = useState(false);
+  const [fontId, setFontId] = useState<ArtworkFontId>(palettes["review-clean"].fontId);
+  const [surface, setSurface] = useState(palettes["review-clean"].surface);
+  const [ink, setInk] = useState(palettes["review-clean"].ink);
+  const [accent, setAccent] = useState(palettes["review-clean"].accent);
+  const [foreground, setForeground] = useState(palettes["review-clean"].foreground);
+  const [background, setBackground] = useState(palettes["review-clean"].background);
   const [size, setSize] = useState<QrSize>(QR_DEFAULTS.size);
   const [logo, setLogo] = useState<ArtworkLogo | null>(null);
   const [logoError, setLogoError] = useState<string | null>(null);
   const [logoBusy, setLogoBusy] = useState(false);
   const [resetToken, setResetToken] = useState(0);
-  const [qrPhase, setQrPhase] = useState<"idle" | "loading" | "ready" | "error">("idle");
+  const [previewSvg, setPreviewSvg] = useState<string | null>(null);
+  const [previewKeyReady, setPreviewKeyReady] = useState<string | null>(null);
+  const [compositionIssue, setCompositionIssue] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [orderError, setOrderError] = useState<string | null>(null);
   const logoInput = useRef<HTMLInputElement>(null);
   const router = useRouter();
 
+  const goal = signageGoal(objective);
   const result = useMemo(() => validateGoogleLink(url, goal), [url, goal]);
   const qrContrast = assessContrast(foreground, background);
   const textContrast = assessContrast(ink, surface);
@@ -108,46 +113,103 @@ export function QrStudio() {
     };
   }, [result, qrContrast.sufficient, foreground, background, size]);
 
-  const artwork = useMemo(
-    () =>
-      buildStudioArtwork({
-        templateId,
-        goal,
-        businessName,
-        subtitle,
-        fontId,
-        ink,
-        accent,
-        surface,
-        foreground,
-        background,
-        qrSize: size,
-        href: payload?.href ?? null,
-        logo,
-      }),
-    [templateId, goal, businessName, subtitle, fontId, ink, accent, surface, foreground, background, size, payload, logo],
-  );
-
   const nameReady = businessName.trim().length > 0;
-  const subtitleReady = subtitle.trim().length > 0;
   const emailReady = parseBuyerEmail(email) !== null;
+  const reviewReady = objective !== "review" || reviewChecked;
+  const previewKey =
+    payload && nameReady && textContrast.sufficient
+      ? JSON.stringify({
+          version: PRESS_ARTWORK_VERSION,
+          objective,
+          url,
+          businessName,
+          logo: logo ? { data: logo.data } : null,
+          format: formatId,
+          templateId,
+          fontId,
+          ink,
+          accent,
+          surface,
+          foreground,
+          background,
+          qrSize: size,
+        })
+      : "";
+  const previewCurrent = previewKey.length > 0 && previewKey === previewKeyReady;
+  const shownSvg = previewCurrent ? previewSvg : null;
+  const shownIssue = previewCurrent ? compositionIssue : null;
+  const compositionReady = shownSvg !== null && shownIssue === null;
   const canOrder =
-    Boolean(payload) && nameReady && subtitleReady && emailReady && textContrast.sufficient && !submitting && !logoBusy;
-  const checkoutHint = !nameReady
-    ? "Escribí el nombre del negocio para crear el pedido."
-    : !subtitleReady
-      ? "Elegí o escribí el subtítulo de la pieza."
-      : !emailReady
-        ? email.trim().length === 0
-          ? "Dejá un correo para recuperar las descargas en otro dispositivo."
-          : "Revisá el correo. Tiene que ser una dirección válida."
-        : !textContrast.sufficient
-        ? "El título y el fondo de la pieza necesitan más contraste."
-        : !payload
-          ? "El pedido se habilita cuando el enlace es válido y el QR tiene contraste."
-          : "El pedido queda pendiente hasta que el pago de prueba quede confirmado.";
+    Boolean(payload) &&
+    nameReady &&
+    emailReady &&
+    reviewReady &&
+    textContrast.sufficient &&
+    compositionReady &&
+    !submitting &&
+    !logoBusy;
+  const checkoutHint = shownIssue
+    ? shownIssue
+    : !nameReady
+      ? "Escribí el nombre del negocio para crear el pedido."
+      : !reviewReady
+        ? "Abrí el enlace y confirmá que muestra el formulario de reseña."
+        : !emailReady
+          ? email.trim().length === 0
+            ? "Dejá un correo para recuperar las descargas en otro dispositivo."
+            : "Revisá el correo. Tiene que ser una dirección válida."
+          : !textContrast.sufficient
+            ? "El título y el fondo de la pieza necesitan más contraste."
+            : !payload
+              ? "El pedido se habilita cuando el enlace es válido y el QR tiene contraste."
+              : !previewCurrent
+                ? "Estamos comprobando que el texto entre en la plantilla."
+                : "El pedido queda pendiente hasta que Mercado Pago confirme el pago.";
 
-  function chooseTemplate(next: StudioTemplateId) {
+  useEffect(() => {
+    if (!previewKey) return;
+    const key = previewKey;
+    const controller = new AbortController();
+    let cancelled = false;
+    const timer = window.setTimeout(() => {
+      void fetch("/api/artwork/preview", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        signal: controller.signal,
+        body: key,
+      })
+        .then(async (response) => {
+          if (cancelled) return;
+          const body = (await response.json()) as { svg?: unknown; error?: unknown };
+          if (!response.ok || typeof body.svg !== "string") {
+            const code = typeof body.error === "string" ? body.error : "composition";
+            setPreviewSvg(null);
+            setCompositionIssue(
+              isCommercialIssue(code) ? commercialIssueMessage(code) : "No pudimos armar la vista previa de la pieza.",
+            );
+            setPreviewKeyReady(key);
+            return;
+          }
+          setPreviewSvg(body.svg);
+          setCompositionIssue(null);
+          setPreviewKeyReady(key);
+        })
+        .catch((error: unknown) => {
+          if (cancelled || (error instanceof DOMException && error.name === "AbortError")) return;
+          setPreviewSvg(null);
+          setCompositionIssue("No pudimos armar la vista previa de la pieza.");
+          setPreviewKeyReady(key);
+        });
+    }, 220);
+
+    return () => {
+      cancelled = true;
+      controller.abort();
+      window.clearTimeout(timer);
+    };
+  }, [previewKey]);
+
+  function chooseTemplate(next: SignageTemplateId) {
     setTemplateId(next);
     const palette = palettes[next];
     setSurface(palette.surface);
@@ -163,7 +225,7 @@ export function QrStudio() {
     if (!file) return;
     setLogoError(null);
     setLogoBusy(true);
-    const prepared = await prepareLogoFile(file);
+    const prepared = await prepareLogoFile(file, "contain");
     setLogoBusy(false);
     if (!prepared.ok) {
       setLogoError(logoErrorMessage(prepared.error));
@@ -181,11 +243,13 @@ export function QrStudio() {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
-          goal,
+          version: PRESS_ARTWORK_VERSION,
+          objective,
           url,
-          templateId,
           businessName,
-          subtitle,
+          logo: logo ? { data: logo.data } : null,
+          format: formatId,
+          templateId,
           fontId,
           ink,
           accent,
@@ -193,8 +257,8 @@ export function QrStudio() {
           foreground,
           background,
           qrSize: size,
-          logo: logo ? { data: logo.data } : null,
           email,
+          reviewChecked,
         }),
       });
       const body = (await response.json()) as { publicId?: unknown; error?: unknown };
@@ -212,34 +276,41 @@ export function QrStudio() {
   }
 
   const guide = guides[goal];
-  const previewMessage =
-    result.ok && !qrContrast.sufficient
+  const previewMessage = shownIssue
+    ? shownIssue
+    : result.ok && !qrContrast.sufficient
       ? "El contraste del QR no alcanza. Oscurecé los módulos o aclará su fondo."
       : !textContrast.sufficient
         ? "El título no se distingue del fondo de la pieza."
-        : qrPhase === "error"
-          ? "No se pudo armar el QR. Si el enlace es muy largo, copiá el enlace corto de Compartir."
-          : qrPhase === "ready"
-            ? "Vista previa de la pieza, lista para escanear."
+        : shownSvg
+          ? "Esta vista es la misma pieza que se exporta en PNG, SVG y PDF."
+          : previewKey
+            ? "Estamos armando la pieza con la tipografía de impresión."
             : "La pieza muestra el QR cuando el enlace es válido.";
 
   return (
     <div className="grid items-start gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(18rem,24rem)]">
-      <div className="order-1 lg:sticky lg:top-24 lg:order-2">
+      <div className="order-2 lg:sticky lg:top-24">
         <section aria-labelledby="vista-previa-title" className="rounded-[2rem] border border-line bg-card p-4 shadow-sm sm:p-6">
           <div className="flex items-baseline justify-between gap-3">
             <h2 id="vista-previa-title" className="text-base font-semibold">
               Pieza completa
             </h2>
-            <p className="text-xs text-muted">{studioTemplates.find((item) => item.id === templateId)?.name}</p>
+            <p className="text-xs text-muted">
+              {signageTemplates.find((item) => item.id === templateId)?.name} · {signageFormats.find((item) => item.id === formatId)?.widthMm} × {signageFormats.find((item) => item.id === formatId)?.heightMm} mm
+            </p>
           </div>
           <p aria-live="polite" className="mt-2 min-h-10 text-sm leading-relaxed text-muted">
             {previewMessage}
           </p>
           <div className="mt-4 rounded-[1.6rem] bg-[radial-gradient(circle_at_center,#efe7d8,transparent_70%)] px-3 py-8">
-            <StudioPiece artwork={artwork}>
-              <QrSlot payload={payload} onPhase={setQrPhase} />
-            </StudioPiece>
+            {shownSvg ? (
+              <ScenePreview svg={shownSvg} />
+            ) : (
+              <p className="mx-auto max-w-xs py-16 text-center text-sm leading-relaxed text-muted">
+                La vista previa aparece cuando el enlace es válido y el texto entra en la plantilla.
+              </p>
+            )}
           </div>
         </section>
         {result.ok ? (
@@ -250,48 +321,24 @@ export function QrStudio() {
         ) : null}
       </div>
 
-      <div className="order-2 space-y-6 lg:order-1">
+      <div className="order-1 space-y-6">
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.18em] text-accent">Editor</p>
-          <h1 className="mt-3 max-w-2xl text-4xl font-semibold leading-tight sm:text-5xl">Diseñá la pieza</h1>
+          <h1 className="mt-3 max-w-2xl text-4xl font-semibold leading-tight sm:text-5xl">Diseñá el cartel o el sticker</h1>
           <p className="mt-4 max-w-2xl text-lg leading-relaxed text-muted">
-            Elegí una plantilla, escribí el texto y mirá la tarjeta o el cartel completo, con el QR integrado.
+            El objetivo define el enlace. La plantilla solo cambia el dibujo.
           </p>
         </div>
         <fieldset>
-          <legend className="text-sm font-semibold">Plantilla</legend>
-          <div className="mt-3 grid gap-3 sm:grid-cols-3">
-            {studioTemplates.map((template) => {
-              const selected = templateId === template.id;
-              return (
-                <label
-                  key={template.id}
-                  className={`cursor-pointer rounded-2xl border p-3 ${
-                    selected ? "border-accent bg-ok-bg" : "border-line bg-card"
-                  }`}
-                >
-                  <input
-                    type="radio"
-                    name="plantilla"
-                    value={template.id}
-                    checked={selected}
-                    onChange={() => chooseTemplate(template.id)}
-                    className="sr-only"
-                  />
-                  <TemplateThumb id={template.id} />
-                  <span className="mt-3 block text-sm font-semibold">{template.name}</span>
-                  <span className="mt-1 block text-xs leading-relaxed text-muted">{template.description}</span>
-                </label>
-              );
-            })}
-          </div>
-        </fieldset>
-
-        <fieldset>
-          <legend className="text-sm font-semibold">Para qué es el QR</legend>
+          <legend className="text-sm font-semibold">Qué abre el QR</legend>
+          <p className="mt-2 text-sm leading-relaxed text-muted">
+            {objective === "review"
+              ? "Para reseñas, el QR lleva a Google para dejar una opinión. No pide una valoración ni solo comentarios positivos."
+              : "Para ubicación, el QR abre el mapa. No abre el formulario de reseña."}
+          </p>
           <div className="mt-3 grid gap-3 sm:grid-cols-2">
-            {goals.map((item) => {
-              const selected = goal === item.id;
+            {objectives.map((item) => {
+              const selected = objective === item.id;
               return (
                 <label
                   key={item.id}
@@ -306,8 +353,9 @@ export function QrStudio() {
                       value={item.id}
                       checked={selected}
                       onChange={() => {
-                        setGoal(item.id);
-                        if (!subtitleEdited) setSubtitle(defaultHeadline(item.id));
+                        setObjective(item.id);
+                        setReviewChecked(false);
+                        setTouched(false);
                       }}
                       className="mt-1 size-4 accent-[#0f6e62]"
                     />
@@ -326,12 +374,40 @@ export function QrStudio() {
           <h2 id="guia-enlace" className="text-base font-semibold">
             {guide.title}
           </h2>
+          <p className="mt-3 text-sm leading-relaxed text-muted">{guide.note}</p>
+          {guide.profileUrl ? (
+            <p className="mt-3 text-sm leading-relaxed">
+              <a
+                href={guide.profileUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="font-semibold text-accent-strong underline decoration-accent/40 underline-offset-2"
+              >
+                Abrir el Perfil de Empresa
+              </a>
+            </p>
+          ) : null}
           <ol className="mt-3 list-decimal space-y-2 pl-5 text-sm leading-relaxed">
             {guide.steps.map((step) => (
               <li key={step}>{step}</li>
             ))}
           </ol>
-          <p className="mt-3 text-sm leading-relaxed text-muted">{guide.note}</p>
+          <div className="mt-4 border-t border-line pt-4">
+            <p className="text-sm font-semibold">Formatos de referencia</p>
+            <p className="mt-1 text-sm leading-relaxed text-muted">
+              Sirven para reconocer el enlace. No son direcciones reales para copiar.
+            </p>
+            <ul className="mt-3 space-y-2">
+              {guide.examples.map((example) => (
+                <li
+                  key={example}
+                  className="break-all rounded-xl bg-background px-3 py-2 font-mono text-sm leading-relaxed"
+                >
+                  {example}
+                </li>
+              ))}
+            </ul>
+          </div>
         </section>
 
         <div>
@@ -355,7 +431,7 @@ export function QrStudio() {
             className="mt-2 w-full resize-y rounded-2xl border border-line bg-card px-4 py-3 text-sm leading-relaxed outline-none"
           />
           <p id="enlace-ayuda" className="mt-2 text-sm leading-relaxed text-muted">
-            Pegá un enlace HTTPS. La vista previa se arma en este navegador.
+            Pegá un enlace HTTPS. La pieza se arma con la misma escena que se descarga.
           </p>
           <p
             id="enlace-estado"
@@ -369,15 +445,15 @@ export function QrStudio() {
               : result.ok
                 ? goal === "ubicacion"
                   ? "Enlace admitido para compartir la ubicación."
-                  : "Enlace admitido para el formulario de reseña."
-                : "La vista previa del QR aparece cuando el enlace es válido."}
+                  : "El enlace tiene la forma de un formulario de reseña. Abrilo para comprobar el destino."
+                : "La vista previa aparece cuando el enlace es válido."}
           </p>
         </div>
 
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="sm:col-span-2">
             <label htmlFor="nombre-negocio" className="text-sm font-semibold">
-              Título
+              Nombre del negocio
             </label>
             <input
               id="nombre-negocio"
@@ -388,50 +464,16 @@ export function QrStudio() {
               placeholder="Nombre del negocio"
               className="mt-2 h-11 w-full rounded-2xl border border-line bg-card px-4 text-sm"
             />
-          </div>
-          <div className="sm:col-span-2">
-            <label htmlFor="subtitulo" className="text-sm font-semibold">
-              Subtítulo
-            </label>
-            <textarea
-              id="subtitulo"
-              value={subtitle}
-              onChange={(event) => {
-                setSubtitle(event.target.value.slice(0, SUBTITLE_MAX));
-                setSubtitleEdited(true);
-              }}
-              maxLength={SUBTITLE_MAX}
-              rows={2}
-              className="mt-2 w-full resize-y rounded-2xl border border-line bg-card px-4 py-3 text-sm leading-relaxed"
-            />
-          </div>
-        </div>
-        <div>
-          <p className="text-sm font-semibold">Frases para {goal === "ubicacion" ? "ubicación" : "reseñas"}</p>
-          <div className="mt-2 flex flex-wrap gap-2">
-            {phraseLibrary[goal].map((phrase) => (
-              <button
-                key={phrase}
-                type="button"
-                aria-pressed={subtitle === phrase}
-                onClick={() => {
-                  setSubtitle(phrase);
-                  setSubtitleEdited(true);
-                }}
-                className={`rounded-full border px-3 py-1.5 text-left text-sm ${
-                  subtitle === phrase ? "border-accent bg-ok-bg font-semibold" : "border-line bg-card"
-                }`}
-              >
-                {phrase}
-              </button>
-            ))}
+            <p className="mt-2 text-sm leading-relaxed text-muted">
+              En la pieza se imprime «{pressCopy[objective].message}» y «{pressCopy[objective].instruction}».
+            </p>
           </div>
         </div>
 
         <section className="rounded-2xl border border-line bg-card p-5">
           <h2 className="text-sm font-semibold">Logo del negocio</h2>
           <p className="mt-2 text-sm leading-relaxed text-muted">
-            Opcional. PNG, JPG o WebP de hasta 2 MB. Se recorta en cuadrado y se guarda como PNG, sin el archivo original.
+            Opcional. Si no hay logo, la pieza no inventa uno. PNG, JPG o WebP de hasta 2 MB.
           </p>
           <div className="mt-4 flex flex-wrap items-center gap-3">
             {logo ? (
@@ -483,7 +525,70 @@ export function QrStudio() {
               {logoError}
             </p>
           ) : null}
+          {templateId === "review-dark" && logo ? (
+            <p className="mt-3 text-sm leading-relaxed text-muted">
+              Si el logo es oscuro y tiene fondo transparente, en la pieza se apoya sobre una superficie clara. El archivo no se modifica.
+            </p>
+          ) : null}
         </section>
+
+        <fieldset>
+          <legend className="text-sm font-semibold">Formato de impresión</legend>
+          <div className="mt-3 grid gap-3 sm:grid-cols-2">
+            {signageFormats.map((format) => {
+              const selected = formatId === format.id;
+              return (
+                <label
+                  key={format.id}
+                  className={`cursor-pointer rounded-2xl border p-4 ${
+                    selected ? "border-accent bg-ok-bg" : "border-line bg-card"
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="formato"
+                    value={format.id}
+                    checked={selected}
+                    onChange={() => setFormatId(format.id)}
+                    className="sr-only"
+                  />
+                  <span className="block text-sm font-semibold">{format.name}</span>
+                  <span className="mt-1 block text-sm leading-relaxed text-muted">{format.description}</span>
+                </label>
+              );
+            })}
+          </div>
+        </fieldset>
+
+        <fieldset>
+          <legend className="text-sm font-semibold">Plantilla</legend>
+          <p className="mt-2 text-sm leading-relaxed text-muted">Cambia el dibujo. No cambia a dónde lleva el QR.</p>
+          <div className="mt-3 grid gap-3 sm:grid-cols-3">
+            {signageTemplates.map((template) => {
+              const selected = templateId === template.id;
+              return (
+                <label
+                  key={template.id}
+                  className={`cursor-pointer rounded-2xl border p-3 ${
+                    selected ? "border-accent bg-ok-bg" : "border-line bg-card"
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="plantilla"
+                    value={template.id}
+                    checked={selected}
+                    onChange={() => chooseTemplate(template.id)}
+                    className="sr-only"
+                  />
+                  <TemplateThumb id={template.id} />
+                  <span className="mt-3 block text-sm font-semibold">{template.name}</span>
+                  <span className="mt-1 block text-xs leading-relaxed text-muted">{template.description}</span>
+                </label>
+              );
+            })}
+          </div>
+        </fieldset>
 
         <fieldset>
           <legend className="text-sm font-semibold">Tipografía</legend>
@@ -529,6 +634,11 @@ export function QrStudio() {
             text={textContrast}
             active={result.ok}
           />
+          {templateId === "review-dark" ? (
+            <p className="mt-3 text-sm leading-relaxed text-muted">
+              En Review Dark el acento es una línea fina bajo el nombre. Si no se distingue del fondo, no se imprime.
+            </p>
+          ) : null}
           <div className="mt-5">
             <p id="tamano-label" className="text-sm font-semibold">
               Tamaño del QR
@@ -569,12 +679,22 @@ export function QrStudio() {
         <section className="rounded-2xl border border-line bg-[#f7f3ea] p-5">
           <h2 className="text-sm font-semibold">Sobre Google</h2>
           <p className="mt-2 text-sm leading-relaxed text-muted">
-            La pieza nombra «{artwork.serviceLine}» con texto. No usa el logo de Google, no inventa estrellas ni
-            calificaciones y no presenta a AtajoLab como un producto oficial de Google.
+            No usa el logo de Google, no muestra estrellas y no presenta a AtajoLab como un producto oficial de Google.
           </p>
-          <p className="mt-2 text-sm leading-relaxed text-muted">
-            El símbolo NFC no entra en esta pieza digital. Queda reservado para un kit físico que tenga NFC de verdad.
-          </p>
+          {objective === "review" && result.ok ? (
+            <label className="mt-4 flex gap-3 text-sm leading-relaxed">
+              <input
+                type="checkbox"
+                checked={reviewChecked}
+                onChange={(event) => setReviewChecked(event.target.checked)}
+                className="mt-1 size-4 accent-[#0f6e62]"
+              />
+              <span>
+                Abrí el enlace y comprobé que muestra el formulario para escribir una reseña. No podemos verificar el
+                destino sin abrirlo.
+              </span>
+            </label>
+          ) : null}
         </section>
 
         <section aria-labelledby="entrega-title" className="rounded-2xl border border-dashed border-line p-5">
@@ -585,7 +705,7 @@ export function QrStudio() {
             Pieza digital · {formatArs(PIECE_PRICE_ARS)} ARS. El precio lo define el servidor.
           </p>
           <p className="mt-2 text-sm leading-relaxed text-muted">
-            El pedido guarda esta composición. Cuando el pago queda confirmado, vas a poder descargar PNG, SVG y PDF.
+            El pedido guarda esta composición. La descarga es un archivo para imprimir, de {signageFormats.find((item) => item.id === formatId)?.widthMm} × {signageFormats.find((item) => item.id === formatId)?.heightMm} mm. No incluye un chip NFC. Cuando el pago queda confirmado, vas a poder descargar PNG, SVG y PDF.
           </p>
           <div className="mt-4">
             <label htmlFor="correo-pedido" className="text-sm font-semibold">
@@ -625,27 +745,26 @@ export function QrStudio() {
   );
 }
 
-function TemplateThumb({ id }: { id: StudioTemplateId }) {
-  if (id === "dark-premium") {
+function TemplateThumb({ id }: { id: SignageTemplateId }) {
+  if (id === "review-dark") {
     return (
-      <span className="flex h-16 items-end justify-end rounded-xl bg-[#161311] p-2" aria-hidden="true">
-        <span className="size-6 rounded-md bg-[#f7f1e6]" />
+      <span className="flex h-16 items-end justify-center rounded-xl bg-[#101114] p-2" aria-hidden="true">
+        <span className="size-7 bg-white" />
       </span>
     );
   }
-  if (id === "brand-identity") {
+  if (id === "review-brand") {
     return (
-      <span className="flex h-16 overflow-hidden rounded-xl border border-line" aria-hidden="true">
-        <span className="w-1/3 bg-accent" />
-        <span className="flex flex-1 items-end justify-center bg-white p-2">
-          <span className="size-6 bg-[#14221f]" />
-        </span>
+      <span className="flex h-16 flex-col justify-between rounded-xl bg-[#f7f5f2] p-2" aria-hidden="true">
+        <span className="h-2 w-8 bg-[#0f6e62]" />
+        <span className="size-6 self-center bg-[#1a1a1a]" />
       </span>
     );
   }
   return (
-    <span className="flex h-16 items-center justify-center rounded-xl border border-[#8d7350]/50 bg-[#f7f4ee]" aria-hidden="true">
-      <span className="size-6 border border-[#8d7350]" />
+    <span className="flex h-16 flex-col justify-end rounded-xl border border-line bg-white p-2" aria-hidden="true">
+      <span className="mb-2 h-0.5 w-6 bg-[#1a73e8]" />
+      <span className="size-6 bg-[#202124]" />
     </span>
   );
 }
@@ -735,10 +854,12 @@ function logoErrorMessage(code: "type" | "size" | "read"): string {
 function orderErrorMessage(code: string): string {
   if (code === "invalid-link") return "Revisá el enlace de Google antes de continuar.";
   if (code === "insufficient-contrast") return "Revisá el contraste del QR y del texto.";
-  if (code === "invalid-text") return "Completá el título y el subtítulo.";
+  if (code === "invalid-text") return "Completá el nombre del negocio.";
+  if (code === "review-unverified") return "Confirmá que el enlace abre el formulario de reseña.";
   if (code === "invalid-logo") return "El logo no pasó la validación. Subilo de nuevo.";
   if (code === "invalid-email") return "Revisá el correo antes de continuar.";
   if (code === "invalid-font" || code === "invalid-template") return "Elegí una plantilla del editor.";
+  if (isCommercialIssue(code)) return commercialIssueMessage(code);
   if (code === "database-unavailable" || code === "order-failed") {
     return "No pudimos guardar el pedido. Intentá de nuevo en un momento.";
   }

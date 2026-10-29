@@ -14,6 +14,23 @@ export const QR_SIZES = [
 
 export type QrSize = (typeof QR_SIZES)[number]["value"];
 
+export const objectives: Array<{
+  id: "review" | "location";
+  title: string;
+  description: string;
+}> = [
+  {
+    id: "review",
+    title: "Reseña en Google",
+    description: "El QR abre Google para que dejen una opinión sobre el negocio.",
+  },
+  {
+    id: "location",
+    title: "Ubicación en Google Maps",
+    description: "El QR abre el mapa para llegar al local.",
+  },
+];
+
 export const goals: Array<{
   id: GoogleLinkGoal;
   title: string;
@@ -33,7 +50,7 @@ export const goals: Array<{
 
 export const guides: Record<
   GoogleLinkGoal,
-  { title: string; steps: string[]; examples: string[]; note: string }
+  { title: string; steps: string[]; examples: string[]; note: string; profileUrl?: string }
 > = {
   ubicacion: {
     title: "Cómo conseguir el enlace de ubicación",
@@ -50,27 +67,20 @@ export const guides: Record<
     title: "Cómo conseguir el enlace de reseña",
     steps: [
       "Entrá al Perfil de Empresa de Google con la cuenta que administra la ficha.",
-      "Buscá la opción Pedir reseñas u Obtener más reseñas.",
-      "Copiá el enlace que Google genera para escribir una reseña.",
-      "Pegalo abajo. No uses el enlace de Compartir del mapa.",
+      "Abrí Solicitar reseñas. En algunas cuentas se llama Pedir reseñas u Obtener más reseñas.",
+      "Tocá Copiar enlace.",
+      "Pegá ese enlace en el campo de abajo.",
     ],
     examples: [
       "https://g.page/r/…/review",
       "https://search.google.com/local/writereview?placeid=…",
     ],
-    note: "Un enlace de ubicación abre el mapa. No abre el formulario para escribir la reseña.",
+    note: "En Google Maps, «Escribir una reseña» puede abrir un panel al costado sin cambiar la dirección del navegador. Copiar esa URL no crea el enlace directo de reseñas: abre la ficha del negocio.",
+    profileUrl: "https://business.google.com/",
   },
 };
 
 export const upcoming = [
-  {
-    title: "Cobros reales",
-    detail: "Checkout Pro queda en modo de prueba. Los cobros de producción siguen deshabilitados.",
-  },
-  {
-    title: "Kits físicos con QR y NFC",
-    detail: "El mismo enlace en una pieza impresa y en una etiqueta NFC.",
-  },
   {
     title: "Gestión de pedidos",
     detail: "Seguimiento de compras digitales y de kits físicos.",
@@ -79,13 +89,14 @@ export const upcoming = [
 
 export const availableNow = [
   "Editor de la pieza completa, sin cuenta.",
-  "Tres plantillas: Minimal Elegance, Dark Premium y Brand Identity.",
-  "Título, subtítulo, colores, tipografía y logo opcional.",
-  "Frases para reseñas y para la ubicación en Google Maps.",
-  "Vista previa en vivo de la tarjeta o el cartel, con un QR escaneable.",
+  "Carteles A6 y stickers cuadrados para pedir reseñas en Google.",
+  "Tres plantillas: Review Clean, Review Dark y Review Brand.",
+  "Nombre del negocio, logo opcional y colores con contraste.",
+  "También puede armar un QR de ubicación, como uso secundario.",
+  "Vista previa de la misma pieza que se descarga en PNG, SVG y PDF.",
   "Control del enlace antes de armar el QR.",
   "Pedido pendiente, con el precio definido en el servidor.",
-  "Pago de prueba con Mercado Pago, cuando hay credenciales de sandbox.",
+  "Pago con Mercado Pago Checkout Pro. El pedido se acredita cuando la API confirma el pago.",
   "Descarga de PNG, SVG y PDF cuando el pedido está pagado.",
   "Enlace privado para recuperar las descargas desde otro dispositivo.",
 ] as const;

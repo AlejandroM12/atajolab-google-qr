@@ -1,7 +1,7 @@
 import { isDatabaseUnavailable } from "@/lib/db-error";
 import type { PaymentRecord } from "@/lib/orders";
 import { isPublicId } from "@/lib/public-id";
-import { paymentEnvironmentMode, sandboxCredentialState } from "@/lib/payments/checkout-policy";
+import { credentialShape, paymentEnvironmentMode } from "@/lib/payments/checkout-policy";
 import { decidePayment, type PaymentEnvironment, type VerifiedPayment } from "@/lib/payments/decision";
 import type { PaymentGateway } from "@/lib/payments/gateway";
 
@@ -28,7 +28,9 @@ export async function processPaymentNotification(input: {
   if (!input.authentic) return 401;
   if (input.topic && input.topic !== "payment") return 200;
   if (!input.dataId || !/^\d{1,32}$/.test(input.dataId)) return 200;
-  if (sandboxCredentialState(input.accessToken) !== "ready") return 500;
+  if (credentialShape(input.accessToken, input.environment ?? process.env.MERCADOPAGO_ENV) !== "ready") {
+    return 500;
+  }
 
   let payment: VerifiedPayment | null;
   try {
