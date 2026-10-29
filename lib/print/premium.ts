@@ -24,6 +24,9 @@ const GOOGLE_GREEN = "#188038";
 /** Instruction type on the 80 × 80 mm sticker. Larger than the proposal so it reads in the hand. */
 export const STICKER_INSTRUCTION_MM = 5.2;
 
+/** White on #ff4d00 is 3.33:1. 6.4 mm is 18.1 pt, so that white shout stays large text. */
+const VIVID_LARGE_TEXT_MM = 6.4;
+
 const lockedAccent: Record<Exclude<PremiumTemplateId, "stand-shop">, string> = {
   "stand-classic": CLASSIC_GOLD,
   "stand-vivid": VIVID_CLAY,
@@ -154,9 +157,9 @@ function paintVividPoster(sheet: Sheet, artwork: ProductArtworkV7): void {
   const insertAt = sheet.commands.length;
   let y = 8;
   if (artwork.logo || artwork.businessName) {
-    y = lockup(sheet, artwork, 20, y, WHITE, "label", 4.4, 12).bottom + 2;
+    y = lockup(sheet, artwork, 20, y, CLASSIC_INK, "label", 4.4, 12).bottom + 2;
   }
-  const shout = layoutShout(phrase.shout, "label", 78, review ? 10 : 8.4, 6.2, 2, 1.02, true);
+  const shout = layoutShout(phrase.shout, "label", 78, review ? 10 : 8.4, VIVID_LARGE_TEXT_MM, 2, 1.02, true);
   if (!shout) {
     sheet.failed = true;
     return;

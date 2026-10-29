@@ -10,7 +10,7 @@ import {
   premiumTemplates,
   type PremiumTemplateId,
 } from "../artwork.ts";
-import { shopStripeReadable } from "../color.ts";
+import { contrastRatio, shopStripeReadable } from "../color.ts";
 import { parseArtworkPreview, parseOrderDraft, readArtworkSnapshot } from "../order-draft.ts";
 import { PIECE_PRICE_ARS } from "../pricing.ts";
 import { fontFile, printFonts, type PrintFontRole } from "./fonts.ts";
@@ -186,6 +186,64 @@ const shopPosterQr = layoutArtwork(piece("stand-shop", "poster", { businessName:
   (command) => command.type === "qr",
 );
 assert.ok(shopPosterQr && shopPosterQr.type === "qr" && shopPosterQr.size >= 60);
+const vividOrange = "#ff4d00";
+const vividInk = "#1c1915";
+const largeTextMm = 6.4;
+const tightMessage = "ancho ancho ancho ancho ancho ancho anchoooooooo";
+assert.equal(tightMessage.length, 48);
+assert.ok(contrastRatio("#ffffff", vividOrange) >= 3);
+assert.ok(contrastRatio("#ffffff", vividOrange) < 4.5);
+assert.ok(contrastRatio(vividInk, vividOrange) >= 4.5);
+assert.ok(contrastRatio("#0c3b32", vividOrange) < 4.5);
+
+function onOrange(scene: ReturnType<typeof layoutArtwork>, line: { x: number; y: number; size: number }) {
+  const band = scene.commands.find((command) => command.type === "rect" && command.fill === vividOrange);
+  assert.ok(band && band.type === "rect");
+  return line.x >= band.x && line.y + line.size <= band.y + band.h;
+}
+
+for (const artwork of [
+  piece("stand-vivid", "poster", { businessName: "Barbería Norte" }),
+  piece("stand-vivid", "poster", { businessName: "Barbería Norte", logo: { data: wideLogo } }),
+  piece("stand-vivid", "poster", { objective: "location", url: placeUrl, reviewChecked: false, businessName: "Barbería Norte" }),
+  piece("stand-vivid", "poster", { message: "Contanos cómo te atendimos hoy en el local" }),
+  piece("stand-vivid", "poster", { message: tightMessage }),
+]) {
+  const scene = layoutArtwork(artwork);
+  const lines = texts(scene.commands);
+  const name = lines.find((line) => line.text === "Barbería Norte");
+  if (artwork.businessName) {
+    assert.ok(name);
+    assert.equal(name.color, vividInk);
+    assert.ok(onOrange(scene, name));
+    assert.ok(contrastRatio(name.color, vividOrange) >= 4.5);
+  }
+  const shout = lines.filter((line) => line.color === "#ffffff");
+  assert.ok(shout.length > 0);
+  for (const line of shout) {
+    assert.ok(onOrange(scene, line), line.text);
+    assert.ok(line.size >= largeTextMm, `${line.text} ${line.size}`);
+    assert.ok((line.size * 72) / 25.4 >= 18, line.text);
+  }
+}
+const tightScene = layoutArtwork(piece("stand-vivid", "poster", { message: tightMessage }));
+assert.ok(texts(tightScene.commands).some((line) => line.color === "#ffffff" && line.size === largeTextMm));
+const overflow = parseOrderDraft(body({ templateId: "stand-vivid", message: "Mmmmmmm mmmmmmm mmmmmmm mmmmmmm mmmmmmm mmm" }));
+assert.equal(overflow.ok, false);
+if (!overflow.ok) assert.equal(overflow.error, "composition");
+const vividStickerName = texts(layoutArtwork(piece("stand-vivid", "sticker", { businessName: "Barbería Norte" })).commands).find(
+  (line) => line.text === "Barbería Norte",
+);
+assert.equal(vividStickerName?.color, "#ffffff");
+const darkName = texts(layoutArtwork(piece("stand-dark", "poster", { businessName: "Barbería Norte" })).commands).find(
+  (line) => line.text === "Barbería Norte",
+);
+assert.equal(darkName?.color, "#f7f4ee");
+const shopName = texts(layoutArtwork(piece("stand-shop", "poster", { businessName: "Barbería Norte" })).commands).find(
+  (line) => line.text === "Barbería Norte",
+);
+assert.equal(shopName?.color, vividInk);
+
 const longMessage = parseOrderDraft(body({ templateId: "stand-classic", format: "sticker", message: "W".repeat(40) }));
 assert.equal(longMessage.ok, false);
 if (!longMessage.ok) assert.equal(longMessage.error, "composition");
