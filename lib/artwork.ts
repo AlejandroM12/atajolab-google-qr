@@ -13,6 +13,8 @@ export const SIGNAGE_ARTWORK_VERSION = 5 as const;
  * A redesign of this drawing needs a new artwork version. Do not change layoutPress in place.
  */
 export const PRESS_ARTWORK_VERSION = 6 as const;
+/** Counter pieces with a fixed composition per template. Versions 1–6 stay on their own renderers. */
+export const PREMIUM_ARTWORK_VERSION = 7 as const;
 
 export const BUSINESS_NAME_MAX = 42;
 export const HEADLINE_MAX = 72;
@@ -35,6 +37,8 @@ export type SignageTemplateId = "review-clean" | "review-dark" | "review-brand";
 export type SignageObjective = "review" | "location";
 
 export type SignageFormat = "poster" | "sticker";
+
+export type PremiumTemplateId = "stand-classic" | "stand-vivid" | "stand-dark" | "stand-shop";
 
 export type ArtworkTemplateId =
   | LegacyTemplateId
@@ -379,6 +383,18 @@ export type ProductArtworkV5 = {
   logo: ArtworkLogo | null;
 };
 
+export type ProductArtworkV7 = {
+  version: typeof PREMIUM_ARTWORK_VERSION;
+  objective: SignageObjective;
+  format: SignageFormat;
+  templateId: PremiumTemplateId;
+  businessName: string;
+  message: string;
+  accent: string;
+  href: string | null;
+  logo: ArtworkLogo | null;
+};
+
 export type ProductArtworkV6 = {
   version: typeof PRESS_ARTWORK_VERSION;
   objective: SignageObjective;
@@ -404,7 +420,71 @@ export type ProductArtwork =
   | ProductArtworkV3
   | ProductArtworkV4
   | ProductArtworkV5
-  | ProductArtworkV6;
+  | ProductArtworkV6
+  | ProductArtworkV7;
+
+export const premiumTemplates: readonly {
+  id: PremiumTemplateId;
+  name: string;
+  description: string;
+}[] = [
+  {
+    id: "stand-classic",
+    name: "Clásico",
+    description: "Papel claro, la frase en Fraunces y un marco doble alrededor del QR.",
+  },
+  {
+    id: "stand-vivid",
+    name: "Vivo",
+    description: "Riel verde y franja naranja. La invitación es el cartel.",
+  },
+  {
+    id: "stand-dark",
+    name: "Nocturno",
+    description: "Campo oscuro, franja amarilla y el QR en una placa blanca.",
+  },
+  {
+    id: "stand-shop",
+    name: "Mi negocio",
+    description: "El nombre grande y una franja de color con la invitación.",
+  },
+];
+
+export function isPremiumTemplate(value: unknown): value is PremiumTemplateId {
+  return premiumTemplates.some((template) => template.id === value);
+}
+
+export const PREMIUM_MESSAGE_MAX = 48;
+
+export const premiumMessagePresets = [
+  "Tu opinión nos importa",
+  "Dejanos tu reseña",
+  "Tu experiencia cuenta",
+] as const;
+
+export function premiumDefaultMessage(templateId: PremiumTemplateId): string {
+  if (templateId === "stand-vivid") return "Dejanos tu reseña";
+  if (templateId === "stand-dark") return "Tu experiencia cuenta";
+  return "Tu opinión nos importa";
+}
+
+export function premiumPhrases(
+  templateId: PremiumTemplateId,
+  objective: SignageObjective,
+  message?: string,
+): { shout: string; instruction: string } {
+  if (objective === "location") {
+    return templateId === "stand-classic"
+      ? { shout: "Encontranos en el mapa", instruction: "Escaneá para llegar, en Google Maps" }
+      : { shout: "Encontranos en el mapa", instruction: "Escaneá para llegar" };
+  }
+  const shout = (message ?? premiumDefaultMessage(templateId)).trim();
+  const instruction =
+    templateId === "stand-classic"
+      ? "Escaneá y dejanos tu reseña en Google"
+      : "Escaneá acá, en Google";
+  return { shout, instruction };
+}
 
 export type ArtworkExportRequest = {
   artwork: ProductArtwork;
@@ -668,6 +748,29 @@ export function buildPressArtwork(input: {
     foreground: input.foreground,
     background: input.background,
     qrSize: input.qrSize,
+    href: input.href,
+    logo: input.logo,
+  };
+}
+
+export function buildPremiumArtwork(input: {
+  objective: SignageObjective;
+  format: SignageFormat;
+  templateId: PremiumTemplateId;
+  businessName: string;
+  message: string;
+  accent: string;
+  href: string | null;
+  logo: ArtworkLogo | null;
+}): ProductArtworkV7 {
+  return {
+    version: PREMIUM_ARTWORK_VERSION,
+    objective: input.objective,
+    format: input.format,
+    templateId: input.templateId,
+    businessName: input.businessName.trim().slice(0, BUSINESS_NAME_MAX),
+    message: input.message.trim().slice(0, PREMIUM_MESSAGE_MAX),
+    accent: input.accent,
     href: input.href,
     logo: input.logo,
   };

@@ -1,9 +1,10 @@
-import { COMMERCIAL_ARTWORK_VERSION, COUNTER_ARTWORK_VERSION, PRESS_ARTWORK_VERSION, SIGNAGE_ARTWORK_VERSION, templateSpec, type ProductArtwork, type ProductArtworkV1, type ProductArtworkV2 } from "@/lib/artwork";
+import { COMMERCIAL_ARTWORK_VERSION, COUNTER_ARTWORK_VERSION, PREMIUM_ARTWORK_VERSION, PRESS_ARTWORK_VERSION, SIGNAGE_ARTWORK_VERSION, templateSpec, type ProductArtwork, type ProductArtworkV1, type ProductArtworkV2 } from "@/lib/artwork";
 import { isDarkColor } from "@/lib/color";
 import { readPngLogo } from "@/lib/logo-image";
 import type { QrSize } from "@/lib/product";
 import { layoutCommercial } from "@/lib/print/commercial";
 import { layoutCounter } from "@/lib/print/counter";
+import { layoutPremium } from "@/lib/print/premium";
 import { layoutPress } from "@/lib/print/press";
 import { layoutSignage } from "@/lib/print/signage";
 import { measureText, type PrintFontRole } from "@/lib/print/fonts";
@@ -16,6 +17,11 @@ const INK = "#14221f";
 
 export function layoutArtwork(artwork: ProductArtwork): ArtworkScene {
   if (!artwork.href) throw new Error("artwork-href");
+  if (artwork.version === PREMIUM_ARTWORK_VERSION) {
+    const composed = layoutPremium(artwork);
+    if (!composed.ok) throw new Error("artwork-composition");
+    return composed.scene;
+  }
   if (artwork.version === PRESS_ARTWORK_VERSION) {
     const composed = layoutPress(artwork);
     if (!composed.ok) throw new Error("artwork-composition");
@@ -59,7 +65,8 @@ export function compositionChecked(artwork: ProductArtwork): boolean {
     artwork.version === COMMERCIAL_ARTWORK_VERSION ||
     artwork.version === COUNTER_ARTWORK_VERSION ||
     artwork.version === SIGNAGE_ARTWORK_VERSION ||
-    artwork.version === PRESS_ARTWORK_VERSION
+    artwork.version === PRESS_ARTWORK_VERSION ||
+    artwork.version === PREMIUM_ARTWORK_VERSION
   );
 }
 

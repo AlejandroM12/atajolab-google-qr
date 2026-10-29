@@ -10,7 +10,7 @@ const steps = [
   {
     title: "Elegí el formato y la plantilla",
     detail:
-      "Cartel A6 o sticker de 80 × 80 mm. Review Clean, Review Dark o Review Brand.",
+      "Cartel A6 o sticker de 80 × 80 mm. Clásico, Vivo, Nocturno o Mi negocio.",
   },
   {
     title: "Revisá la pieza completa",
