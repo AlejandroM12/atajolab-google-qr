@@ -13,7 +13,7 @@ export default function NotFound() {
         <div className="mt-8 flex flex-col gap-3 sm:flex-row">
           <ButtonLink href="/">Volver al inicio</ButtonLink>
           <ButtonLink href="/crear" variant="secondary">
-            Diseñar la pieza
+            Crear mi cartel QR
           </ButtonLink>
         </div>
       </Container>

@@ -29,7 +29,7 @@ export function RecoveryForm() {
         return;
       }
       setMessage(
-        "Listo. Si ese correo tiene compras pagadas, preparamos el enlace de acceso. Esta respuesta no indica si el correo está registrado.",
+        "Listo. Si ese correo tiene compras confirmadas, preparamos el enlace. Esta respuesta no indica si el correo tiene compras.",
       );
       setEmail("");
     } catch {
@@ -42,7 +42,7 @@ export function RecoveryForm() {
   return (
     <form onSubmit={(event) => void submit(event)} className="mt-6 max-w-xl">
       <label htmlFor="correo-recuperacion" className="text-sm font-semibold">
-        Correo de la compra
+        Correo electrónico
       </label>
       <input
         id="correo-recuperacion"
@@ -62,7 +62,7 @@ export function RecoveryForm() {
         disabled={busy}
         className="mt-4 inline-flex h-11 items-center justify-center rounded-full bg-accent px-5 text-sm font-semibold text-white transition-colors hover:bg-accent-strong disabled:cursor-not-allowed disabled:opacity-60"
       >
-        {busy ? "Preparando…" : "Pedir enlace de acceso"}
+        {busy ? "Preparando…" : "Recuperar mis descargas"}
       </button>
       {message ? (
         <p className="mt-4 text-sm leading-relaxed text-muted" role="status">

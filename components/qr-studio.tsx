@@ -10,7 +10,6 @@ import {
   PREMIUM_MESSAGE_MAX,
   premiumDefaultMessage,
   premiumMessagePresets,
-  premiumPhrases,
   premiumTemplates,
   signageFormats,
   signageGoal,
@@ -73,7 +72,6 @@ export function QrStudio() {
   const visibleIssue = revealIssue(url, touched, result.ok ? null : result.issue);
   const draftMessage = (messageCustom ? customMessage.trim() : messageChoice) || premiumDefaultMessage(templateId);
   const messageReady = objective !== "review" || (messageCustom ? customMessage.trim().length > 0 : messageChoice.length > 0);
-  const phrases = premiumPhrases(templateId, objective, draftMessage);
 
   const payload = useMemo<QrPayload | null>(() => {
     if (!result.ok) return null;
@@ -120,17 +118,17 @@ export function QrStudio() {
       ? "Abrí el enlace y confirmá que muestra el formulario de reseña."
       : !emailReady
         ? email.trim().length === 0
-          ? "Dejá un correo para recuperar las descargas en otro dispositivo."
+          ? "Dejá tu correo para poder recuperar los archivos."
           : "Revisá el correo. Tiene que ser una dirección válida."
         : !shopReady
           ? "La franja de Mi negocio necesita contrastar con el texto blanco y con el papel."
           : !messageReady
           ? "Elegí un mensaje o escribí uno propio."
           : !payload
-            ? "El pedido se habilita cuando el enlace es válido."
+            ? "La compra se habilita cuando el enlace es válido."
             : !previewCurrent
-              ? "Estamos comprobando que el texto entre en la plantilla."
-              : "El pedido queda pendiente hasta que Mercado Pago confirme el pago.";
+              ? "Estamos comprobando que el texto entre en el diseño."
+              : "La compra queda pendiente hasta que se confirme el pago.";
 
   useEffect(() => {
     if (!previewKey) return;
@@ -151,7 +149,7 @@ export function QrStudio() {
             const code = typeof body.error === "string" ? body.error : "composition";
             setPreviewSvg(null);
             setCompositionIssue(
-              isCommercialIssue(code) ? commercialIssueMessage(code) : "No pudimos armar la vista previa de la pieza.",
+              isCommercialIssue(code) ? commercialIssueMessage(code) : "No pudimos armar la vista previa.",
             );
             setPreviewKeyReady(key);
             return;
@@ -163,7 +161,7 @@ export function QrStudio() {
         .catch((error: unknown) => {
           if (cancelled || (error instanceof DOMException && error.name === "AbortError")) return;
           setPreviewSvg(null);
-          setCompositionIssue("No pudimos armar la vista previa de la pieza.");
+          setCompositionIssue("No pudimos armar la vista previa.");
           setPreviewKeyReady(key);
         });
     }, 220);
@@ -282,7 +280,7 @@ export function QrStudio() {
       }
       router.push(`/pedido/${publicId}`);
     } catch {
-      setOrderError("No pudimos guardar el pedido. Intentá de nuevo en un momento.");
+      setOrderError("No pudimos guardar la compra. Intentá de nuevo en un momento.");
       setSubmitting(false);
     }
   }
@@ -293,10 +291,10 @@ export function QrStudio() {
     : !shopReady
       ? "La franja de Mi negocio necesita contrastar con el texto blanco y con el papel."
       : shownSvg
-        ? "Esta vista es la misma pieza que se exporta en PNG, SVG y PDF."
+        ? "Esta vista es el cartel que vas a descargar en PNG, SVG y PDF."
         : previewKey
-          ? "Estamos armando la pieza con la tipografía de impresión."
-          : "La pieza muestra el QR cuando el enlace es válido.";
+          ? "Estamos preparando la vista."
+          : "El cartel aparece cuando el enlace es válido.";
 
   return (
     <div className="grid items-start gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(18rem,24rem)]">
@@ -304,7 +302,7 @@ export function QrStudio() {
         <section aria-labelledby="vista-previa-title" className="rounded-[2rem] border border-line bg-card p-4 shadow-sm sm:p-6">
           <div className="flex items-baseline justify-between gap-3">
             <h2 id="vista-previa-title" className="text-base font-semibold">
-              Pieza completa
+              Tu diseño
             </h2>
             <p className="text-xs text-muted">
               {premiumTemplates.find((item) => item.id === templateId)?.name} · {signageFormats.find((item) => item.id === formatId)?.widthMm} × {signageFormats.find((item) => item.id === formatId)?.heightMm} mm
@@ -318,7 +316,7 @@ export function QrStudio() {
               <ScenePreview svg={shownSvg} />
             ) : (
               <p className="mx-auto max-w-xs py-16 text-center text-sm leading-relaxed text-muted">
-                La vista previa aparece cuando el enlace es válido y el texto entra en la plantilla.
+                La vista previa aparece cuando el enlace es válido.
               </p>
             )}
           </div>
@@ -334,18 +332,15 @@ export function QrStudio() {
       <div className="order-1 space-y-6">
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.18em] text-accent">Editor</p>
-          <h1 className="mt-3 max-w-2xl text-4xl font-semibold leading-tight sm:text-5xl">Diseñá el cartel o el sticker</h1>
+          <h1 className="mt-3 max-w-2xl text-4xl font-semibold leading-tight sm:text-5xl">
+            Creá tu cartel QR para tu negocio
+          </h1>
           <p className="mt-4 max-w-2xl text-lg leading-relaxed text-muted">
-            El objetivo define el enlace. La plantilla solo cambia el dibujo.
+            Personalizá tu diseño en minutos. Descargalo listo para imprimir y compartí tu negocio con un simple escaneo.
           </p>
         </div>
         <fieldset>
-          <legend className="text-sm font-semibold">Qué abre el QR</legend>
-          <p className="mt-2 text-sm leading-relaxed text-muted">
-            {objective === "review"
-              ? "Para reseñas, el QR lleva a Google para dejar una opinión. No pide una valoración ni solo comentarios positivos."
-              : "Para ubicación, el QR abre el mapa. No abre el formulario de reseña."}
-          </p>
+          <legend className="text-sm font-semibold">¿Para qué querés usar tu QR?</legend>
           <div className="mt-3 grid gap-3 sm:grid-cols-2">
             {objectives.map((item) => {
               const selected = objective === item.id;
@@ -380,49 +375,35 @@ export function QrStudio() {
           </div>
         </fieldset>
 
-        <section className="rounded-2xl border border-line bg-card p-5" aria-labelledby="guia-enlace">
-          <h2 id="guia-enlace" className="text-base font-semibold">
-            {guide.title}
-          </h2>
-          <p className="mt-3 text-sm leading-relaxed text-muted">{guide.note}</p>
-          {guide.profileUrl ? (
-            <p className="mt-3 text-sm leading-relaxed">
-              <a
-                href={guide.profileUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="font-semibold text-accent-strong underline decoration-accent/40 underline-offset-2"
-              >
-                Abrir el Perfil de Empresa
-              </a>
-            </p>
-          ) : null}
-          <ol className="mt-3 list-decimal space-y-2 pl-5 text-sm leading-relaxed">
-            {guide.steps.map((step) => (
-              <li key={step}>{step}</li>
-            ))}
-          </ol>
-          <div className="mt-4 border-t border-line pt-4">
-            <p className="text-sm font-semibold">Formatos de referencia</p>
-            <p className="mt-1 text-sm leading-relaxed text-muted">
-              Sirven para reconocer el enlace. No son direcciones reales para copiar.
-            </p>
-            <ul className="mt-3 space-y-2">
-              {guide.examples.map((example) => (
-                <li
-                  key={example}
-                  className="break-all rounded-xl bg-background px-3 py-2 font-mono text-sm leading-relaxed"
-                >
-                  {example}
-                </li>
+        <section className="rounded-2xl border border-line bg-card px-5">
+          <details className="group py-4">
+            <summary className="cursor-pointer text-base font-semibold marker:text-accent">
+              {goal === "resena" ? "¿Cómo consigo mi enlace de reseñas?" : "¿Cómo consigo el enlace de mi ubicación?"}
+            </summary>
+            <ol className="mt-4 list-decimal space-y-2 pl-5 text-sm leading-relaxed">
+              {guide.steps.map((step) => (
+                <li key={step}>{step}</li>
               ))}
-            </ul>
-          </div>
+            </ol>
+            {guide.profileUrl ? (
+              <p className="mt-4 text-sm leading-relaxed">
+                <a
+                  href={guide.profileUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="font-semibold text-accent-strong underline decoration-accent/40 underline-offset-2"
+                >
+                  Abrir el Perfil de Empresa
+                </a>
+              </p>
+            ) : null}
+            <p className="mt-4 text-sm leading-relaxed text-muted">{guide.note}</p>
+          </details>
         </section>
 
         <div>
           <label htmlFor="enlace-google" className="text-sm font-semibold">
-            Enlace de Google
+            Pegá el enlace de tu negocio
           </label>
           <textarea
             id="enlace-google"
@@ -435,13 +416,13 @@ export function QrStudio() {
             spellCheck={false}
             autoCapitalize="none"
             autoCorrect="off"
-            placeholder={goal === "ubicacion" ? "https://maps.app.goo.gl/…" : "https://g.page/r/…/review"}
+            placeholder={goal === "ubicacion" ? "Pegá el enlace de Google Maps" : "Pegá el enlace de reseñas"}
             aria-invalid={visibleIssue ? true : undefined}
             aria-describedby="enlace-ayuda enlace-estado"
             className="mt-2 w-full resize-y rounded-2xl border border-line bg-card px-4 py-3 text-sm leading-relaxed outline-none"
           />
           <p id="enlace-ayuda" className="mt-2 text-sm leading-relaxed text-muted">
-            Pegá un enlace HTTPS. La pieza se arma con la misma escena que se descarga.
+            Pegá el enlace de tu negocio. Tiene que empezar con https.
           </p>
           <p
             id="enlace-estado"
@@ -458,12 +439,26 @@ export function QrStudio() {
                   : "El enlace tiene la forma de un formulario de reseña. Abrilo para comprobar el destino."
                 : "La vista previa aparece cuando el enlace es válido."}
           </p>
+          {objective === "review" && result.ok ? (
+            <label className="mt-4 flex gap-3 text-sm leading-relaxed">
+              <input
+                type="checkbox"
+                checked={reviewChecked}
+                onChange={(event) => setReviewChecked(event.target.checked)}
+                className="mt-1 size-4 accent-[#0f6e62]"
+              />
+              <span>
+                Abrí el enlace y comprobé que muestra el formulario para escribir una reseña. No podemos verificar el
+                destino sin abrirlo.
+              </span>
+            </label>
+          ) : null}
         </div>
 
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="sm:col-span-2">
             <label htmlFor="nombre-negocio" className="text-sm font-semibold">
-              Nombre del negocio
+              ¿Cómo se llama tu negocio?
             </label>
             <input
               id="nombre-negocio"
@@ -471,20 +466,20 @@ export function QrStudio() {
               onChange={(event) => setBusinessName(event.target.value.slice(0, BUSINESS_NAME_MAX))}
               maxLength={BUSINESS_NAME_MAX}
               autoComplete="organization"
-              placeholder="Nombre del negocio"
+              placeholder="Taller Electromecánica Morel"
               className="mt-2 h-11 w-full rounded-2xl border border-line bg-card px-4 text-sm"
             />
             <p className="mt-2 text-sm leading-relaxed text-muted">
-              Opcional. Si lo dejás vacío, la pieza no reserva un hueco. Debajo del código se lee «{phrases.instruction}».
+              Opcional. Si lo dejás vacío, el diseño no deja un espacio en blanco.
             </p>
           </div>
         </div>
 
         {objective === "review" ? (
           <fieldset>
-            <legend className="text-sm font-semibold">Mensaje</legend>
+            <legend className="text-sm font-semibold">Elegí el mensaje de tu cartel</legend>
             <p className="mt-2 text-sm leading-relaxed text-muted">
-              Invita a dejar una reseña, sin pedir que sea positiva. En el sticker tiene que entrar sin achicar el QR.
+              Si el mensaje es muy largo, no se recorta: te pedimos uno más corto para que el código se siga leyendo.
             </p>
             <div className="mt-3 grid gap-2">
               {premiumMessagePresets.map((preset) => {
@@ -546,9 +541,9 @@ export function QrStudio() {
         ) : null}
 
         <section className="rounded-2xl border border-line bg-card p-5">
-          <h2 className="text-sm font-semibold">Logo del negocio</h2>
+          <h2 className="text-sm font-semibold">Agregá tu logo</h2>
           <p className="mt-2 text-sm leading-relaxed text-muted">
-            Opcional. Si no hay logo, la pieza no inventa uno. PNG, JPG o WebP de hasta 2 MB.
+            Opcional. PNG, JPG o WebP de hasta 2 MB. Si no subís uno, el diseño no inventa un logo.
           </p>
           <div className="mt-4 flex flex-wrap items-center gap-3">
             {logo ? (
@@ -603,7 +598,7 @@ export function QrStudio() {
         </section>
 
         <fieldset>
-          <legend className="text-sm font-semibold">Formato de impresión</legend>
+          <legend className="text-sm font-semibold">Elegí el tamaño</legend>
           <div className="mt-3 grid gap-3 sm:grid-cols-2">
             {signageFormats.map((format) => {
               const selected = formatId === format.id;
@@ -631,9 +626,9 @@ export function QrStudio() {
         </fieldset>
 
         <fieldset>
-          <legend className="text-sm font-semibold">Plantilla</legend>
+          <legend className="text-sm font-semibold">Elegí un diseño</legend>
           <p className="mt-2 text-sm leading-relaxed text-muted">
-            Cambia el dibujo. El enlace, el nombre, el logo y el mensaje se mantienen.
+            Podés cambiar de diseño sin perder el enlace, el nombre, el logo ni el mensaje.
           </p>
           <div className="mt-3 grid gap-3 sm:grid-cols-2">
             {premiumTemplates.map((template) => {
@@ -687,40 +682,45 @@ export function QrStudio() {
           </fieldset>
         ) : null}
 
-        <section className="rounded-2xl border border-line bg-[#f7f3ea] p-5">
-          <h2 className="text-sm font-semibold">Sobre Google</h2>
-          <p className="mt-2 text-sm leading-relaxed text-muted">
-            No usa el logo de Google. La palabra queda en el color de la pieza y lleva un subrayado azul, amarillo y verde. En las piezas de reseña, las estrellas invitan a escribir; no son una calificación y no van junto a la palabra Google. AtajoLab no es un producto oficial de Google.
-          </p>
-          {objective === "review" && result.ok ? (
-            <label className="mt-4 flex gap-3 text-sm leading-relaxed">
-              <input
-                type="checkbox"
-                checked={reviewChecked}
-                onChange={(event) => setReviewChecked(event.target.checked)}
-                className="mt-1 size-4 accent-[#0f6e62]"
-              />
-              <span>
-                Abrí el enlace y comprobé que muestra el formulario para escribir una reseña. No podemos verificar el
-                destino sin abrirlo.
-              </span>
-            </label>
-          ) : null}
-        </section>
-
         <section aria-labelledby="entrega-title" className="rounded-2xl border border-dashed border-line p-5">
           <h2 id="entrega-title" className="text-base font-semibold">
-            Pedido
+            Tu compra
           </h2>
-          <p className="mt-2 text-sm leading-relaxed text-muted">
-            Pieza digital · {formatArs(PIECE_PRICE_ARS)} ARS. El precio lo define el servidor.
+          <p className="mt-2 text-sm font-semibold">
+            {formatId === "sticker" ? "Sticker QR personalizado" : "Cartel QR personalizado"}
           </p>
-          <p className="mt-2 text-sm leading-relaxed text-muted">
-            El pedido guarda esta composición. La descarga es un archivo para imprimir, de {signageFormats.find((item) => item.id === formatId)?.widthMm} × {signageFormats.find((item) => item.id === formatId)?.heightMm} mm. No incluye un chip NFC. Cuando el pago queda confirmado, vas a poder descargar PNG, SVG y PDF.
+          <dl className="mt-4 space-y-2 text-sm">
+            <div className="flex justify-between gap-4">
+              <dt className="text-muted">Diseño</dt>
+              <dd>{premiumTemplates.find((item) => item.id === templateId)?.name}</dd>
+            </div>
+            <div className="flex justify-between gap-4">
+              <dt className="text-muted">Formato</dt>
+              <dd>
+                {signageFormats.find((item) => item.id === formatId)?.name} ·{" "}
+                {signageFormats.find((item) => item.id === formatId)?.widthMm} ×{" "}
+                {signageFormats.find((item) => item.id === formatId)?.heightMm} mm
+              </dd>
+            </div>
+            <div className="flex justify-between gap-4">
+              <dt className="text-muted">Precio</dt>
+              <dd>{formatArs(PIECE_PRICE_ARS)} ARS</dd>
+            </div>
+            <div className="flex justify-between gap-4">
+              <dt className="text-muted">Entrega</dt>
+              <dd>Digital</dd>
+            </div>
+            <div className="flex justify-between gap-4">
+              <dt className="text-muted">Archivos</dt>
+              <dd>PNG, SVG y PDF</dd>
+            </div>
+          </dl>
+          <p className="mt-4 text-sm leading-relaxed text-muted">
+            Descargá tus archivos cuando se confirme el pago.
           </p>
           <div className="mt-4">
             <label htmlFor="correo-pedido" className="text-sm font-semibold">
-              Correo electrónico
+              Tu correo electrónico
             </label>
             <input
               id="correo-pedido"
@@ -736,7 +736,7 @@ export function QrStudio() {
               className="mt-2 h-11 w-full rounded-xl border border-line bg-background px-3 text-sm"
             />
             <p className="mt-2 text-sm leading-relaxed text-muted">
-              Lo guardamos con el pedido para recuperar las descargas en otro dispositivo. No crea una cuenta.
+              Lo usaremos para que puedas recuperar tus archivos.
             </p>
           </div>
           <button
@@ -745,7 +745,11 @@ export function QrStudio() {
             disabled={!canOrder}
             className="mt-4 inline-flex h-11 items-center rounded-full bg-accent px-5 text-sm font-semibold text-white enabled:hover:bg-accent-strong disabled:cursor-not-allowed disabled:opacity-50"
           >
-            {submitting ? "Creando el pedido…" : "Continuar al pago"}
+            {submitting
+              ? "Preparando la compra…"
+              : formatId === "sticker"
+                ? "Comprar mi sticker QR"
+                : "Comprar mi cartel QR"}
           </button>
           <p className="mt-3 text-sm leading-relaxed text-muted" role={orderError ? "alert" : "status"}>
             {orderError ?? checkoutHint}

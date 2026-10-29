@@ -3,9 +3,9 @@ import { Container } from "@/components/container";
 import { QrStudio } from "@/components/qr-studio";
 
 export const metadata: Metadata = {
-  title: "Diseñar la pieza",
+  title: "Crear mi cartel QR",
   description:
-    "Armá un cartel o un sticker con el QR de reseñas y mirá la pieza completa antes de pedirla.",
+    "Personalizá tu cartel o sticker QR en minutos y descargalo listo para imprimir.",
 };
 
 export default function CreateQrPage() {
