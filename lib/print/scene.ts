@@ -37,6 +37,7 @@ export type DrawCommand =
       opacity?: number;
     }
   | { type: "image"; x: number; y: number; w: number; h: number; data: string; radius: number }
+  | { type: "star"; cx: number; cy: number; r: number; fill: string }
   | { type: "qr"; x: number; y: number; size: number; foreground: string; background: string; href: string };
 
 export type ArtworkScene = {

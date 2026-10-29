@@ -116,7 +116,14 @@ function drawSvg(command: DrawCommand, index: number): string {
     const id = `mark-${index}`;
     return `<clipPath id="${id}"><rect x="${num(command.x)}" y="${num(command.y)}" width="${num(command.w)}" height="${num(command.h)}" rx="${num(command.radius)}" ry="${num(command.radius)}"/></clipPath><image href="data:image/png;base64,${command.data}" x="${num(command.x)}" y="${num(command.y)}" width="${num(command.w)}" height="${num(command.h)}" preserveAspectRatio="xMidYMid slice" clip-path="url(#${id})"/>`;
   }
+  if (command.type === "star") return starSvg(command);
   return qrSvg(command);
+}
+
+const STAR_PATH = "M0-1 L0.22-0.31 H0.95 L0.36 0.09 L0.59 0.81 L0 0.38 L-0.59 0.81 L-0.36 0.09 L-0.95-0.31 H-0.22 Z";
+
+function starSvg(command: Extract<DrawCommand, { type: "star" }>): string {
+  return `<path d="${STAR_PATH}" fill="${command.fill}" transform="translate(${num(command.cx)} ${num(command.cy)}) scale(${num(command.r)})"/>`;
 }
 
 function qrSvg(command: Extract<DrawCommand, { type: "qr" }>): string {
@@ -182,6 +189,14 @@ function drawPdf(doc: PDFKit.PDFDocument, command: DrawCommand): void {
       characterSpacing: pt(command.size * (command.letterSpacing ?? 0)),
     });
     doc.fillOpacity(1);
+    return;
+  }
+  if (command.type === "star") {
+    doc.save();
+    doc.translate(pt(command.cx), pt(command.cy));
+    doc.scale(pt(command.r));
+    doc.path(STAR_PATH).fill(command.fill);
+    doc.restore();
     return;
   }
   const matrix = qrMatrix(command.href);
