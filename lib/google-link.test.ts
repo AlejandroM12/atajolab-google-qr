@@ -91,13 +91,13 @@ assert.equal(
 );
 assert.equal(
   guides.resena.note,
-  "En Google Maps, «Escribir una reseña» puede abrir un panel al costado sin cambiar la dirección del navegador. Copiar esa URL no crea el enlace directo de reseñas: abre la ficha del negocio.",
+  "Antes de continuar, comprobá que el enlace abra el formulario para dejar una reseña.",
 );
 assert.deepEqual(guides.resena.steps, [
-  "Entrá al Perfil de Empresa de Google con la cuenta que administra la ficha.",
-  "Abrí Solicitar reseñas. En algunas cuentas se llama Pedir reseñas u Obtener más reseñas.",
-  "Tocá Copiar enlace.",
-  "Pegá ese enlace en el campo de abajo.",
+  "Entrá al Perfil de Empresa de Google.",
+  "Buscá la opción para solicitar o compartir reseñas. En algunas cuentas se llama Solicitar reseñas, Pedir reseñas u Obtener más reseñas.",
+  "Copiá el enlace.",
+  "Pegá el enlace en AtajoLab.",
 ]);
 assert.equal(guides.resena.profileUrl, "https://business.google.com/");
 assert.deepEqual(guides.resena.examples, [

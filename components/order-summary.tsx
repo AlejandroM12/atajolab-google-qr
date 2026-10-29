@@ -15,16 +15,16 @@ import { renderArtworkSvg } from "@/lib/print/preview";
 const viewLabel: Record<PaymentView, string> = {
   pending: "Pendiente de pago",
   verifying: "Pago en verificación",
-  approved: "Pago aprobado",
+  approved: "Tu compra está confirmada",
   rejected: "Pago rechazado",
   cancelled: "Cancelado",
 };
 
 const viewCopy: Record<PaymentView, string> = {
-  pending: "El pedido está pendiente de pago.",
+  pending: "El pago todavía no está confirmado.",
   verifying:
     "Estamos verificando el pago con Mercado Pago. El regreso del navegador no alcanza para confirmarlo.",
-  approved: "El pago quedó aprobado.",
+  approved: "Ya podés descargar los archivos.",
   rejected: "El pago no se acreditó. El pedido sigue pendiente y podés intentar de nuevo.",
   cancelled: "El pedido está cancelado.",
 };
@@ -88,8 +88,8 @@ export function OrderSummary({
   return (
     <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_20rem] lg:items-start">
       <div>
-        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-accent">Pedido</p>
-        <h1 className="mt-3 text-4xl font-semibold leading-tight">Resumen del pedido</h1>
+        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-accent">Tu compra</p>
+        <h1 className="mt-3 text-4xl font-semibold leading-tight">Resumen de tu compra</h1>
         <p className="mt-4 text-lg text-muted" role="status">
           {viewLabel[view]}
         </p>
@@ -103,7 +103,7 @@ export function OrderSummary({
             <dd className="mt-1 text-muted">{created}</dd>
           </div>
           <div>
-            <dt className="font-semibold">Pieza</dt>
+            <dt className="font-semibold">Diseño</dt>
             <dd className="mt-1 text-muted">
               {[templateName, order.artwork.businessName, `${printSize.widthMm} × ${printSize.heightMm} mm`]
                 .filter((part) => part.length > 0)
@@ -127,18 +127,20 @@ export function OrderSummary({
             </p>
           ) : null}
           {downloads ? (
-            <p>La pieza se genera en el servidor con la plantilla, los textos, los colores y el QR guardados en el pedido.</p>
+            <p>Descargá tus archivos. Se arman con el diseño, el texto y el código que guardaste.</p>
           ) : order.status === "PAID" ? (
             <p>
-              Para descargar PNG, SVG y PDF, abrí este pedido en el navegador donde lo creaste. Desde otro
-              dispositivo, pedí un enlace con el correo de la compra.
+              Para descargar PNG, SVG y PDF, abrí esta compra en el navegador donde la creaste. Desde otro
+              dispositivo, recuperá los archivos con el mismo correo.
             </p>
           ) : order.status === "CANCELLED" ? null : (
             <p>PNG, SVG y PDF se habilitan cuando el pago queda confirmado.</p>
           )}
         </div>
         {downloads ? (
-          <div className="mt-4 flex flex-wrap gap-3">
+          <div className="mt-4">
+            <p className="text-sm font-semibold">Descargar mis archivos</p>
+            <div className="mt-3 flex flex-wrap gap-3">
             {artworkExportFormats.map((format) => (
               <a
                 key={format}
@@ -149,19 +151,20 @@ export function OrderSummary({
                 {downloadLabel[format]}
               </a>
             ))}
+            </div>
           </div>
         ) : null}
         {downloads ? <OrderAccessLink publicId={order.publicId} /> : null}
         {order.status === "PAID" && !downloads ? (
           <div className="mt-4">
             <ButtonLink href="/recuperar" variant="secondary">
-              Recuperar descargas
+              Recuperar mis descargas
             </ButtonLink>
           </div>
         ) : null}
         {sceneVersion && !compositionOk ? (
           <p role="alert" className="mt-4 rounded-2xl bg-danger-bg px-4 py-3 text-sm leading-relaxed text-danger">
-            Esta pieza no entra en la plantilla. Volvé al editor y acortá el texto antes de pagar.
+            Este texto no entra en el diseño. Volvé al editor y acortalo antes de pagar.
           </p>
         ) : null}
         {canPay ? <OrderPaymentActions publicId={order.publicId} mode="pay" /> : null}
@@ -192,7 +195,7 @@ export function OrderSummary({
         <ScenePreview svg={sceneSvg} />
       ) : order.artwork.version === 3 || order.artwork.version === 4 || order.artwork.version === 5 || order.artwork.version === 6 || order.artwork.version === 7 ? (
         <p role="alert" className="rounded-2xl bg-danger-bg px-4 py-6 text-sm leading-relaxed text-danger">
-          No se puede mostrar esta pieza porque el texto no entra en la plantilla.
+          No se puede mostrar este diseño porque el texto no entra.
         </p>
       ) : (
         <StudioPiece artwork={order.artwork}>

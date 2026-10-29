@@ -6,8 +6,8 @@ import { RecoveryForm } from "@/components/recovery-form";
 import { createMailSender } from "@/lib/mail";
 
 export const metadata: Metadata = {
-  title: "Recuperar descargas",
-  description: "Pedí un enlace privado para entrar a las descargas de un pedido pagado.",
+  title: "Recuperar mis descargas",
+  description: "Pedí un enlace para volver a descargar los archivos de una compra confirmada.",
 };
 
 type SearchParams = Record<string, string | string[] | undefined>;
@@ -33,19 +33,18 @@ async function RecoveryContent({ searchParams }: { searchParams: Promise<SearchP
   return (
     <>
       <p className="text-xs font-semibold uppercase tracking-[0.18em] text-accent">Acceso</p>
-      <h1 className="mt-3 text-4xl font-semibold leading-tight">Recuperar descargas</h1>
+      <h1 className="mt-3 text-4xl font-semibold leading-tight">Recuperar mis descargas</h1>
       <p className="mt-4 max-w-2xl text-lg leading-relaxed text-muted">
-        Escribí el correo que dejaste antes de pagar. Si tiene compras pagadas, preparamos un enlace privado para
-        este dispositivo. No hace falta una cuenta.
+        Escribí el correo que dejaste al comprar. Si tiene compras confirmadas, te enviamos un enlace para descargar
+        los archivos en este dispositivo. No hace falta una cuenta.
       </p>
       {mail.mode === "dev-outbox" ? (
         <p className="mt-4 max-w-2xl text-sm leading-relaxed text-muted">
-          El envío a un buzón real no está conectado. En este desarrollo, el enlace queda en{" "}
-          <span className="font-mono">.data/mail-outbox.jsonl</span> y no sale de esta computadora.
+          El correo todavía no está conectado a un buzón real. En este entorno de desarrollo el enlace no sale de esta computadora.
         </p>
       ) : mail.mode === "resend" ? (
         <p className="mt-4 max-w-2xl text-sm leading-relaxed text-muted">
-          Si ese correo tiene compras pagadas, el enlace sale solo hacia esa casilla.
+          Si ese correo tiene compras confirmadas, el enlace llega solo a esa casilla.
         </p>
       ) : (
         <p className="mt-4 max-w-2xl text-sm leading-relaxed text-muted">
@@ -54,7 +53,7 @@ async function RecoveryContent({ searchParams }: { searchParams: Promise<SearchP
       )}
       {estado === "enlace" ? (
         <p className="mt-4 max-w-2xl text-sm leading-relaxed" role="status">
-          Ese enlace no está disponible. Puede haber vencido o ya se usó. Pedí uno nuevo con el correo de la compra.
+          Ese enlace no está disponible. Puede haber vencido o ya se usó. Pedí uno nuevo con el mismo correo.
         </p>
       ) : null}
       <RecoveryForm />

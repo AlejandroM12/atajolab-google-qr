@@ -371,12 +371,12 @@ function isUniqueViolation(error: unknown): boolean {
 
 function pieceLabel(artwork: Prisma.JsonValue): string {
   if (typeof artwork !== "object" || artwork === null || Array.isArray(artwork) || !("businessName" in artwork)) {
-    return "Tu pieza";
+    return "Tu diseño";
   }
   const name = artwork.businessName;
-  if (typeof name !== "string") return "Tu pieza";
+  if (typeof name !== "string") return "Tu diseño";
   const label = name.replace(/[\r\n]/g, " ").trim();
-  return label.length > 0 ? label.slice(0, 80) : "Tu pieza";
+  return label.length > 0 ? label.slice(0, 80) : "Tu diseño";
 }
 
 function isOrderStatus(value: string): value is OrderStatus {

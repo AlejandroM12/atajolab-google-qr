@@ -76,7 +76,7 @@ export function QrSlot({
         ref={canvasRef}
         className={ready ? "block h-full w-full" : "hidden"}
         role={ready ? "img" : undefined}
-        aria-label={ready ? "Código QR de la pieza" : undefined}
+        aria-label={ready ? "Código QR del diseño" : undefined}
         aria-hidden={ready ? undefined : true}
       />
       {ready ? null : (

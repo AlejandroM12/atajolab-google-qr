@@ -205,15 +205,15 @@ export const counterTemplates: readonly CounterTemplateSpec[] = [
 export const signageFormats: readonly SignageFormatSpec[] = [
   {
     id: "poster",
-    name: "Cartel",
-    description: "A6 vertical, 105 × 148 mm. Para mostrador, pared o soporte.",
+    name: "Cartel A6",
+    description: "Ideal para mostradores y recepciones. 105 × 148 mm.",
     widthMm: 105,
     heightMm: 148,
   },
   {
     id: "sticker",
-    name: "Sticker",
-    description: "Cuadrado de 80 × 80 mm, con margen para recortar y pegar.",
+    name: "Sticker QR",
+    description: "Ideal para pegar en superficies. 80 × 80 mm.",
     widthMm: 80,
     heightMm: 80,
   },
@@ -431,22 +431,22 @@ export const premiumTemplates: readonly {
   {
     id: "stand-classic",
     name: "Clásico",
-    description: "Papel claro, la frase en Fraunces y un marco doble alrededor del QR.",
+    description: "Papel claro y un marco alrededor del código.",
   },
   {
     id: "stand-vivid",
     name: "Vivo",
-    description: "Riel verde y franja naranja. La invitación es el cartel.",
+    description: "Riel verde y franja naranja.",
   },
   {
     id: "stand-dark",
     name: "Nocturno",
-    description: "Campo oscuro, franja amarilla y el QR en una placa blanca.",
+    description: "Fondo oscuro y el código sobre una placa clara.",
   },
   {
     id: "stand-shop",
     name: "Mi negocio",
-    description: "El nombre grande y una franja de color con la invitación.",
+    description: "El nombre grande y una franja de color.",
   },
 ];
 

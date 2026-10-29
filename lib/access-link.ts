@@ -90,7 +90,7 @@ export function recoveryMail(
   for (const entry of entries) {
     const url = accessLinkUrl(origin, entry.token);
     if (!url) return null;
-    const label = entry.label.replace(/[\r\n]/g, " ").trim().slice(0, 80) || "Tu pieza";
+    const label = entry.label.replace(/[\r\n]/g, " ").trim().slice(0, 80) || "Tu diseño";
     lines.push(`${label}\n${url}`);
   }
   if (lines.length === 0) return null;
