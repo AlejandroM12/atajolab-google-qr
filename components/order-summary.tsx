@@ -109,9 +109,7 @@ export function OrderSummary({
           <p>{viewCopy[view]}</p>
           {!sandboxReady && order.status === "PENDING" ? (
             <p>
-              El cobro de prueba todavía no está configurado. Hace falta el access token de la pestaña
-              Prueba y MERCADOPAGO_ENV=test. Desde esta pantalla no se puede marcar el pedido como
-              pagado.
+              El cobro no está configurado en el servidor. Desde esta pantalla no se puede marcar el pedido como pagado.
             </p>
           ) : null}
           {downloads ? (

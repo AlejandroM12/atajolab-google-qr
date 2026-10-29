@@ -10,10 +10,11 @@ import {
 } from "mercadopago";
 import { PIECE_CURRENCY, PIECE_PRICE_ARS } from "@/lib/pricing";
 import {
+  MAX_RECONCILE_PAYMENTS,
+  credentialShape,
   isMercadoPagoCheckoutUrl,
   preferenceAutoReturn,
   publicNotificationUrl,
-  sandboxCredentialState,
 } from "@/lib/payments/checkout-policy";
 import type { VerifiedPayment } from "@/lib/payments/decision";
 import {
@@ -97,6 +98,11 @@ type PaymentIdentity = {
 
 const ACCOUNT_ID = /^\d{1,20}$/;
 
+function accountId(value: number | string | null | undefined): string | null {
+  const id = value === undefined || value === null ? "" : String(value);
+  return ACCOUNT_ID.test(id) ? id : null;
+}
+
 function asPayment(value: PaymentIdentity): VerifiedPayment | null {
   if (
     value.id === undefined ||
@@ -117,7 +123,60 @@ function asPayment(value: PaymentIdentity): VerifiedPayment | null {
     liveMode: value.live_mode ?? null,
     approvedAt: value.date_approved ?? null,
     parties: "unverified",
+    collectorId: null,
+    accountId: null,
   };
+}
+
+export function parseMercadoPagoUser(
+  body: unknown,
+): { id: string; account: MercadoPagoAccount } | null {
+  if (body === null || typeof body !== "object") return null;
+  const record = body as {
+    id?: unknown;
+    email?: unknown;
+    tags?: unknown;
+    nickname?: unknown;
+    test_data?: unknown;
+  };
+  const id = record.id === undefined || record.id === null ? "" : String(record.id);
+  if (!ACCOUNT_ID.test(id)) return null;
+
+  const testData =
+    record.test_data !== null && typeof record.test_data === "object"
+      ? (record.test_data as { test_user?: unknown })
+      : null;
+
+  return {
+    id,
+    account: {
+      email: typeof record.email === "string" ? record.email : null,
+      tags: Array.isArray(record.tags)
+        ? record.tags.filter((tag): tag is string => typeof tag === "string")
+        : [],
+      nickname: typeof record.nickname === "string" ? record.nickname : null,
+      testUserFlag: testData?.test_user === true,
+    },
+  };
+}
+
+export async function readTokenOwner(
+  accessToken: string,
+): Promise<{ id: string; account: MercadoPagoAccount } | null> {
+  let response: Response;
+  try {
+    response = await fetch("https://api.mercadopago.com/users/me", {
+      headers: { Authorization: `Bearer ${accessToken}` },
+      signal: AbortSignal.timeout(8000),
+    });
+  } catch {
+    throw new PaymentProviderError();
+  }
+
+  if (response.status === 401 || response.status === 403 || response.status === 404) return null;
+  if (!response.ok) throw new PaymentProviderError();
+
+  return parseMercadoPagoUser(await response.json());
 }
 
 async function readAccount(
@@ -140,26 +199,9 @@ async function readAccount(
   if (response.status === 401 || response.status === 403 || response.status === 404) return null;
   if (!response.ok) throw new PaymentProviderError();
 
-  const body = (await response.json()) as {
-    id?: unknown;
-    email?: unknown;
-    tags?: unknown;
-    nickname?: unknown;
-    test_data?: unknown;
-  };
-  if (body.id === undefined || String(body.id) !== id) return null;
-
-  const testData =
-    body.test_data !== null && typeof body.test_data === "object"
-      ? (body.test_data as { test_user?: unknown })
-      : null;
-
-  return {
-    email: typeof body.email === "string" ? body.email : null,
-    tags: Array.isArray(body.tags) ? body.tags.filter((tag): tag is string => typeof tag === "string") : [],
-    nickname: typeof body.nickname === "string" ? body.nickname : null,
-    testUserFlag: testData?.test_user === true,
-  };
+  const parsed = parseMercadoPagoUser(await response.json());
+  if (!parsed || parsed.id !== id) return null;
+  return parsed.account;
 }
 
 async function paymentParties(accessToken: string, payment: PaymentIdentity): Promise<PaymentParties> {
@@ -177,10 +219,13 @@ async function paymentParties(accessToken: string, payment: PaymentIdentity): Pr
 export function createMercadoPagoGateway(env: {
   accessToken: string | undefined;
   notificationUrl: string | undefined;
+  collectorId: string;
+  environment?: string;
 }): PaymentGateway {
   const accessToken = env.accessToken?.trim() ?? "";
+  const collectorId = env.collectorId.trim();
 
-  if (sandboxCredentialState(accessToken) !== "ready") {
+  if (credentialShape(accessToken, env.environment) !== "ready" || !ACCOUNT_ID.test(collectorId)) {
     throw new PaymentProviderError();
   }
 
@@ -252,6 +297,8 @@ export function createMercadoPagoGateway(env: {
         const response = await payments.get({ id });
         const payment = asPayment(response);
         if (!payment) return null;
+        payment.collectorId = accountId(response.collector_id);
+        payment.accountId = collectorId;
         payment.parties = await paymentParties(accessToken, response);
         return payment;
       } catch (error) {
@@ -267,13 +314,20 @@ export function createMercadoPagoGateway(env: {
     async findPayments(publicId) {
       try {
         const response = await payments.search({
-          options: { external_reference: publicId },
+          options: {
+            external_reference: publicId,
+            limit: MAX_RECONCILE_PAYMENTS,
+            sort: "date_created",
+            criteria: "desc",
+          },
         });
         const verified: VerifiedPayment[] = [];
 
-        for (const payment of response.results ?? []) {
+        for (const payment of (response.results ?? []).slice(0, MAX_RECONCILE_PAYMENTS)) {
           const mapped = asPayment(payment);
           if (!mapped) continue;
+          mapped.collectorId = accountId(payment.collector_id);
+          mapped.accountId = collectorId;
           mapped.parties = await paymentParties(accessToken, payment);
           verified.push(mapped);
         }

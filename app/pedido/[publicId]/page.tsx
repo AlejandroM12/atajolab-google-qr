@@ -8,9 +8,14 @@ import { OrderSummary } from "@/components/order-summary";
 import { DIGITAL_DOWNLOADS_ENABLED } from "@/lib/delivery";
 import { applyVerifiedPayment, findOrder, findOrderAccessHashes, findPaymentRecord } from "@/lib/orders";
 import { digitalDeliveryAllowed, orderAccessCookieName, readOrderAccess } from "@/lib/payments/access";
-import { parseReturnHint, paymentView, sandboxCredentialState } from "@/lib/payments/checkout-policy";
+import {
+  createReconcileLimiter,
+  credentialOwnerMatches,
+  parseReturnHint,
+  paymentView,
+} from "@/lib/payments/checkout-policy";
 import { reconcilePayment } from "@/lib/payments/checkout-service";
-import { gatewayForRequest, paymentAccessToken } from "@/lib/payments/mercadopago";
+import { paymentRuntime } from "@/lib/payments/mercadopago";
 
 export const metadata: Metadata = {
   title: "Pedido",
@@ -18,6 +23,8 @@ export const metadata: Metadata = {
 };
 
 type SearchParams = Record<string, string | string[] | undefined>;
+
+const reconcileLimiter = createReconcileLimiter();
 
 export default function OrderPage({
   params,
@@ -51,8 +58,8 @@ async function OrderLoader({
   let order = await findOrder(publicId);
   if (!order) notFound();
 
-  const accessToken = paymentAccessToken();
-  const sandboxReady = sandboxCredentialState(accessToken) === "ready";
+  const runtime = await paymentRuntime();
+  const paymentsReady = credentialOwnerMatches(process.env.MERCADOPAGO_ENV, runtime.owner);
   const jar = await cookies();
   const accessCookie = jar.get(orderAccessCookieName(publicId))?.value;
   const deliveryKey = readOrderAccess(
@@ -60,18 +67,27 @@ async function OrderLoader({
     publicId,
   );
 
-  if (order.status === "PENDING" && hint && deliveryKey && sandboxReady) {
+  if (
+    order.status === "PENDING" &&
+    deliveryKey &&
+    paymentsReady &&
+    reconcileLimiter.allow(publicId)
+  ) {
     try {
       const hinted = paymentHint(first(query.payment_id) ?? first(query.collection_id));
-      await reconcilePayment({
+      const result = await reconcilePayment({
         publicId,
         body: hinted ? { paymentId: hinted } : {},
         deliveryKey,
-        accessToken,
-        gateway: gatewayForRequest(),
+        accessToken: runtime.token,
+        gateway: runtime.gateway,
         store: { find: findPaymentRecord, apply: applyVerifiedPayment },
       });
-      order = (await findOrder(publicId)) ?? order;
+      if (!result.ok) {
+        console.error("payment reconcile failed", result.error);
+      } else {
+        order = (await findOrder(publicId)) ?? order;
+      }
     } catch (error) {
       console.error("payment reconcile failed", error instanceof Error ? error.name : "unknown");
     }
@@ -89,7 +105,7 @@ async function OrderLoader({
   return (
     <OrderSummary
       order={order}
-      sandboxReady={sandboxReady}
+      sandboxReady={paymentsReady}
       downloads={downloads}
       view={paymentView({
         orderStatus: order.status,

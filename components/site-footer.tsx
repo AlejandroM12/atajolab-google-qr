@@ -14,8 +14,7 @@ export function SiteFooter() {
           <p className="mt-4 text-sm leading-relaxed text-muted">
             Herramienta para diseñar una tarjeta o un cartel a partir de un enlace de Google que pegás
             vos. La vista previa usa la misma escena que la descarga. Si continuás al pago, el pedido queda
-            pendiente hasta que Mercado Pago lo confirme. Esta versión no tiene cuentas ni habilita
-            cobros reales.
+            pendiente hasta que Mercado Pago lo confirme. Esta versión no tiene cuentas.
           </p>
           <p className="mt-3 text-sm leading-relaxed text-muted">
             AtajoLab no está afiliado a Google. Google Maps y el Perfil de Empresa son servicios de

@@ -45,7 +45,7 @@ export function Hero() {
           </ul>
           <p className="mt-4 text-sm leading-relaxed text-muted">
             La vista previa es el archivo que se imprime. No incluye un chip. Antes de pagar te pedimos un correo,
-            sin crear una cuenta. El pago de prueba queda en Mercado Pago. Si se confirma, descargás PNG, SVG y PDF.
+            sin crear una cuenta. El pago queda en Mercado Pago. Si se confirma, descargás PNG, SVG y PDF.
           </p>
         </aside>
       </Container>

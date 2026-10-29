@@ -1,7 +1,7 @@
 import { applyVerifiedPayment, findPaymentRecord } from "@/lib/orders";
 import { processPaymentNotification } from "@/lib/payments/webhook-handler";
 import { notificationIsAuthentic } from "@/lib/payments/webhook-auth";
-import { gatewayForRequest, paymentAccessToken, paymentWebhookSecret } from "@/lib/payments/mercadopago";
+import { paymentRuntime, paymentWebhookSecret } from "@/lib/payments/mercadopago";
 
 export async function POST(request: Request) {
   const url = new URL(request.url);
@@ -14,12 +14,13 @@ export async function POST(request: Request) {
     secret: paymentWebhookSecret(),
   });
 
+  const runtime = await paymentRuntime();
   const status = await processPaymentNotification({
     authentic,
     topic,
     dataId,
-    accessToken: paymentAccessToken(),
-    gateway: gatewayForRequest(),
+    accessToken: runtime.token,
+    gateway: runtime.gateway,
     findOrder: findPaymentRecord,
     apply: applyVerifiedPayment,
   });
