@@ -82,10 +82,6 @@ export const guides: Record<
 
 export const upcoming = [
   {
-    title: "Cobros reales",
-    detail: "Checkout Pro queda en modo de prueba. Los cobros de producción siguen deshabilitados.",
-  },
-  {
     title: "Gestión de pedidos",
     detail: "Seguimiento de compras digitales y de kits físicos.",
   },
@@ -100,7 +96,7 @@ export const availableNow = [
   "Vista previa de la misma pieza que se descarga en PNG, SVG y PDF.",
   "Control del enlace antes de armar el QR.",
   "Pedido pendiente, con el precio definido en el servidor.",
-  "Pago de prueba con Mercado Pago, cuando hay credenciales de sandbox.",
+  "Pago con Mercado Pago Checkout Pro. El pedido se acredita cuando la API confirma el pago.",
   "Descarga de PNG, SVG y PDF cuando el pedido está pagado.",
   "Enlace privado para recuperar las descargas desde otro dispositivo.",
 ] as const;

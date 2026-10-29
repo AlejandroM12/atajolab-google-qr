@@ -1,9 +1,9 @@
 import { isDatabaseUnavailable } from "@/lib/db-error";
 import { findOrder, findPaymentRecord, savePreferenceId } from "@/lib/orders";
 import { readOrderAccess } from "@/lib/payments/access";
-import { createPreferenceLimiter, sandboxCredentialState } from "@/lib/payments/checkout-policy";
+import { createPreferenceLimiter, credentialShape } from "@/lib/payments/checkout-policy";
 import { readAppOrigin, startCheckout } from "@/lib/payments/checkout-service";
-import { gatewayForRequest, paymentAccessToken } from "@/lib/payments/mercadopago";
+import { paymentAccessToken, paymentRuntime } from "@/lib/payments/mercadopago";
 import { compositionChecked, pieceComposes } from "@/lib/print/layout";
 
 const limiter = createPreferenceLimiter();
@@ -16,8 +16,8 @@ export async function POST(
   const body = await readBody(request);
   if (body === undefined) return paymentError(400, "invalid-body");
 
-  if (sandboxCredentialState(paymentAccessToken()) === "production") {
-    console.error("checkout refused production-token");
+  if (credentialShape(paymentAccessToken()) === "mismatch") {
+    console.error("checkout refused credentials");
   }
 
   try {
@@ -34,15 +34,17 @@ export async function POST(
     throw error;
   }
 
+  const runtime = await paymentRuntime();
   const result = await startCheckout({
     publicId,
     body,
     deliveryKey: readOrderAccess(request.headers.get("cookie"), publicId),
-    accessToken: paymentAccessToken(),
+    accessToken: runtime.token,
     origin: readAppOrigin(),
-    gateway: gatewayForRequest(),
+    gateway: runtime.gateway,
     limiter,
     store: { find: findPaymentRecord, savePreference: savePreferenceId },
+    owner: runtime.owner,
   });
 
   if (!result.ok) return paymentError(result.status, result.error);

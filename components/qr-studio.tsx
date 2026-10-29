@@ -164,7 +164,7 @@ export function QrStudio() {
               ? "El pedido se habilita cuando el enlace es válido y el QR tiene contraste."
               : !previewCurrent
                 ? "Estamos comprobando que el texto entre en la plantilla."
-                : "El pedido queda pendiente hasta que el pago de prueba quede confirmado.";
+                : "El pedido queda pendiente hasta que Mercado Pago confirme el pago.";
 
   useEffect(() => {
     if (!previewKey) return;

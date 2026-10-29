@@ -14,6 +14,10 @@ export type VerifiedPayment = {
   liveMode: boolean | null;
   approvedAt: string | null;
   parties: PaymentParties;
+  /** Collector on the payment resource. Null when the API omits it. */
+  collectorId: string | null;
+  /** Id from GET /users/me for the token that read this payment. */
+  accountId: string | null;
 };
 
 export type PaymentOrderSnapshot = {
@@ -66,6 +70,8 @@ export function decidePayment(
     return { action: "ignore", reason: "unverified-parties" };
   }
 
+  // Refunds and chargebacks for an order that is already PAID are ignored.
+  // The download stays available. Changing that needs a separate product decision.
   if (order.status === "PAID" || order.status === "CANCELLED") {
     return { action: "ignore", reason: "order-closed" };
   }
@@ -91,5 +97,11 @@ function acceptedPayment(payment: VerifiedPayment, environment: PaymentEnvironme
     return payment.parties === "verified-test-users";
   }
 
-  return payment.parties === "verified-real" && payment.liveMode === true;
+  return (
+    payment.parties === "verified-real" &&
+    payment.liveMode === true &&
+    payment.collectorId !== null &&
+    payment.accountId !== null &&
+    payment.collectorId === payment.accountId
+  );
 }
