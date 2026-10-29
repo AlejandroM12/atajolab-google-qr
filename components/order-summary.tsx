@@ -5,7 +5,7 @@ import { QrSlot } from "@/components/qr-slot";
 import { ButtonLink } from "@/components/button-link";
 import { OrderAccessLink } from "@/components/order-access-link";
 import { OrderPaymentActions } from "@/components/order-payment-actions";
-import { artworkExportFormats, signageFormatSpec, templateSpec } from "@/lib/artwork";
+import { artworkExportFormats, premiumPhrases, premiumTemplates, signageFormatSpec, templateSpec } from "@/lib/artwork";
 import { formatArs } from "@/lib/pricing";
 import type { PaymentView } from "@/lib/payments/checkout-policy";
 import type { StoredOrder } from "@/lib/orders";
@@ -46,19 +46,31 @@ export function OrderSummary({
   sandboxReady: boolean;
   downloads: boolean;
 }) {
-  const spec = templateSpec(order.artwork.templateId);
+  const templateName =
+    order.artwork.version === 7
+      ? (premiumTemplates.find((item) => item.id === order.artwork.templateId)?.name ?? "Plantilla")
+      : templateSpec(order.artwork.templateId).name;
   const phrase =
     order.artwork.version === 1
       ? order.artwork.headline
-      : order.artwork.version === 5 || order.artwork.version === 6
-        ? order.artwork.message
-        : order.artwork.subtitle;
+      : order.artwork.version === 7
+        ? premiumPhrases(order.artwork.templateId, order.artwork.objective, order.artwork.message).shout
+        : order.artwork.version === 5 || order.artwork.version === 6
+          ? order.artwork.message
+          : order.artwork.subtitle;
   const sceneVersion =
-    order.artwork.version === 3 || order.artwork.version === 4 || order.artwork.version === 5 || order.artwork.version === 6;
+    order.artwork.version === 3 ||
+    order.artwork.version === 4 ||
+    order.artwork.version === 5 ||
+    order.artwork.version === 6 ||
+    order.artwork.version === 7;
   const printSize =
-    order.artwork.version === 5 || order.artwork.version === 6
+    order.artwork.version === 5 || order.artwork.version === 6 || order.artwork.version === 7
       ? signageFormatSpec(order.artwork.format)
-      : { widthMm: spec.widthMm, heightMm: spec.heightMm };
+      : {
+          widthMm: templateSpec(order.artwork.templateId).widthMm,
+          heightMm: templateSpec(order.artwork.templateId).heightMm,
+        };
   const compositionOk = !sceneVersion || pieceComposes(order.artwork);
   const sceneSvg = sceneVersion && compositionOk ? safeScene(order.artwork) : null;
   const created = new Intl.DateTimeFormat("es-AR", {
@@ -93,7 +105,9 @@ export function OrderSummary({
           <div>
             <dt className="font-semibold">Pieza</dt>
             <dd className="mt-1 text-muted">
-              {spec.name} · {order.artwork.businessName} · {printSize.widthMm} × {printSize.heightMm} mm
+              {[templateName, order.artwork.businessName, `${printSize.widthMm} × ${printSize.heightMm} mm`]
+                .filter((part) => part.length > 0)
+                .join(" · ")}
             </dd>
           </div>
           <div>
@@ -174,9 +188,9 @@ export function OrderSummary({
             }
           />
         </ProductArtworkView>
-      ) : (order.artwork.version === 3 || order.artwork.version === 4 || order.artwork.version === 5 || order.artwork.version === 6) && sceneSvg ? (
+      ) : (order.artwork.version === 3 || order.artwork.version === 4 || order.artwork.version === 5 || order.artwork.version === 6 || order.artwork.version === 7) && sceneSvg ? (
         <ScenePreview svg={sceneSvg} />
-      ) : order.artwork.version === 3 || order.artwork.version === 4 || order.artwork.version === 5 || order.artwork.version === 6 ? (
+      ) : order.artwork.version === 3 || order.artwork.version === 4 || order.artwork.version === 5 || order.artwork.version === 6 || order.artwork.version === 7 ? (
         <p role="alert" className="rounded-2xl bg-danger-bg px-4 py-6 text-sm leading-relaxed text-danger">
           No se puede mostrar esta pieza porque el texto no entra en la plantilla.
         </p>

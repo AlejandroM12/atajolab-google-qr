@@ -6,19 +6,20 @@ import { ScenePreview } from "@/components/scene-preview";
 import { type QrPayload } from "@/components/qr-slot";
 import {
   BUSINESS_NAME_MAX,
-  artworkFonts,
-  PRESS_ARTWORK_VERSION,
-  pressCopy,
+  PREMIUM_ARTWORK_VERSION,
+  PREMIUM_MESSAGE_MAX,
+  premiumDefaultMessage,
+  premiumMessagePresets,
+  premiumPhrases,
+  premiumTemplates,
   signageFormats,
   signageGoal,
-  signageTemplates,
-  type ArtworkFontId,
   type ArtworkLogo,
+  type PremiumTemplateId,
   type SignageFormat,
   type SignageObjective,
-  type SignageTemplateId,
 } from "@/lib/artwork";
-import { assessContrast, formatContrastRatio, isHexColor } from "@/lib/color";
+import { assessContrast, formatContrastRatio, isHexColor, shopStripeReadable } from "@/lib/color";
 import {
   isIncompleteHttpsPrefix,
   linkIssueMessage,
@@ -29,65 +30,33 @@ import { parseBuyerEmail } from "@/lib/buyer-email";
 import { prepareLogoFile } from "@/lib/logo-prepare";
 import { commercialIssueMessage, isCommercialIssue } from "@/lib/print/commercial-issues";
 import { formatArs, PIECE_PRICE_ARS } from "@/lib/pricing";
-import { QR_DEFAULTS, QR_SIZES, guides, objectives, type QrSize } from "@/lib/product";
+import { guides, objectives } from "@/lib/product";
 
-const palettes: Record<
-  SignageTemplateId,
-  {
-    surface: string;
-    ink: string;
-    accent: string;
-    foreground: string;
-    background: string;
-    fontId: ArtworkFontId;
-  }
-> = {
-  "review-clean": {
-    surface: "#ffffff",
-    ink: "#202124",
-    accent: "#1a73e8",
-    foreground: "#202124",
-    background: "#ffffff",
-    fontId: "sora",
-  },
-  "review-dark": {
-    surface: "#101114",
-    ink: "#f5f6f7",
-    accent: "#d2d6dc",
-    foreground: "#101114",
-    background: "#ffffff",
-    fontId: "sora",
-  },
-  "review-brand": {
-    surface: "#f7f5f2",
-    ink: "#1a1a1a",
-    accent: "#0f6e62",
-    foreground: "#1a1a1a",
-    background: "#ffffff",
-    fontId: "source",
-  },
-};
+const SHOP_STRIPE = "#1c1915";
+const SHOP_PAPER = "#f7f1e8";
 
 export function QrStudio() {
   const [objective, setObjective] = useState<SignageObjective>("review");
   const [url, setUrl] = useState("");
   const [touched, setTouched] = useState(false);
   const [formatId, setFormatId] = useState<SignageFormat>("poster");
-  const [templateId, setTemplateId] = useState<SignageTemplateId>("review-clean");
+  const [templateId, setTemplateId] = useState<PremiumTemplateId>("stand-classic");
   const [businessName, setBusinessName] = useState("");
+  const [messageChoice, setMessageChoice] = useState(premiumDefaultMessage("stand-classic"));
+  const [customMessage, setCustomMessage] = useState("");
+  const [messageCustom, setMessageCustom] = useState(false);
+  const [messageTouched, setMessageTouched] = useState(false);
   const [email, setEmail] = useState("");
   const [reviewChecked, setReviewChecked] = useState(false);
-  const [fontId, setFontId] = useState<ArtworkFontId>(palettes["review-clean"].fontId);
-  const [surface, setSurface] = useState(palettes["review-clean"].surface);
-  const [ink, setInk] = useState(palettes["review-clean"].ink);
-  const [accent, setAccent] = useState(palettes["review-clean"].accent);
-  const [foreground, setForeground] = useState(palettes["review-clean"].foreground);
-  const [background, setBackground] = useState(palettes["review-clean"].background);
-  const [size, setSize] = useState<QrSize>(QR_DEFAULTS.size);
+  const [accent, setAccent] = useState(SHOP_STRIPE);
   const [logo, setLogo] = useState<ArtworkLogo | null>(null);
   const [logoError, setLogoError] = useState<string | null>(null);
   const [logoBusy, setLogoBusy] = useState(false);
   const [resetToken, setResetToken] = useState(0);
+  const [thumbs, setThumbs] = useState<{ key: string; images: Partial<Record<PremiumTemplateId, string>> }>({
+    key: "",
+    images: {},
+  });
   const [previewSvg, setPreviewSvg] = useState<string | null>(null);
   const [previewKeyReady, setPreviewKeyReady] = useState<string | null>(null);
   const [compositionIssue, setCompositionIssue] = useState<string | null>(null);
@@ -98,41 +67,39 @@ export function QrStudio() {
 
   const goal = signageGoal(objective);
   const result = useMemo(() => validateGoogleLink(url, goal), [url, goal]);
-  const qrContrast = assessContrast(foreground, background);
-  const textContrast = assessContrast(ink, surface);
+  const stripeOnWhite = assessContrast("#ffffff", accent);
+  const stripeOnPaper = assessContrast(accent, SHOP_PAPER);
+  const shopReady = templateId !== "stand-shop" || shopStripeReadable(accent, SHOP_PAPER);
   const visibleIssue = revealIssue(url, touched, result.ok ? null : result.issue);
+  const draftMessage = (messageCustom ? customMessage.trim() : messageChoice) || premiumDefaultMessage(templateId);
+  const messageReady = objective !== "review" || (messageCustom ? customMessage.trim().length > 0 : messageChoice.length > 0);
+  const phrases = premiumPhrases(templateId, objective, draftMessage);
 
   const payload = useMemo<QrPayload | null>(() => {
-    if (!result.ok || !qrContrast.sufficient) return null;
+    if (!result.ok) return null;
     return {
-      key: `${result.href}|${foreground}|${background}|${size}`,
+      key: result.href,
       href: result.href,
-      foreground,
-      background,
-      size,
+      foreground: "#1c1915",
+      background: "#ffffff",
+      size: 256,
     };
-  }, [result, qrContrast.sufficient, foreground, background, size]);
+  }, [result]);
 
-  const nameReady = businessName.trim().length > 0;
   const emailReady = parseBuyerEmail(email) !== null;
   const reviewReady = objective !== "review" || reviewChecked;
   const previewKey =
-    payload && nameReady && textContrast.sufficient
+    payload && shopReady && messageReady
       ? JSON.stringify({
-          version: PRESS_ARTWORK_VERSION,
+          version: PREMIUM_ARTWORK_VERSION,
           objective,
           url,
           businessName,
+          message: draftMessage,
           logo: logo ? { data: logo.data } : null,
           format: formatId,
           templateId,
-          fontId,
-          ink,
           accent,
-          surface,
-          foreground,
-          background,
-          qrSize: size,
         })
       : "";
   const previewCurrent = previewKey.length > 0 && previewKey === previewKeyReady;
@@ -141,30 +108,29 @@ export function QrStudio() {
   const compositionReady = shownSvg !== null && shownIssue === null;
   const canOrder =
     Boolean(payload) &&
-    nameReady &&
     emailReady &&
     reviewReady &&
-    textContrast.sufficient &&
+    shopReady &&
     compositionReady &&
     !submitting &&
     !logoBusy;
   const checkoutHint = shownIssue
     ? shownIssue
-    : !nameReady
-      ? "Escribí el nombre del negocio para crear el pedido."
-      : !reviewReady
-        ? "Abrí el enlace y confirmá que muestra el formulario de reseña."
-        : !emailReady
-          ? email.trim().length === 0
-            ? "Dejá un correo para recuperar las descargas en otro dispositivo."
-            : "Revisá el correo. Tiene que ser una dirección válida."
-          : !textContrast.sufficient
-            ? "El título y el fondo de la pieza necesitan más contraste."
-            : !payload
-              ? "El pedido se habilita cuando el enlace es válido y el QR tiene contraste."
-              : !previewCurrent
-                ? "Estamos comprobando que el texto entre en la plantilla."
-                : "El pedido queda pendiente hasta que Mercado Pago confirme el pago.";
+    : !reviewReady
+      ? "Abrí el enlace y confirmá que muestra el formulario de reseña."
+      : !emailReady
+        ? email.trim().length === 0
+          ? "Dejá un correo para recuperar las descargas en otro dispositivo."
+          : "Revisá el correo. Tiene que ser una dirección válida."
+        : !shopReady
+          ? "La franja de Mi negocio necesita contrastar con el texto blanco y con el papel."
+          : !messageReady
+          ? "Elegí un mensaje o escribí uno propio."
+          : !payload
+            ? "El pedido se habilita cuando el enlace es válido."
+            : !previewCurrent
+              ? "Estamos comprobando que el texto entre en la plantilla."
+              : "El pedido queda pendiente hasta que Mercado Pago confirme el pago.";
 
   useEffect(() => {
     if (!previewKey) return;
@@ -209,16 +175,67 @@ export function QrStudio() {
     };
   }, [previewKey]);
 
-  function chooseTemplate(next: SignageTemplateId) {
+  const thumbKey = result.ok
+    ? JSON.stringify({
+        version: PREMIUM_ARTWORK_VERSION,
+        objective,
+        url,
+        businessName,
+        message: draftMessage,
+        logo: logo ? { data: logo.data } : null,
+        format: formatId,
+        accent,
+      })
+    : "";
+
+  const shownThumbs = thumbs.key === thumbKey ? thumbs.images : {};
+
+  useEffect(() => {
+    if (!thumbKey) return;
+    const controller = new AbortController();
+    let cancelled = false;
+    const base = JSON.parse(thumbKey) as Record<string, unknown>;
+    for (const template of premiumTemplates) {
+      void fetch("/api/artwork/preview", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        signal: controller.signal,
+        body: JSON.stringify({ ...base, templateId: template.id }),
+      })
+        .then(async (response) => {
+          if (cancelled) return;
+          const body = (await response.json()) as { svg?: unknown };
+          if (!response.ok || typeof body.svg !== "string") {
+            setThumbs((current) => {
+              const images = current.key === thumbKey ? { ...current.images } : {};
+              delete images[template.id];
+              return { key: thumbKey, images };
+            });
+            return;
+          }
+          setThumbs((current) => ({
+            key: thumbKey,
+            images: {
+              ...(current.key === thumbKey ? current.images : {}),
+              [template.id]: body.svg as string,
+            },
+          }));
+        })
+        .catch((error: unknown) => {
+          if (cancelled || (error instanceof DOMException && error.name === "AbortError")) return;
+        });
+    }
+    return () => {
+      cancelled = true;
+      controller.abort();
+    };
+  }, [thumbKey]);
+
+  function chooseTemplate(next: PremiumTemplateId) {
     setTemplateId(next);
-    const palette = palettes[next];
-    setSurface(palette.surface);
-    setInk(palette.ink);
-    setAccent(palette.accent);
-    setForeground(palette.foreground);
-    setBackground(palette.background);
-    setFontId(palette.fontId);
+    setAccent(SHOP_STRIPE);
     setResetToken((token) => token + 1);
+    if (!messageTouched) setMessageChoice(premiumDefaultMessage(next));
   }
 
   async function onLogo(file: File | undefined) {
@@ -243,20 +260,15 @@ export function QrStudio() {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
-          version: PRESS_ARTWORK_VERSION,
+          version: PREMIUM_ARTWORK_VERSION,
           objective,
           url,
           businessName,
+          message: draftMessage,
           logo: logo ? { data: logo.data } : null,
           format: formatId,
           templateId,
-          fontId,
-          ink,
           accent,
-          surface,
-          foreground,
-          background,
-          qrSize: size,
           email,
           reviewChecked,
         }),
@@ -278,15 +290,13 @@ export function QrStudio() {
   const guide = guides[goal];
   const previewMessage = shownIssue
     ? shownIssue
-    : result.ok && !qrContrast.sufficient
-      ? "El contraste del QR no alcanza. Oscurecé los módulos o aclará su fondo."
-      : !textContrast.sufficient
-        ? "El título no se distingue del fondo de la pieza."
-        : shownSvg
-          ? "Esta vista es la misma pieza que se exporta en PNG, SVG y PDF."
-          : previewKey
-            ? "Estamos armando la pieza con la tipografía de impresión."
-            : "La pieza muestra el QR cuando el enlace es válido.";
+    : !shopReady
+      ? "La franja de Mi negocio necesita contrastar con el texto blanco y con el papel."
+      : shownSvg
+        ? "Esta vista es la misma pieza que se exporta en PNG, SVG y PDF."
+        : previewKey
+          ? "Estamos armando la pieza con la tipografía de impresión."
+          : "La pieza muestra el QR cuando el enlace es válido.";
 
   return (
     <div className="grid items-start gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(18rem,24rem)]">
@@ -297,7 +307,7 @@ export function QrStudio() {
               Pieza completa
             </h2>
             <p className="text-xs text-muted">
-              {signageTemplates.find((item) => item.id === templateId)?.name} · {signageFormats.find((item) => item.id === formatId)?.widthMm} × {signageFormats.find((item) => item.id === formatId)?.heightMm} mm
+              {premiumTemplates.find((item) => item.id === templateId)?.name} · {signageFormats.find((item) => item.id === formatId)?.widthMm} × {signageFormats.find((item) => item.id === formatId)?.heightMm} mm
             </p>
           </div>
           <p aria-live="polite" className="mt-2 min-h-10 text-sm leading-relaxed text-muted">
@@ -465,10 +475,75 @@ export function QrStudio() {
               className="mt-2 h-11 w-full rounded-2xl border border-line bg-card px-4 text-sm"
             />
             <p className="mt-2 text-sm leading-relaxed text-muted">
-              En la pieza se imprime «{pressCopy[objective].message}» y «{pressCopy[objective].instruction}».
+              Opcional. Si lo dejás vacío, la pieza no reserva un hueco. Debajo del código se lee «{phrases.instruction}».
             </p>
           </div>
         </div>
+
+        {objective === "review" ? (
+          <fieldset>
+            <legend className="text-sm font-semibold">Mensaje</legend>
+            <p className="mt-2 text-sm leading-relaxed text-muted">
+              Invita a dejar una reseña, sin pedir que sea positiva. En el sticker tiene que entrar sin achicar el QR.
+            </p>
+            <div className="mt-3 grid gap-2">
+              {premiumMessagePresets.map((preset) => {
+                const selected = !messageCustom && messageChoice === preset;
+                return (
+                  <label
+                    key={preset}
+                    className={`cursor-pointer rounded-2xl border px-4 py-3 text-sm ${
+                      selected ? "border-accent bg-ok-bg" : "border-line bg-card"
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="mensaje"
+                      value={preset}
+                      checked={selected}
+                      onChange={() => {
+                        setMessageCustom(false);
+                        setMessageChoice(preset);
+                        setMessageTouched(true);
+                      }}
+                      className="sr-only"
+                    />
+                    {preset}
+                  </label>
+                );
+              })}
+              <label
+                className={`cursor-pointer rounded-2xl border px-4 py-3 text-sm ${
+                  messageCustom ? "border-accent bg-ok-bg" : "border-line bg-card"
+                }`}
+              >
+                <input
+                  type="radio"
+                  name="mensaje"
+                  value="propio"
+                  checked={messageCustom}
+                  onChange={() => {
+                    setMessageCustom(true);
+                    setMessageTouched(true);
+                  }}
+                  className="sr-only"
+                />
+                Escribir otro
+              </label>
+            </div>
+            {messageCustom ? (
+              <input
+                id="mensaje-propio"
+                value={customMessage}
+                onChange={(event) => setCustomMessage(event.target.value.slice(0, PREMIUM_MESSAGE_MAX))}
+                maxLength={PREMIUM_MESSAGE_MAX}
+                placeholder="Una frase breve"
+                aria-label="Mensaje propio"
+                className="mt-3 h-11 w-full rounded-2xl border border-line bg-card px-4 text-sm"
+              />
+            ) : null}
+          </fieldset>
+        ) : null}
 
         <section className="rounded-2xl border border-line bg-card p-5">
           <h2 className="text-sm font-semibold">Logo del negocio</h2>
@@ -525,11 +600,6 @@ export function QrStudio() {
               {logoError}
             </p>
           ) : null}
-          {templateId === "review-dark" && logo ? (
-            <p className="mt-3 text-sm leading-relaxed text-muted">
-              Si el logo es oscuro y tiene fondo transparente, en la pieza se apoya sobre una superficie clara. El archivo no se modifica.
-            </p>
-          ) : null}
         </section>
 
         <fieldset>
@@ -562,9 +632,11 @@ export function QrStudio() {
 
         <fieldset>
           <legend className="text-sm font-semibold">Plantilla</legend>
-          <p className="mt-2 text-sm leading-relaxed text-muted">Cambia el dibujo. No cambia a dónde lleva el QR.</p>
-          <div className="mt-3 grid gap-3 sm:grid-cols-3">
-            {signageTemplates.map((template) => {
+          <p className="mt-2 text-sm leading-relaxed text-muted">
+            Cambia el dibujo. El enlace, el nombre, el logo y el mensaje se mantienen.
+          </p>
+          <div className="mt-3 grid gap-3 sm:grid-cols-2">
+            {premiumTemplates.map((template) => {
               const selected = templateId === template.id;
               return (
                 <label
@@ -581,7 +653,7 @@ export function QrStudio() {
                     onChange={() => chooseTemplate(template.id)}
                     className="sr-only"
                   />
-                  <TemplateThumb id={template.id} />
+                  <TemplateThumb svg={shownThumbs[template.id]} />
                   <span className="mt-3 block text-sm font-semibold">{template.name}</span>
                   <span className="mt-1 block text-xs leading-relaxed text-muted">{template.description}</span>
                 </label>
@@ -590,96 +662,35 @@ export function QrStudio() {
           </div>
         </fieldset>
 
-        <fieldset>
-          <legend className="text-sm font-semibold">Tipografía</legend>
-          <div className="mt-3 grid gap-2 sm:grid-cols-3" role="radiogroup" aria-label="Tipografía">
-            {artworkFonts.map((font) => {
-              const selected = fontId === font.id;
-              return (
-                <label
-                  key={font.id}
-                  className={`cursor-pointer rounded-2xl border px-3 py-3 ${
-                    selected ? "border-accent bg-ok-bg" : "border-line bg-card"
-                  }`}
-                >
-                  <input
-                    type="radio"
-                    name="tipografia"
-                    value={font.id}
-                    checked={selected}
-                    onChange={() => setFontId(font.id)}
-                    className="sr-only"
-                  />
-                  <span className="block text-sm font-semibold">{font.name}</span>
-                  <span className="mt-1 block text-xs text-muted">{font.detail}</span>
-                </label>
-              );
-            })}
-          </div>
-        </fieldset>
-
-        <fieldset className="rounded-2xl border border-line bg-card p-5">
-          <legend className="px-1 text-sm font-semibold">Colores</legend>
-          <div className="mt-4 grid gap-4 sm:grid-cols-3">
-            <ColorField key={`surface-${resetToken}`} label="Fondo" value={surface} onChange={setSurface} />
-            <ColorField key={`ink-${resetToken}`} label="Tinta" value={ink} onChange={setInk} />
-            <ColorField key={`accent-${resetToken}`} label="Acento" value={accent} onChange={setAccent} />
-          </div>
-          <div className="mt-4 grid gap-4 sm:grid-cols-2">
-            <ColorField key={`frente-${resetToken}`} label="Módulos del QR" value={foreground} onChange={setForeground} />
-            <ColorField key={`fondo-${resetToken}`} label="Fondo del QR" value={background} onChange={setBackground} />
-          </div>
-          <ContrastNotes
-            qr={qrContrast}
-            text={textContrast}
-            active={result.ok}
-          />
-          {templateId === "review-dark" ? (
-            <p className="mt-3 text-sm leading-relaxed text-muted">
-              En Review Dark el acento es una línea fina bajo el nombre. Si no se distingue del fondo, no se imprime.
+        {templateId === "stand-shop" ? (
+          <fieldset className="rounded-2xl border border-line bg-card p-5">
+            <legend className="px-1 text-sm font-semibold">Franja</legend>
+            <p className="mt-2 text-sm leading-relaxed text-muted">
+              El texto de la franja es blanco. El color tiene que leerse sobre el papel crema.
             </p>
-          ) : null}
-          <div className="mt-5">
-            <p id="tamano-label" className="text-sm font-semibold">
-              Tamaño del QR
-            </p>
-            <div role="radiogroup" aria-labelledby="tamano-label" className="mt-2 grid grid-cols-3 gap-2">
-              {QR_SIZES.map((option) => {
-                const selected = size === option.value;
-                return (
-                  <label
-                    key={option.value}
-                    className={`cursor-pointer rounded-xl border px-2 py-3 text-center text-sm ${
-                      selected ? "border-accent bg-ok-bg font-semibold" : "border-line"
-                    }`}
-                  >
-                    <input
-                      type="radio"
-                      name="tamano"
-                      value={option.value}
-                      checked={selected}
-                      onChange={() => setSize(option.value)}
-                      className="sr-only"
-                    />
-                    {option.label}
-                  </label>
-                );
-              })}
+            <div className="mt-4">
+              <ColorField key={`franja-${resetToken}`} label="Color de la franja" value={accent} onChange={setAccent} />
             </div>
-          </div>
-          <button
-            type="button"
-            onClick={() => chooseTemplate(templateId)}
-            className="mt-5 inline-flex h-10 items-center rounded-full border border-line px-4 text-sm font-semibold hover:border-accent"
-          >
-            Restaurar estilo de la plantilla
-          </button>
-        </fieldset>
+            {!shopReady ? (
+              <p role="status" className="mt-4 rounded-xl bg-warning-bg px-3 py-2 text-sm leading-relaxed text-warning">
+                Blanco sobre la franja contrasta {formatContrastRatio(stripeOnWhite.ratio)} y la franja sobre el papel{" "}
+                {formatContrastRatio(stripeOnPaper.ratio)}. Hacen falta 4,5:1 y 3:1.
+              </p>
+            ) : null}
+            <button
+              type="button"
+              onClick={() => chooseTemplate(templateId)}
+              className="mt-5 inline-flex h-10 items-center rounded-full border border-line px-4 text-sm font-semibold hover:border-accent"
+            >
+              Restaurar el negro de la franja
+            </button>
+          </fieldset>
+        ) : null}
 
         <section className="rounded-2xl border border-line bg-[#f7f3ea] p-5">
           <h2 className="text-sm font-semibold">Sobre Google</h2>
           <p className="mt-2 text-sm leading-relaxed text-muted">
-            No usa el logo de Google, no muestra estrellas y no presenta a AtajoLab como un producto oficial de Google.
+            No usa el logo de Google. La palabra queda en el color de la pieza y lleva un subrayado azul, amarillo y verde. En las piezas de reseña, las estrellas invitan a escribir; no son una calificación y no van junto a la palabra Google. AtajoLab no es un producto oficial de Google.
           </p>
           {objective === "review" && result.ok ? (
             <label className="mt-4 flex gap-3 text-sm leading-relaxed">
@@ -745,55 +756,17 @@ export function QrStudio() {
   );
 }
 
-function TemplateThumb({ id }: { id: SignageTemplateId }) {
-  if (id === "review-dark") {
-    return (
-      <span className="flex h-16 items-end justify-center rounded-xl bg-[#101114] p-2" aria-hidden="true">
-        <span className="size-7 bg-white" />
-      </span>
-    );
+function TemplateThumb({ svg }: { svg?: string }) {
+  if (!svg) {
+    return <span className="block h-28 rounded-xl border border-dashed border-line bg-background" aria-hidden="true" />;
   }
-  if (id === "review-brand") {
-    return (
-      <span className="flex h-16 flex-col justify-between rounded-xl bg-[#f7f5f2] p-2" aria-hidden="true">
-        <span className="h-2 w-8 bg-[#0f6e62]" />
-        <span className="size-6 self-center bg-[#1a1a1a]" />
-      </span>
-    );
-  }
+  const markup = svg.replace(/^\s*<\?xml[^>]*>\s*/, "");
   return (
-    <span className="flex h-16 flex-col justify-end rounded-xl border border-line bg-white p-2" aria-hidden="true">
-      <span className="mb-2 h-0.5 w-6 bg-[#1a73e8]" />
-      <span className="size-6 bg-[#202124]" />
-    </span>
-  );
-}
-
-function ContrastNotes({
-  qr,
-  text,
-  active,
-}: {
-  qr: ReturnType<typeof assessContrast>;
-  text: ReturnType<typeof assessContrast>;
-  active: boolean;
-}) {
-  const notes = [
-    text.sufficient ? null : `El título y el fondo contrastan ${formatContrastRatio(text.ratio)}. Hace falta 3:1.`,
-    active && !qr.sufficient ? `El QR contrasta ${formatContrastRatio(qr.ratio)}. Hace falta 3:1.` : null,
-    active && qr.low ? `El QR contrasta ${formatContrastRatio(qr.ratio)}. Conviene reforzarlo.` : null,
-    active && qr.inverted ? "El fondo del QR quedó más oscuro que los módulos." : null,
-  ].filter((note): note is string => Boolean(note));
-  if (notes.length === 0) return null;
-
-  return (
-    <div className="mt-4 space-y-2">
-      {notes.map((note) => (
-        <p key={note} role="status" className="rounded-xl bg-warning-bg px-3 py-2 text-sm leading-relaxed text-warning">
-          {note}
-        </p>
-      ))}
-    </div>
+    <span
+      className="block h-28 overflow-hidden rounded-xl bg-background [&_svg]:h-full [&_svg]:w-full"
+      aria-hidden="true"
+      dangerouslySetInnerHTML={{ __html: markup }}
+    />
   );
 }
 

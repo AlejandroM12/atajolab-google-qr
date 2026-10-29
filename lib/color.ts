@@ -34,6 +34,11 @@ export function formatContrastRatio(ratio: number): string {
   return `${ratio.toFixed(1).replace(".", ",")}:1`;
 }
 
+/** White type on the Mi negocio stripe, and the stripe against the cream paper. */
+export function shopStripeReadable(accent: string, paper = "#f7f1e8"): boolean {
+  return isHexColor(accent) && contrastRatio("#ffffff", accent) >= 4.5 && contrastRatio(accent, paper) >= 3;
+}
+
 export function isDarkColor(hex: string): boolean {
   if (!isHexColor(hex)) return true;
   return relativeLuminance(hex) < 0.45;

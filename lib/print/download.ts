@@ -1,4 +1,4 @@
-import { templateSpec, type ArtworkExportFormat, type ProductArtwork } from "@/lib/artwork";
+import { isPremiumTemplate, templateSpec, type ArtworkExportFormat, type ProductArtwork } from "@/lib/artwork";
 import { DIGITAL_DOWNLOADS_ENABLED, type OrderStatus } from "@/lib/delivery";
 import { digitalDeliveryAllowed } from "@/lib/payments/access";
 import { isPublicId } from "@/lib/public-id";
@@ -28,7 +28,7 @@ export function artworkFilename(
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "")
     .slice(0, 40);
-  const template = templateSpec(templateId).id;
+  const template = isPremiumTemplate(templateId) ? templateId : templateSpec(templateId).id;
   const base = slug.length > 0 ? `${template}-${slug}` : template;
   return `${base}.${format}`;
 }

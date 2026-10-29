@@ -90,8 +90,8 @@ export const upcoming = [
 export const availableNow = [
   "Editor de la pieza completa, sin cuenta.",
   "Carteles A6 y stickers cuadrados para pedir reseñas en Google.",
-  "Tres plantillas: Review Clean, Review Dark y Review Brand.",
-  "Nombre del negocio, logo opcional y colores con contraste.",
+  "Cuatro plantillas: Clásico, Vivo, Nocturno y Mi negocio.",
+  "Nombre y logo opcionales. En Mi negocio, la franja se puede colorear si el contraste alcanza.",
   "También puede armar un QR de ubicación, como uso secundario.",
   "Vista previa de la misma pieza que se descarga en PNG, SVG y PDF.",
   "Control del enlace antes de armar el QR.",

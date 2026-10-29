@@ -20,12 +20,12 @@ const benefits = [
   {
     title: "Diseño con contraste",
     detail:
-      "Cambiás colores, tipografía y tamaño del QR. Si el texto o el código no se distinguen, el pedido no avanza.",
+      "En Mi negocio podés elegir el color de la franja. Si el blanco no se lee, o la franja se confunde con el papel, el pedido no avanza.",
   },
   {
     title: "Logo opcional",
     detail:
-      "Podés subir un PNG, JPG o WebP. Se recorta en cuadrado, se guarda como PNG y se vuelve a validar en el servidor.",
+      "Podés subir un PNG, JPG o WebP, o dejar la pieza sin logo. Se guarda como PNG y se vuelve a validar en el servidor.",
   },
 ];
 
