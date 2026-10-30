@@ -87,7 +87,7 @@ expectIssue(reviewUrl, "ubicacion", "review-instead-of-location");
 expectIssue("https://www.google.com/maps?q=test", "resena", "location-instead-of-review");
 assert.equal(
   linkIssueMessage["location-instead-of-review"],
-  "Esta URL de Google Maps abre la ficha del negocio, aunque se vea el panel de reseñas. El enlace directo se copia en el Perfil de Empresa: Solicitar reseñas, también llamada Pedir reseñas u Obtener más reseñas, y después Copiar enlace.",
+  "Este enlace abre la ficha del negocio, no el formulario para dejar una reseña. El enlace de reseñas se copia en el Perfil de Empresa, en Solicitar reseñas, Pedir reseñas u Obtener más reseñas.",
 );
 assert.equal(
   guides.resena.note,
@@ -96,8 +96,8 @@ assert.equal(
 assert.deepEqual(guides.resena.steps, [
   "Entrá al Perfil de Empresa de Google.",
   "Buscá la opción para solicitar o compartir reseñas. En algunas cuentas se llama Solicitar reseñas, Pedir reseñas u Obtener más reseñas.",
-  "Copiá el enlace.",
-  "Pegá el enlace en AtajoLab.",
+  "Copiá el enlace directo de reseñas.",
+  "Pegá ese enlace en AtajoLab.",
 ]);
 assert.equal(guides.resena.profileUrl, "https://business.google.com/");
 assert.deepEqual(guides.resena.examples, [

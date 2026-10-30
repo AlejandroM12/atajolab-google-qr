@@ -121,7 +121,7 @@ export function QrStudio() {
           ? "Dejá tu correo para poder recuperar los archivos."
           : "Revisá el correo. Tiene que ser una dirección válida."
         : !shopReady
-          ? "La franja de Mi negocio necesita contrastar con el texto blanco y con el papel."
+          ? "Elegí un color de franja que se lea bien en el cartel."
           : !messageReady
           ? "Elegí un mensaje o escribí uno propio."
           : !payload
@@ -378,13 +378,23 @@ export function QrStudio() {
         <section className="rounded-2xl border border-line bg-card px-5">
           <details className="group py-4">
             <summary className="cursor-pointer text-base font-semibold marker:text-accent">
-              {goal === "resena" ? "¿Cómo consigo mi enlace de reseñas?" : "¿Cómo consigo el enlace de mi ubicación?"}
+              {goal === "resena"
+                ? "¿Cómo consigo el enlace directo de reseñas?"
+                : "¿Cómo copio el enlace de Google Maps?"}
             </summary>
             <ol className="mt-4 list-decimal space-y-2 pl-5 text-sm leading-relaxed">
               {guide.steps.map((step) => (
                 <li key={step}>{step}</li>
               ))}
             </ol>
+            <p className="mt-4 text-sm leading-relaxed text-muted">Así se ve, por ejemplo:</p>
+            <ul className="mt-2 space-y-1 text-sm leading-relaxed">
+              {guide.examples.map((example) => (
+                <li key={example} className="break-all">
+                  {example}
+                </li>
+              ))}
+            </ul>
             {guide.profileUrl ? (
               <p className="mt-4 text-sm leading-relaxed">
                 <a
@@ -416,13 +426,15 @@ export function QrStudio() {
             spellCheck={false}
             autoCapitalize="none"
             autoCorrect="off"
-            placeholder={goal === "ubicacion" ? "Pegá el enlace de Google Maps" : "Pegá el enlace de reseñas"}
+            placeholder={
+              goal === "ubicacion" ? "Ej.: https://maps.app.goo.gl/…" : "Ej.: https://g.page/r/…/review"
+            }
             aria-invalid={visibleIssue ? true : undefined}
             aria-describedby="enlace-ayuda enlace-estado"
             className="mt-2 w-full resize-y rounded-2xl border border-line bg-card px-4 py-3 text-sm leading-relaxed outline-none"
           />
           <p id="enlace-ayuda" className="mt-2 text-sm leading-relaxed text-muted">
-            Pegá el enlace de tu negocio. Tiene que empezar con https.
+            Pegá el enlace al que querés que lleguen tus clientes cuando escaneen el QR.
           </p>
           <p
             id="enlace-estado"
@@ -435,7 +447,7 @@ export function QrStudio() {
               ? linkIssueMessage[visibleIssue]
               : result.ok
                 ? goal === "ubicacion"
-                  ? "Enlace admitido para compartir la ubicación."
+                  ? "Listo. Con este enlace tus clientes llegan a tu ubicación en Google Maps."
                   : "El enlace tiene la forma de un formulario de reseña. Abrilo para comprobar el destino."
                 : "La vista previa aparece cuando el enlace es válido."}
           </p>
@@ -466,11 +478,11 @@ export function QrStudio() {
               onChange={(event) => setBusinessName(event.target.value.slice(0, BUSINESS_NAME_MAX))}
               maxLength={BUSINESS_NAME_MAX}
               autoComplete="organization"
-              placeholder="Taller Electromecánica Morel"
+              placeholder="Ej.: Café Central"
               className="mt-2 h-11 w-full rounded-2xl border border-line bg-card px-4 text-sm"
             />
             <p className="mt-2 text-sm leading-relaxed text-muted">
-              Opcional. Si lo dejás vacío, el diseño no deja un espacio en blanco.
+              Opcional. Agregalo para personalizar tu cartel.
             </p>
           </div>
         </div>
@@ -541,9 +553,9 @@ export function QrStudio() {
         ) : null}
 
         <section className="rounded-2xl border border-line bg-card p-5">
-          <h2 className="text-sm font-semibold">Agregá tu logo</h2>
+          <h2 className="text-sm font-semibold">Agregá el logo de tu negocio</h2>
           <p className="mt-2 text-sm leading-relaxed text-muted">
-            Opcional. PNG, JPG o WebP de hasta 2 MB. Si no subís uno, el diseño no inventa un logo.
+            Opcional. Podés subir una imagen PNG, JPG o WebP de hasta 2 MB.
           </p>
           <div className="mt-4 flex flex-wrap items-center gap-3">
             {logo ? (
@@ -830,10 +842,10 @@ function logoErrorMessage(code: "type" | "size" | "read"): string {
 
 function orderErrorMessage(code: string): string {
   if (code === "invalid-link") return "Revisá el enlace de Google antes de continuar.";
-  if (code === "insufficient-contrast") return "Revisá el contraste del QR y del texto.";
+  if (code === "insufficient-contrast") return "Elegí un color que se distinga del texto.";
   if (code === "invalid-text") return "Completá el nombre del negocio.";
   if (code === "review-unverified") return "Confirmá que el enlace abre el formulario de reseña.";
-  if (code === "invalid-logo") return "El logo no pasó la validación. Subilo de nuevo.";
+  if (code === "invalid-logo") return "No pudimos usar ese logo. Subilo de nuevo en PNG, JPG o WebP.";
   if (code === "invalid-email") return "Revisá el correo antes de continuar.";
   if (code === "invalid-font" || code === "invalid-template") return "Elegí una plantilla del editor.";
   if (isCommercialIssue(code)) return commercialIssueMessage(code);

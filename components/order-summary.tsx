@@ -23,7 +23,7 @@ const viewLabel: Record<PaymentView, string> = {
 const viewCopy: Record<PaymentView, string> = {
   pending: "El pago todavía no está confirmado.",
   verifying:
-    "Estamos verificando el pago con Mercado Pago. El regreso del navegador no alcanza para confirmarlo.",
+    "Estamos verificando el pago con Mercado Pago.",
   approved: "Ya podés descargar los archivos.",
   rejected: "El pago no se acreditó. El pedido sigue pendiente y podés intentar de nuevo.",
   cancelled: "El pedido está cancelado.",

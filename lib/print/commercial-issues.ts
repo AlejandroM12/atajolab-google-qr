@@ -17,7 +17,7 @@ export function commercialIssueMessage(issue: CommercialIssue): string {
     return "La frase no entra en esta plantilla. Acortala para continuar.";
   }
   if (issue === "accent-contrast") {
-    return "El color de acento no se distingue del texto. Elegí un acento más claro o más oscuro.";
+    return "Ese color no se distingue del texto. Elegí uno más claro o más oscuro.";
   }
   return "Con este texto y este logo el diseño no entra. Probá un texto más corto o un logo más simple.";
 }
