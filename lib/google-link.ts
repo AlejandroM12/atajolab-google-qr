@@ -129,37 +129,34 @@ const GPAGE_REVIEW =
 export const linkIssueMessage: Record<LinkIssue, string> = {
   empty: "Pegá el enlace de Google.",
   "too-long":
-    "El enlace es demasiado largo para un QR confiable. En Google Maps, usá Compartir y copiá el enlace corto.",
+    "Ese enlace es demasiado largo. En Google Maps, usá Compartir y copiá el enlace corto.",
   "unsafe-characters":
-    "El enlace tiene espacios o caracteres que no podemos aceptar. Copialo de nuevo desde Google, sin texto extra.",
-  "invalid-url": "Eso no es un enlace válido. Copiá la URL completa, con https://.",
-  "insecure-protocol":
-    "El enlace tiene que empezar con https://. No aceptamos HTTP ni otros protocolos.",
-  credentials: "El enlace no puede incluir usuario ni contraseña.",
-  port: "El enlace usa un puerto que no corresponde a HTTPS.",
-  punycode:
-    "No aceptamos dominios internacionalizados ni direcciones escritas para parecerse a Google.",
-  "not-google":
-    "Solo aceptamos enlaces HTTPS de Google Maps o del formulario oficial para escribir una reseña.",
+    "El enlace tiene espacios o texto de más. Copialo de nuevo desde Google, sin agregar nada.",
+  "invalid-url": "Eso no parece un enlace. Copiá la dirección completa, la que empieza con https://.",
+  "insecure-protocol": "El enlace tiene que empezar con https://.",
+  credentials: "El enlace no puede incluir un usuario ni una contraseña.",
+  port: "Ese enlace tiene un agregado que no corresponde. Copialo de nuevo desde Google.",
+  punycode: "Ese enlace no parece de Google. Copialo desde Google Maps o desde el Perfil de Empresa.",
+  "not-google": "Pegá un enlace de Google Maps o del formulario para dejar una reseña.",
   "unsupported-google-domain":
-    "No aceptamos ese dominio. En Google Maps, tocá Compartir y copiá el enlace que empieza con https://maps.app.goo.gl/.",
+    "Ese enlace no es de Google Maps. Tocá Compartir en el mapa y copiá el enlace.",
   "unsupported-short-link":
     "Ese enlace corto no es de Google Maps. Copiá el enlace desde Compartir en el mapa.",
-  "incomplete-short-link": "El enlace corto de Google Maps está incompleto.",
+  "incomplete-short-link": "El enlace corto de Google Maps está incompleto. Copialo de nuevo.",
   "generic-maps":
-    "Este enlace abre Google Maps, pero no una ubicación concreta. Compartí el lugar o la dirección desde el mapa.",
-  "not-location": "Este enlace no es una ubicación de Google Maps.",
+    "Este enlace abre Google Maps, pero no un lugar concreto. Compartí tu negocio o la dirección desde el mapa.",
+  "not-location": "Este enlace no abre una ubicación de Google Maps.",
   "review-instead-of-location":
-    "Este enlace abre el formulario de reseña. Cambiá el objetivo a reseña, o pegá el enlace de la ubicación.",
+    "Este enlace abre el formulario de reseña. Si querés compartir la ubicación, pegá el enlace del mapa.",
   "location-instead-of-review":
-    "Esta URL de Google Maps abre la ficha del negocio, aunque se vea el panel de reseñas. El enlace directo se copia en el Perfil de Empresa: Solicitar reseñas, también llamada Pedir reseñas u Obtener más reseñas, y después Copiar enlace.",
-  "not-review": "Este enlace de Google no abre el formulario para escribir una reseña.",
+    "Este enlace abre la ficha del negocio, no el formulario para dejar una reseña. El enlace de reseñas se copia en el Perfil de Empresa, en Solicitar reseñas, Pedir reseñas u Obtener más reseñas.",
+  "not-review": "Este enlace no abre el formulario para dejar una reseña.",
   "gpage-not-review":
-    "Este enlace de g.page no termina en /review, así que no lo tomamos como formulario de reseña.",
+    "Este enlace no abre el formulario de reseña. Tiene que ser el que termina en /review.",
   "business-profile":
-    "Esta es la dirección del Perfil de Empresa, no el enlace para reseñar ni el de la ubicación. Entrá a “Pedir reseñas” y copiá el enlace que te da Google.",
-  "missing-place-id": "Al enlace de reseña le falta el parámetro placeid.",
-  "invalid-place-id": "El placeid de ese enlace de reseña no tiene un formato válido.",
+    "Esta es la página del Perfil de Empresa, no el enlace de reseñas ni el del mapa. Entrá a Pedir reseñas y copiá el enlace que te da Google.",
+  "missing-place-id": "A este enlace de reseña le falta una parte. Copialo de nuevo desde Pedir reseñas.",
+  "invalid-place-id": "Este enlace de reseña está incompleto. Copialo de nuevo desde Pedir reseñas.",
 };
 
 type GoogleCountryHost = "maps" | "standard" | "unsupported";
