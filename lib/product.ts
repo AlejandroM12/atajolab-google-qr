@@ -53,23 +53,23 @@ export const guides: Record<
   { title: string; steps: string[]; examples: string[]; note: string; profileUrl?: string }
 > = {
   ubicacion: {
-    title: "Cómo conseguir el enlace de ubicación",
+    title: "Cómo copiar el enlace de Google Maps",
     steps: [
       "Abrí Google Maps en el celular o en la computadora.",
-      "Buscá tu comercio o la dirección que querés compartir.",
+      "Buscá tu negocio o la dirección que querés compartir.",
       "Tocá Compartir y después Copiar enlace.",
       "Pegá ese enlace en el campo de abajo.",
     ],
     examples: ["https://maps.app.goo.gl/…", "https://www.google.com/maps/…"],
-    note: "Tiene que apuntar a un lugar concreto. La portada de Google Maps no alcanza.",
+    note: "Tiene que abrir tu negocio o una dirección concreta. La portada de Google Maps no alcanza.",
   },
   resena: {
-    title: "Cómo conseguir el enlace de reseña",
+    title: "Cómo conseguir el enlace directo de reseñas",
     steps: [
       "Entrá al Perfil de Empresa de Google.",
       "Buscá la opción para solicitar o compartir reseñas. En algunas cuentas se llama Solicitar reseñas, Pedir reseñas u Obtener más reseñas.",
-      "Copiá el enlace.",
-      "Pegá el enlace en AtajoLab.",
+      "Copiá el enlace directo de reseñas.",
+      "Pegá ese enlace en AtajoLab.",
     ],
     examples: [
       "https://g.page/r/…/review",

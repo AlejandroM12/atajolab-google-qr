@@ -3,7 +3,7 @@ import { Container } from "@/components/container";
 import { DEMO_BUSINESS_NAME, designSampleSvg } from "@/components/landing/samples";
 
 export function Hero() {
-  const sample = designSampleSvg("stand-vivid");
+  const sample = designSampleSvg("stand-classic");
 
   return (
     <section className="relative overflow-hidden">
@@ -35,9 +35,9 @@ export function Hero() {
         </div>
         <figure className="mx-auto w-full max-w-sm">
           <div
-            className="overflow-hidden rounded-[1.6rem] border border-line bg-card shadow-sm [&_svg]:h-auto [&_svg]:w-full"
+            className="[&_svg]:block [&_svg]:h-auto [&_svg]:w-full"
             role="img"
-            aria-label={`Ejemplo del diseño Vivo para ${DEMO_BUSINESS_NAME}`}
+            aria-label={`Ejemplo del diseño Clásico para ${DEMO_BUSINESS_NAME}`}
             dangerouslySetInnerHTML={{ __html: sample }}
           />
           <figcaption className="mt-3 text-center text-sm text-muted">
