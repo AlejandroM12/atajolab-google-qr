@@ -313,6 +313,7 @@ const stillBound = await store.findById(put.asset.id);
 assert.equal(stillBound?.orderId, "orderidorderidorderid02");
 
 if (assetSnap.ok) {
+  // Unauthorized key still blocked; authorized PAID downloads are covered in studio/download.test.ts.
   const download = resolveArtworkDownload({
     publicId: "abcdefghijklmnopqrstuvwx",
     format: "png",
