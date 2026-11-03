@@ -14,6 +14,12 @@ const StudioEditor = dynamic(
   },
 );
 
-export function StudioLoader({ exportEnabled = true }: { exportEnabled?: boolean }) {
-  return <StudioEditor exportEnabled={exportEnabled} />;
+export function StudioLoader({
+  exportEnabled = true,
+  checkoutEnabled = false,
+}: {
+  exportEnabled?: boolean;
+  checkoutEnabled?: boolean;
+}) {
+  return <StudioEditor exportEnabled={exportEnabled} checkoutEnabled={checkoutEnabled} />;
 }

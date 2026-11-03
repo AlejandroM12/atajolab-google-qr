@@ -253,6 +253,8 @@ function StudioV8OrderSummary({
     dateStyle: "medium",
     timeStyle: "short",
   }).format(new Date(artwork.frozenAt));
+  const canPay = sandboxReady && order.status === "PENDING" && (view === "pending" || view === "rejected");
+  const canVerify = sandboxReady && view === "verifying";
 
   return (
     <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_20rem] lg:items-start">
@@ -290,6 +292,10 @@ function StudioV8OrderSummary({
         </dl>
         <div className="mt-8 space-y-3 text-sm leading-relaxed text-muted">
           <p>{viewCopy[view]}</p>
+          <p>
+            Este pedido conserva una copia congelada del diseño al momento de crearlo. Cambios posteriores en
+            Studio no modifican esta compra.
+          </p>
           {!sandboxReady && order.status === "PENDING" ? (
             <p>
               El cobro no está configurado en el servidor. Desde esta pantalla no se puede marcar el pedido como pagado.
@@ -303,7 +309,7 @@ function StudioV8OrderSummary({
               dispositivo, recuperá los archivos con el mismo correo.
             </p>
           ) : order.status === "CANCELLED" ? null : (
-            <p>PNG, SVG y PDF se habilitan cuando el pago queda confirmado. El cobro desde Studio llega en un paso posterior.</p>
+            <p>PNG, SVG y PDF se habilitan cuando el pago queda confirmado.</p>
           )}
         </div>
         {downloads ? (
@@ -331,6 +337,8 @@ function StudioV8OrderSummary({
             </ButtonLink>
           </div>
         ) : null}
+        {canPay ? <OrderPaymentActions publicId={order.publicId} mode="pay" /> : null}
+        {canVerify ? <OrderPaymentActions publicId={order.publicId} mode="verify" /> : null}
         <div className="mt-8">
           <ButtonLink href="/studio" variant="secondary">
             Volver al editor

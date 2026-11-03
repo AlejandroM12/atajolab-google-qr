@@ -88,6 +88,11 @@ export async function savePendingOrder(
 /**
  * Create a PENDING Studio v8 order and retain draft-owned assets atomically.
  * Client cannot set amountArs or status — always PENDING + server price.
+ *
+ * Idempotency (bounded): if the same draft already retained the same asset set onto a
+ * PENDING order (retry / double-submit), reuse that order and rotate deliveryKey so the
+ * caller gets a working cookie. Designs with zero assets are not deduped — rely on UI
+ * busy guards + rate limits (document before production enablement).
  */
 async function savePendingStudioV8Order(
   draft: OrderDraft,
@@ -102,6 +107,13 @@ async function savePendingStudioV8Order(
   const artwork = draft.artwork;
   const assetIds = artwork.assetIds;
   const draftKeyHash = draft.studioDraftKeyHash;
+
+  const reused = await reuseStudioV8PendingOrder({
+    draftKeyHash,
+    assetIds,
+    buyerEmail: draft.buyerEmail,
+  });
+  if (reused) return reused;
 
   for (let attempt = 0; attempt < 3; attempt += 1) {
     const publicId = createPublicId();
@@ -137,13 +149,72 @@ async function savePendingStudioV8Order(
 
       return { publicId, deliveryKey };
     } catch (error) {
-      if (error instanceof Error && error.message === "order-assets") throw error;
+      if (error instanceof Error && error.message === "order-assets") {
+        const raced = await reuseStudioV8PendingOrder({
+          draftKeyHash,
+          assetIds,
+          buyerEmail: draft.buyerEmail,
+        });
+        if (raced) return raced;
+        throw error;
+      }
       if (isUniqueViolation(error) && attempt < 2) continue;
       throw error;
     }
   }
 
   throw new Error("order-id");
+}
+
+/** Reuse PENDING v8 order when the draft already retained the exact asset set. */
+async function reuseStudioV8PendingOrder(input: {
+  draftKeyHash: string;
+  assetIds: string[];
+  buyerEmail: string | null;
+}): Promise<{ publicId: string; deliveryKey: string } | null> {
+  if (input.assetIds.length === 0) return null;
+
+  const assets = await prisma.studioAsset.findMany({
+    where: { id: { in: input.assetIds } },
+    select: { id: true, status: true, orderId: true, draftKeyHash: true },
+  });
+  if (assets.length !== input.assetIds.length) return null;
+
+  const orderId = assets[0]?.orderId;
+  if (!orderId) return null;
+  if (
+    !assets.every(
+      (asset) =>
+        asset.status === "RETAINED" &&
+        asset.orderId === orderId &&
+        asset.draftKeyHash === input.draftKeyHash,
+    )
+  ) {
+    return null;
+  }
+
+  const order = await prisma.order.findUnique({
+    where: { id: orderId },
+    select: { id: true, status: true, artwork: true, buyerEmail: true },
+  });
+  if (!order || order.status !== "PENDING") return null;
+
+  const artwork = readArtworkSnapshot(order.artwork);
+  if (!artwork || artwork.version !== STUDIO_COMMERCIAL_ARTWORK_VERSION) return null;
+  if (sortedIds(artwork.assetIds) !== sortedIds(input.assetIds)) return null;
+  if (input.buyerEmail && order.buyerEmail && order.buyerEmail !== input.buyerEmail) return null;
+
+  const deliveryKey = createDeliveryKey();
+  const updated = await prisma.order.updateMany({
+    where: { id: orderId, status: "PENDING" },
+    data: { deliveryKeyHash: hashDeliveryKey(deliveryKey) },
+  });
+  if (updated.count !== 1) return null;
+  return { publicId: orderId, deliveryKey };
+}
+
+function sortedIds(ids: readonly string[]): string {
+  return [...ids].sort().join("\0");
 }
 
 export async function findOrder(publicId: string): Promise<StoredOrder | null> {
