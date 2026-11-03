@@ -54,6 +54,7 @@ export function OrderSummary({
         order={{ ...order, artwork: order.artwork }}
         view={view}
         sandboxReady={sandboxReady}
+        downloads={downloads}
       />
     );
   }
@@ -235,10 +236,12 @@ function StudioV8OrderSummary({
   order,
   view,
   sandboxReady,
+  downloads,
 }: {
   order: StoredOrder & { artwork: Extract<StoredOrder["artwork"], { version: typeof STUDIO_COMMERCIAL_ARTWORK_VERSION }> };
   view: PaymentView;
   sandboxReady: boolean;
+  downloads: boolean;
 }) {
   const artwork = order.artwork;
   const templateName = templateList.find((item) => item.id === artwork.templateId)?.name ?? "Studio";
@@ -292,8 +295,42 @@ function StudioV8OrderSummary({
               El cobro no está configurado en el servidor. Desde esta pantalla no se puede marcar el pedido como pagado.
             </p>
           ) : null}
-          <p>Este pedido usa Studio v8. El cobro y las descargas digitales se habilitan en un paso posterior.</p>
+          {downloads ? (
+            <p>Descargá tus archivos Studio. Se arman con el diseño congelado al crear el pedido.</p>
+          ) : order.status === "PAID" ? (
+            <p>
+              Para descargar PNG, SVG y PDF, abrí esta compra en el navegador donde la creaste. Desde otro
+              dispositivo, recuperá los archivos con el mismo correo.
+            </p>
+          ) : order.status === "CANCELLED" ? null : (
+            <p>PNG, SVG y PDF se habilitan cuando el pago queda confirmado. El cobro desde Studio llega en un paso posterior.</p>
+          )}
         </div>
+        {downloads ? (
+          <div className="mt-4">
+            <p className="text-sm font-semibold">Descargar mis archivos</p>
+            <div className="mt-3 flex flex-wrap gap-3">
+              {artworkExportFormats.map((format) => (
+                <a
+                  key={format}
+                  href={`/api/orders/${order.publicId}/files/${format}`}
+                  aria-label={`Descargar ${downloadLabel[format]}`}
+                  className="inline-flex h-11 items-center justify-center rounded-full bg-accent px-5 text-sm font-semibold text-white transition-colors hover:bg-accent-strong"
+                >
+                  {downloadLabel[format]}
+                </a>
+              ))}
+            </div>
+          </div>
+        ) : null}
+        {downloads ? <OrderAccessLink publicId={order.publicId} /> : null}
+        {order.status === "PAID" && !downloads ? (
+          <div className="mt-4">
+            <ButtonLink href="/recuperar" variant="secondary">
+              Recuperar mis descargas
+            </ButtonLink>
+          </div>
+        ) : null}
         <div className="mt-8">
           <ButtonLink href="/studio" variant="secondary">
             Volver al editor
