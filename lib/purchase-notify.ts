@@ -9,6 +9,7 @@ import {
   purchaseMail,
   type AccessLinkRecord,
 } from "@/lib/access-link";
+import { isDatabaseUnavailable } from "@/lib/db-error";
 import { prisma } from "@/lib/db";
 import { createMailSender, type MailResult, type MailSender } from "@/lib/mail";
 import { orderArtworkLabel } from "@/lib/order-label";
@@ -19,6 +20,7 @@ import { orderAccessSecret } from "@/lib/studio/order-idempotency";
 export const PURCHASE_ACCESS_KIND = "PURCHASE_ACCESS" as const;
 export const MAIL_NOTIFY_MAX_ATTEMPTS = 8;
 export const MAIL_NOTIFY_STALE_MS = 5 * 60 * 1000;
+/** @deprecated Unused: claim() is the concurrency control. Kept for docs/compat. */
 export const MAIL_DISPATCH_LOCK_KEY = 88442211;
 
 export type PurchaseNotifyOrder = {
@@ -221,6 +223,92 @@ export function mailDispatchAuthorized(
   return mismatch === 0;
 }
 
+/**
+ * Safe classification for ops logs / JSON. Never includes tokens, emails, or URLs with credentials.
+ */
+export function describeMailDispatchError(error: unknown): {
+  name: string;
+  kind: "database-unavailable" | "prisma" | "transaction" | "pooler" | "unknown";
+  prismaCode?: string;
+  detail?: string;
+} {
+  if (isDatabaseUnavailable(error)) {
+    return { name: "DatabaseUnavailable", kind: "database-unavailable" };
+  }
+
+  const name =
+    error instanceof Error
+      ? error.name || "Error"
+      : typeof error === "object" && error !== null && "name" in error
+        ? String((error as { name?: unknown }).name ?? "unknown")
+        : "unknown";
+
+  const prismaCode =
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    typeof (error as { code?: unknown }).code === "string" &&
+    /^P\d{4}$/.test((error as { code: string }).code)
+      ? (error as { code: string }).code
+      : undefined;
+
+  const rawMessage = error instanceof Error ? error.message : "";
+  const detail = rawMessage ? sanitizeDispatchLogDetail(rawMessage) : undefined;
+  const lower = rawMessage.toLowerCase();
+
+  if (
+    lower.includes("prepared statement") ||
+    lower.includes("pgbouncer") ||
+    lower.includes("max clients") ||
+    (lower.includes("pool") && lower.includes("timeout"))
+  ) {
+    return { name, kind: "pooler", prismaCode, detail };
+  }
+
+  if (
+    lower.includes("transaction not found") ||
+    lower.includes("transaction api error") ||
+    lower.includes("interactive transaction") ||
+    prismaCode === "P2028"
+  ) {
+    return { name, kind: "transaction", prismaCode, detail };
+  }
+
+  if (prismaCode) {
+    return { name, kind: "prisma", prismaCode, detail };
+  }
+
+  return { name, kind: "unknown", detail };
+}
+
+function sanitizeDispatchLogDetail(message: string): string {
+  return message
+    .replace(/postgres(?:ql)?:\/\/[^\s"'`]+/gi, "postgresql://***")
+    .replace(/\bBearer\s+[A-Za-z0-9._~+/-]+=*/gi, "Bearer ***")
+    .replace(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi, "***@***")
+    .slice(0, 240);
+}
+
+function logMailDispatchFailure(error: unknown): void {
+  const described = describeMailDispatchError(error);
+  console.error(
+    "mail dispatch failed",
+    JSON.stringify({
+      name: described.name,
+      kind: described.kind,
+      prismaCode: described.prismaCode ?? null,
+      detail: described.detail ?? null,
+    }),
+  );
+}
+
+/**
+ * Cron entry: drain due MailNotification rows.
+ *
+ * Concurrency is enforced by atomic claim() (UPDATE … WHERE status=PENDING), not by a
+ * long-lived interactive Prisma transaction. Holding Resend/HTTP inside `$transaction`
+ * breaks on Neon poolers and starves the connection pool even on direct URLs.
+ */
 export async function runMailDispatchJob(
   deps: {
     now?: Date;
@@ -230,29 +318,18 @@ export async function runMailDispatchJob(
     secret?: string;
     limit?: number;
   } = {},
-): Promise<DispatchPurchaseResult | { ok: false; error: "lock-failed" | "dispatch-failed" }> {
+): Promise<
+  | DispatchPurchaseResult
+  | { ok: false; error: "lock-failed" | "dispatch-failed"; reason?: string }
+> {
   try {
-    if (!deps.store) {
-      return await prisma.$transaction(
-        async (tx) => {
-          const locked = await tx.$queryRawUnsafe<Array<{ locked: boolean }>>(
-            `SELECT pg_try_advisory_xact_lock($1) AS locked`,
-            MAIL_DISPATCH_LOCK_KEY,
-          );
-          if (!locked[0]?.locked) {
-            return { ok: false as const, error: "lock-failed" as const };
-          }
-          return dispatchPurchaseAccessMail({
-            ...deps,
-            store: prismaPurchaseNotifyStore(tx),
-          });
-        },
-        { timeout: 60_000 },
-      );
-    }
-    return dispatchPurchaseAccessMail(deps);
-  } catch {
-    return { ok: false, error: "dispatch-failed" };
+    return await dispatchPurchaseAccessMail(deps);
+  } catch (error) {
+    if (isDatabaseUnavailable(error)) throw error;
+    logMailDispatchFailure(error);
+    const described = describeMailDispatchError(error);
+    const reason = described.prismaCode ?? described.kind;
+    return { ok: false, error: "dispatch-failed", reason };
   }
 }
 
