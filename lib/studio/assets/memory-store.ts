@@ -38,7 +38,7 @@ export function createMemoryStudioAssetStore(): StudioAssetStore {
       const unique = [...new Set(input.ids)];
       const rejected = unique.filter((id) => {
         const row = rows.get(id);
-        return !row || row.draftKeyHash !== input.draftKeyHash;
+        return !row || row.draftKeyHash !== input.draftKeyHash || row.status !== "TEMPORARY" || row.orderId !== null;
       });
       if (rejected.length > 0) return { retained: [], rejected };
       for (const id of unique) {

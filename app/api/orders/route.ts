@@ -6,6 +6,8 @@ import { appOrigin } from "@/lib/payments/checkout-policy";
 import { PIECE_CURRENCY, PIECE_PRICE_ARS } from "@/lib/pricing";
 
 const MAX_BODY_CHARS = 320_000;
+/** Dehydrated Studio v8 documents stay well under this; blocks accidental embedded images. */
+const MAX_STUDIO_V8_BODY_CHARS = 400_000;
 
 export async function POST(request: Request) {
   const contentType = request.headers.get("content-type") ?? "";
@@ -19,12 +21,21 @@ export async function POST(request: Request) {
   } catch {
     return orderError(400, "invalid-body");
   }
-  if (raw.length > MAX_BODY_CHARS) return orderError(400, "invalid-body");
 
   let body: unknown;
   try {
     body = JSON.parse(raw);
   } catch {
+    return orderError(400, "invalid-body");
+  }
+
+  const studioV8 =
+    typeof body === "object" &&
+    body !== null &&
+    !Array.isArray(body) &&
+    (body as { version?: unknown }).version === 8;
+
+  if (raw.length > (studioV8 ? MAX_STUDIO_V8_BODY_CHARS : MAX_BODY_CHARS)) {
     return orderError(400, "invalid-body");
   }
 
@@ -52,6 +63,9 @@ export async function POST(request: Request) {
       { status: 201, headers },
     );
   } catch (error) {
+    if (error instanceof Error && error.message === "order-assets") {
+      return orderError(400, "studio-assets");
+    }
     console.error("order create failed", error instanceof Error ? error.name : "unknown");
     if (isDatabaseUnavailable(error)) return orderError(503, "database-unavailable");
     return orderError(500, "order-failed");

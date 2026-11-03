@@ -9,6 +9,8 @@ import { paymentEnvironmentMode } from "@/lib/payments/checkout-policy";
 import { decidePayment, type VerifiedPayment } from "@/lib/payments/decision";
 import { PIECE_CURRENCY, PIECE_PRICE_ARS } from "@/lib/pricing";
 import { createPublicId, isPublicId } from "@/lib/public-id";
+import { STUDIO_COMMERCIAL_ARTWORK_VERSION } from "@/lib/studio/commercial-artwork";
+import { createPrismaStudioAssetStore, retainStudioAssetsForOrder } from "@/lib/studio/assets/index";
 
 export type StoredOrder = {
   publicId: string;
@@ -37,15 +39,22 @@ export async function savePendingOrder(
   if (draft.amountArs !== PIECE_PRICE_ARS || draft.currency !== PIECE_CURRENCY) {
     throw new Error("order-price");
   }
+  if (!draft.artwork.href) {
+    throw new Error("order-artwork");
+  }
+
+  if (draft.artwork.version === STUDIO_COMMERCIAL_ARTWORK_VERSION) {
+    return savePendingStudioV8Order(draft);
+  }
+
   if (
-    (draft.artwork.version !== ARTWORK_VERSION &&
-      draft.artwork.version !== STUDIO_ARTWORK_VERSION &&
-      draft.artwork.version !== COMMERCIAL_ARTWORK_VERSION &&
-      draft.artwork.version !== COUNTER_ARTWORK_VERSION &&
-      draft.artwork.version !== SIGNAGE_ARTWORK_VERSION &&
-      draft.artwork.version !== PRESS_ARTWORK_VERSION &&
-      draft.artwork.version !== PREMIUM_ARTWORK_VERSION) ||
-    !draft.artwork.href
+    draft.artwork.version !== ARTWORK_VERSION &&
+    draft.artwork.version !== STUDIO_ARTWORK_VERSION &&
+    draft.artwork.version !== COMMERCIAL_ARTWORK_VERSION &&
+    draft.artwork.version !== COUNTER_ARTWORK_VERSION &&
+    draft.artwork.version !== SIGNAGE_ARTWORK_VERSION &&
+    draft.artwork.version !== PRESS_ARTWORK_VERSION &&
+    draft.artwork.version !== PREMIUM_ARTWORK_VERSION
   ) {
     throw new Error("order-artwork");
   }
@@ -68,6 +77,67 @@ export async function savePendingOrder(
       });
       return { publicId, deliveryKey };
     } catch (error) {
+      if (isUniqueViolation(error) && attempt < 2) continue;
+      throw error;
+    }
+  }
+
+  throw new Error("order-id");
+}
+
+/**
+ * Create a PENDING Studio v8 order and retain draft-owned assets atomically.
+ * Client cannot set amountArs or status — always PENDING + server price.
+ */
+async function savePendingStudioV8Order(
+  draft: OrderDraft,
+): Promise<{ publicId: string; deliveryKey: string }> {
+  if (draft.artwork.version !== STUDIO_COMMERCIAL_ARTWORK_VERSION) {
+    throw new Error("order-artwork");
+  }
+  if (!draft.studioDraftKeyHash) {
+    throw new Error("order-assets");
+  }
+
+  const artwork = draft.artwork;
+  const assetIds = artwork.assetIds;
+  const draftKeyHash = draft.studioDraftKeyHash;
+
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const publicId = createPublicId();
+    const deliveryKey = createDeliveryKey();
+    try {
+      await prisma.$transaction(async (tx) => {
+        await tx.order.create({
+          data: {
+            id: publicId,
+            status: "PENDING",
+            amountArs: PIECE_PRICE_ARS,
+            currency: PIECE_CURRENCY,
+            artworkVersion: STUDIO_COMMERCIAL_ARTWORK_VERSION,
+            artwork: artwork as unknown as Prisma.InputJsonValue,
+            deliveryKeyHash: hashDeliveryKey(deliveryKey),
+            buyerEmail: draft.buyerEmail,
+          },
+        });
+
+        if (assetIds.length > 0) {
+          const store = createPrismaStudioAssetStore(tx);
+          const retained = await retainStudioAssetsForOrder({
+            store,
+            draftKeyHash,
+            orderId: publicId,
+            assetIds,
+          });
+          if (retained.rejected.length > 0) {
+            throw new Error("order-assets");
+          }
+        }
+      });
+
+      return { publicId, deliveryKey };
+    } catch (error) {
+      if (error instanceof Error && error.message === "order-assets") throw error;
       if (isUniqueViolation(error) && attempt < 2) continue;
       throw error;
     }

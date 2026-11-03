@@ -1,3 +1,4 @@
+import { isStudioAssetRef } from "@/lib/studio/assets/refs";
 import { MAX_IMAGE_CHARS } from "@/lib/studio/types";
 
 export type ImageKind = "png" | "jpeg" | "webp" | "heic" | "unknown";
@@ -15,6 +16,7 @@ export function classifyImage(bytes: Uint8Array, mime = ""): ImageKind {
 }
 
 export function imageSrcIssue(src: string): "type" | "size" | null {
+  if (isStudioAssetRef(src)) return null;
   if (src.length > MAX_IMAGE_CHARS) return "size";
   if (!DATA_URL.test(src)) return "type";
   return null;

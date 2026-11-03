@@ -2,7 +2,16 @@ import type { PrismaClient, StudioAssetStatus as PrismaStatus } from "@prisma/cl
 import type { StudioStoredMime } from "@/lib/studio/assets/limits";
 import type { StudioAssetInsert, StudioAssetRecord, StudioAssetStore } from "@/lib/studio/assets/store";
 
-export function createPrismaStudioAssetStore(client: PrismaClient): StudioAssetStore {
+type StudioAssetDb = {
+  studioAsset: PrismaClient["studioAsset"];
+  $transaction?: PrismaClient["$transaction"];
+};
+
+/**
+ * Prisma-backed store. Accepts a full client or an interactive transaction client
+ * so order create + retain can share one atomic transaction.
+ */
+export function createPrismaStudioAssetStore(client: StudioAssetDb): StudioAssetStore {
   return {
     async put(asset: StudioAssetInsert): Promise<StudioAssetRecord> {
       const row = await client.studioAsset.create({
@@ -42,26 +51,49 @@ export function createPrismaStudioAssetStore(client: PrismaClient): StudioAssetS
 
     async retain(input): Promise<{ retained: string[]; rejected: string[] }> {
       const unique = [...new Set(input.ids)];
-      return client.$transaction(async (tx) => {
-        const owned = await tx.studioAsset.findMany({
-          where: { id: { in: unique }, draftKeyHash: input.draftKeyHash },
+      const execute = async (db: Pick<PrismaClient, "studioAsset">) => {
+        // Only TEMPORARY draft-owned rows may be bound. Already RETAINED assets
+        // cannot be reassigned to another order (even with the same draft key).
+        const eligible = await db.studioAsset.findMany({
+          where: {
+            id: { in: unique },
+            draftKeyHash: input.draftKeyHash,
+            status: "TEMPORARY",
+            orderId: null,
+          },
           select: { id: true },
         });
-        const ownedIds = new Set(owned.map((row) => row.id));
-        const rejected = unique.filter((id) => !ownedIds.has(id));
-        // All-or-nothing: never leave a partial retain if any id is foreign/missing.
+        const eligibleIds = new Set(eligible.map((row) => row.id));
+        const rejected = unique.filter((id) => !eligibleIds.has(id));
+        // All-or-nothing: never leave a partial retain if any id is foreign/missing/already bound.
         if (rejected.length > 0) return { retained: [], rejected };
 
-        await tx.studioAsset.updateMany({
-          where: { id: { in: unique }, draftKeyHash: input.draftKeyHash },
+        if (unique.length === 0) return { retained: [], rejected: [] };
+
+        const updated = await db.studioAsset.updateMany({
+          where: {
+            id: { in: unique },
+            draftKeyHash: input.draftKeyHash,
+            status: "TEMPORARY",
+            orderId: null,
+          },
           data: {
             status: "RETAINED",
             orderId: input.orderId,
             expiresAt: null,
           },
         });
+        if (updated.count !== unique.length) {
+          // Concurrent retain raced us — force transaction rollback.
+          throw new Error("order-assets");
+        }
         return { retained: unique, rejected: [] };
-      });
+      };
+
+      if (typeof client.$transaction === "function") {
+        return client.$transaction((tx) => execute(tx));
+      }
+      return execute(client as Pick<PrismaClient, "studioAsset">);
     },
 
     async deleteExpired(now: Date): Promise<number> {
