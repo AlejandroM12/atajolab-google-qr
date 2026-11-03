@@ -33,8 +33,41 @@ model Order {
   buyerEmail               String?
   accessLinks              DownloadAccessLink[]
   accessCredentials        DownloadAccessCredential[]
+  studioAssets             StudioAsset[]
 
   @@index([buyerEmail])
+}
+
+/// TEMPORARY: borrador Studio (expira). RETAINED: ligado a un pedido, no limpia.
+enum StudioAssetStatus {
+  TEMPORARY
+  RETAINED
+}
+
+/// Bytes privados de Studio v8. No se sirven por URL pública.
+model StudioAsset {
+  id           String            @id
+  sha256       String
+  mime         String
+  width        Int
+  height       Int
+  byteLength   Int
+  bytes        Bytes
+  status       StudioAssetStatus @default(TEMPORARY)
+  /// Hash del draft key del borrador. Obligatorio mientras TEMPORARY.
+  draftKeyHash String?
+  /// Pedido que retiene el asset. Null mientras es temporal.
+  orderId      String?
+  createdAt    DateTime          @default(now())
+  /// Solo TEMPORARY. RETAINED queda en null.
+  expiresAt    DateTime?
+  order        Order?            @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([sha256])
+  @@index([draftKeyHash, status])
+  @@index([orderId])
+  @@index([status, expiresAt])
+  @@unique([draftKeyHash, sha256])
 }
 
 /// El id es el hash del token. El token en claro no se guarda.
