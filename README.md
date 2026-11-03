@@ -31,7 +31,7 @@ La aplicación queda en el puerto que muestre `pnpm dev`. Si el 3000 está ocupa
 
 | Variable | Uso |
 | --- | --- |
-| `DATABASE_URL` | PostgreSQL. En local apunta a `127.0.0.1:54329`. |
+| `DATABASE_URL` | PostgreSQL. En local apunta a `127.0.0.1:54329`. En producción: Neon directo + `sslmode=require`. |
 | `APP_URL` | Origen público de esta aplicación, sin barra final. |
 | `MERCADOPAGO_ENV` | `test` para la pestaña Prueba. `production` para la pestaña Producción. Otro valor o un token que no coincida deja el cobro deshabilitado. |
 | `MERCADOPAGO_ACCESS_TOKEN` | Access token de la misma pestaña que `MERCADOPAGO_ENV`. Vacío en el ejemplo. |
@@ -40,8 +40,18 @@ La aplicación queda en el puerto que muestre `pnpm dev`. Si el 3000 está ocupa
 | `EMAIL_PROVIDER` | Vacío en desarrollo. `resend` para enviar correos. |
 | `RESEND_API_KEY` | Clave de Resend. Empieza con `re_`. No va al navegador. |
 | `EMAIL_FROM` | `email@dominio` o `Nombre <email@dominio>` de un dominio verificado. |
+| `ORDER_ACCESS_SECRET` | ≥32 caracteres. Deriva deliveryKey de pedidos Studio v8. Obligatorio en production antes de habilitar checkout Studio. |
+| `MAIL_DISPATCH_SECRET` | ≥16 caracteres. Bearer de `POST /api/mail/dispatch` (reintentos del outbox). |
+| `STUDIO_CLEANUP_SECRET` | ≥16 caracteres. Bearer de `POST /api/studio/assets/cleanup`. |
+| `STUDIO_CHECKOUT_ENABLED` | Off por defecto. Solo `true`/`1`/`yes`/`on` habilita pedidos y checkout Studio v8. |
+| `STUDIO_EXPORT_ENABLED` | En production, vacío = export preview cerrado. |
+| `RATE_LIMIT_TRUST_PROXY` | Vacío = no confiar IP headers (bucket `untrusted`). `cloudflare` solo con origen cerrado a Cloudflare. |
 
 `MERCADOPAGO_ACCESS_TOKEN_LIVE` y `MERCADOPAGO_WEBHOOK_SECRET_LIVE` no las lee el código. No las completes.
+
+Las descargas digitales (`DIGITAL_DOWNLOADS_ENABLED`) están **siempre habilitadas en código**; no hay flag de entorno para apagarlas (evitar romper pedidos PAID). Siguen exigiendo estado PAID y cookie/clave de acceso.
+
+Checklist de producción Studio: [docs/studio-v8-production-readiness.md](docs/studio-v8-production-readiness.md). Plantilla de env de producción: [deploy/env.production.example](deploy/env.production.example).
 
 ## Mercado Pago
 
@@ -102,12 +112,26 @@ pnpm start
 
 `next start` lee `PORT`. No uses `deploy/atajolab-google-qr.service`: esa unidad es para un VPS y escucha solo en `127.0.0.1`.
 
-Cargá las variables en el panel de Render, no en el repositorio. No copies el `.env` local: apunta a un túnel, a PostgreSQL de desarrollo y a una cuenta de prueba. `DATABASE_URL` es la conexión directa de Neon, con `sslmode=require`. `APP_URL` es `https://qr.atajolab.dev`, sin barra final.
+Cargá las variables en el panel de Render, no en el repositorio. No copies el `.env` local: apunta a un túnel, a PostgreSQL de desarrollo y a una cuenta de prueba. `DATABASE_URL` es la conexión directa de Neon, con `sslmode=require`. `APP_URL` es `https://qr.atajolab.dev`, sin barra final. Usá `deploy/env.production.example` como checklist (sin valores reales).
 
-Para cobrar de verdad, después de desplegar este código: `MERCADOPAGO_ENV=production`, el access token `APP_USR-` de la pestaña Producción de la aplicación de Argentina, y el secreto de webhook de esa misma aplicación. `MERCADOPAGO_NOTIFICATION_URL` es `https://qr.atajolab.dev/api/payments/mercadopago`. En Mercado Pago, la URL de notificaciones tiene que ser esa misma. No uses el túnel de desarrollo. No ejecutes `prisma migrate deploy`: esta versión no agrega migraciones. Para el correo: `EMAIL_PROVIDER=resend`, `RESEND_API_KEY` y `EMAIL_FROM`.
+Para cobrar de verdad, después de desplegar este código: `MERCADOPAGO_ENV=production`, el access token `APP_USR-` de la pestaña Producción de la aplicación de Argentina, y el secreto de webhook de esa misma aplicación. `MERCADOPAGO_NOTIFICATION_URL` es `https://qr.atajolab.dev/api/payments/mercadopago`. En Mercado Pago, la URL de notificaciones tiene que ser esa misma. No uses el túnel de desarrollo. Para el correo: `EMAIL_PROVIDER=resend`, `RESEND_API_KEY` y `EMAIL_FROM`.
+
+**Migraciones:** Neon debió partir con las tres migraciones históricas de pedidos. Studio v8 agrega cuatro más (`studio_assets`, `rate_limit_buckets`, `studio_order_attempts`, `mail_notifications`). Tras un backup, el comando pre-deploy es:
+
+```bash
+pnpm exec prisma migrate deploy
+pnpm exec prisma migrate status
+```
+
+No asumas que la base ya está al día: verificá `_prisma_migrations` antes de habilitar `STUDIO_CHECKOUT_ENABLED`.
+
+**Studio (secretos y crons, checkout off hasta GO):**
+
+- `ORDER_ACCESS_SECRET`, `MAIL_DISPATCH_SECRET`, `STUDIO_CLEANUP_SECRET`
+- Cron cada 1–5 min: `POST /api/mail/dispatch` con Bearer `MAIL_DISPATCH_SECRET`
+- Cron horario: `POST /api/studio/assets/cleanup` con Bearer `STUDIO_CLEANUP_SECRET`
+- Dejá `STUDIO_CHECKOUT_ENABLED` vacío/false hasta completar [docs/studio-v8-production-readiness.md](docs/studio-v8-production-readiness.md)
 
 Si el token de producción se carga mientras sigue desplegado el código anterior, o mientras `MERCADOPAGO_ENV` sigue en `test`, el cobro puede abrirse sin poder acreditarse, o quedar cerrado. Primero el código, después las credenciales.
 
-La base de Neon ya tiene las tres migraciones. El primer despliegue no debe volver a aplicarlas como si la base estuviera vacía. Cuando aparezca una migración nueva, el comando previo al deploy es `pnpm exec prisma migrate deploy`.
-
-El plan Free tiene 0,1 CPU y 512 MB, se suspende tras 15 minutos sin tráfico y tarda cerca de un minuto en volver. El dominio propio entra en el plan Hobby, con TLS. El registro de `qr.atajolab.dev` es un CNAME al host de Render. Conservá los registros de correo de `mail.atajolab.dev`.
+El plan Free tiene 0,1 CPU y 512 MB, se suspende tras 15 minutos sin tráfico y tarda cerca de un minuto en volver. Eso afecta webhooks y crons: validalo antes de tráfico comercial Studio. El dominio propio entra en el plan Hobby, con TLS. El registro de `qr.atajolab.dev` es un CNAME al host de Render. Conservá los registros de correo de `mail.atajolab.dev`.
