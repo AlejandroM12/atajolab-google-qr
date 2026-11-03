@@ -25,6 +25,7 @@ import { commitDraft, flushDraft, historyFrom, redo, replacePresent, undo, type 
 import { createId } from "@/lib/studio/ids";
 import { prepareStudioImage } from "@/lib/studio/images.browser";
 import { loadSessionDesign, writeDesign } from "@/lib/studio/persistence";
+import { prepareStudioOrderDocument } from "@/lib/studio/prepare-order";
 import { qrContrastIssue } from "@/lib/studio/qr-rules";
 import { validateForExport } from "@/lib/studio/export/validate";
 import { serializeDesign } from "@/lib/studio/serialize";
@@ -51,6 +52,10 @@ export function StudioEditor({ exportEnabled = true }: { exportEnabled?: boolean
   );
   const [imageBusy, setImageBusy] = useState(false);
   const [exportBusy, setExportBusy] = useState(false);
+  const [prepareBusy, setPrepareBusy] = useState(false);
+  const [prepareProgress, setPrepareProgress] = useState<string | null>(null);
+  const [prepareReady, setPrepareReady] = useState(false);
+  const commercialDocumentRef = useRef<DesignDocumentV8 | null>(null);
   const [drafting, setDrafting] = useState(false);
   const historyRef = useRef<HistoryState | null>(null);
   const selectedIdRef = useRef<string | null>(null);
@@ -64,6 +69,16 @@ export function StudioEditor({ exportEnabled = true }: { exportEnabled?: boolean
     redo: () => {},
     remove: () => {},
   });
+
+  useEffect(() => {
+    void fetch("/api/studio/draft", {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { accept: "application/json" },
+    }).catch(() => {
+      /* Draft cookie is best-effort on first paint; prepare flow retries. */
+    });
+  }, []);
 
   useEffect(() => {
     function onKey(event: KeyboardEvent) {
@@ -390,6 +405,62 @@ export function StudioEditor({ exportEnabled = true }: { exportEnabled?: boolean
     setSelectedId(id);
   }
 
+  async function onPrepareOrder() {
+    const current = historyRef.current?.present;
+    if (!current || prepareBusy) return;
+    const gate = validateForExport(current);
+    if (!gate.ready) {
+      setNotice(gate.errors[0]?.message ?? "El diseño todavía no está listo para preparar el pedido.");
+      return;
+    }
+    setPrepareBusy(true);
+    setPrepareProgress("Iniciando sesión segura…");
+    setError(null);
+    setNotice(null);
+    setPrepareReady(false);
+    try {
+      const prepared = await prepareStudioOrderDocument({
+        document: current,
+        onProgress: (progress) => {
+          if (progress.total === 0) {
+            setPrepareProgress("Sin imágenes nuevas para subir.");
+            return;
+          }
+          setPrepareProgress(
+            `Subiendo ${progress.completed + 1}/${progress.total}${progress.currentAlt ? `: ${progress.currentAlt}` : ""}`,
+          );
+        },
+      });
+      if (!prepared.ok) {
+        setPrepareReady(false);
+        commercialDocumentRef.current = null;
+        setError(
+          prepared.error === "draft-failed"
+            ? "No pudimos abrir la sesión segura del borrador. Recargá e intentá de nuevo."
+            : prepared.error === "rate-limited"
+              ? "Llegaste al límite de subidas. Esperá un rato y reintentá."
+              : "No pudimos subir una imagen. Revisá el archivo y reintentá.",
+        );
+        return;
+      }
+      commercialDocumentRef.current = prepared.commercialDocument;
+      setPrepareReady(true);
+      setPrepareProgress(null);
+      setSaveLabel(
+        prepared.uploaded + prepared.reused > 0
+          ? `Imágenes privadas listas (${prepared.uploaded} nuevas, ${prepared.reused} reutilizadas). El lienzo no cambió.`
+          : "Diseño listo sin imágenes nuevas. El cobro se habilita después.",
+      );
+    } catch {
+      setPrepareReady(false);
+      commercialDocumentRef.current = null;
+      setError("No pudimos preparar las imágenes. Probá de nuevo.");
+    } finally {
+      setPrepareBusy(false);
+      setPrepareProgress(null);
+    }
+  }
+
   async function onExport(format: "png" | "svg" | "pdf") {
     if (!exportEnabled) {
       setError("La descarga de prueba no está habilitada en este entorno.");
@@ -479,8 +550,8 @@ export function StudioEditor({ exportEnabled = true }: { exportEnabled?: boolean
         <p className="text-sm font-semibold text-accent">AtajoLab Studio</p>
         <h1 className="mt-1 text-3xl text-foreground">Editor de cartel</h1>
         <p className="mt-2 text-sm leading-6 text-muted">
-          Editor de prueba A6. El diseño queda en esta sesión. Las descargas PNG/SVG/PDF son solo internas y no
-          crean un pedido ni reemplazan las descargas comerciales.
+          Editor A6. El diseño queda en esta sesión. Podés preparar imágenes privadas para un pedido futuro; el
+          cobro todavía no está conectado. Las descargas PNG/SVG/PDF de prueba son solo internas.
         </p>
       </header>
       {error ? (
@@ -526,6 +597,9 @@ export function StudioEditor({ exportEnabled = true }: { exportEnabled?: boolean
             exportValidation={exportValidation}
             exportBusy={exportBusy}
             exportEnabled={exportEnabled}
+            prepareBusy={prepareBusy}
+            prepareProgress={prepareProgress}
+            prepareReady={prepareReady}
             onSelect={setSelectedId}
             onCommit={onCommit}
             onEdit={editLive}
@@ -553,6 +627,9 @@ export function StudioEditor({ exportEnabled = true }: { exportEnabled?: boolean
             }}
             onBringQrForward={onBringQrForward}
             onExport={onExport}
+            onPrepareOrder={() => {
+              void onPrepareOrder();
+            }}
           />
         </aside>
       </div>

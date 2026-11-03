@@ -4,6 +4,13 @@ import { savePendingOrder } from "@/lib/orders";
 import { orderAccessCookie } from "@/lib/payments/access";
 import { appOrigin } from "@/lib/payments/checkout-policy";
 import { PIECE_CURRENCY, PIECE_PRICE_ARS } from "@/lib/pricing";
+import {
+  readStudioDraftKey,
+  studioClientKeyFromRequest,
+  studioRequestTrusted,
+} from "@/lib/studio/draft-session";
+import { hashStudioDraftKey } from "@/lib/studio/assets/draft-key";
+import { limitStudioOrderCreate } from "@/lib/studio/rate-limits";
 
 const MAX_BODY_CHARS = 320_000;
 /** Dehydrated Studio v8 documents stay well under this; blocks accidental embedded images. */
@@ -39,7 +46,25 @@ export async function POST(request: Request) {
     return orderError(400, "invalid-body");
   }
 
-  const parsed = parseOrderDraft(body);
+  if (studioV8 && !studioRequestTrusted(request)) {
+    return orderError(403, "origin-rejected");
+  }
+
+  const studioDraftKey = studioV8 ? readStudioDraftKey(request.headers.get("cookie")) : null;
+  if (studioV8) {
+    if (!studioDraftKey) return orderError(401, "studio-draft-key");
+    const limited = await limitStudioOrderCreate(
+      studioClientKeyFromRequest(request),
+      hashStudioDraftKey(studioDraftKey),
+    );
+    if (!limited.ok) {
+      return orderError(429, "rate-limited", {
+        "retry-after": String(limited.retryAfterSec),
+      });
+    }
+  }
+
+  const parsed = parseOrderDraft(body, { studioDraftKey });
   if (!parsed.ok) return orderError(400, parsed.error);
 
   try {
@@ -72,6 +97,9 @@ export async function POST(request: Request) {
   }
 }
 
-function orderError(status: number, error: string) {
-  return Response.json({ error }, { status, headers: { "cache-control": "no-store" } });
+function orderError(status: number, error: string, extraHeaders?: Record<string, string>) {
+  return Response.json(
+    { error },
+    { status, headers: { "cache-control": "no-store", ...extraHeaders } },
+  );
 }

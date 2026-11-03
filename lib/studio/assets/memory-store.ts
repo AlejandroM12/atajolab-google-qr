@@ -34,6 +34,14 @@ export function createMemoryStudioAssetStore(): StudioAssetStore {
       return count;
     },
 
+    async sumBytesByDraft(draftKeyHash: string): Promise<number> {
+      let total = 0;
+      for (const row of rows.values()) {
+        if (row.draftKeyHash === draftKeyHash) total += row.byteLength;
+      }
+      return total;
+    },
+
     async retain(input): Promise<{ retained: string[]; rejected: string[] }> {
       const unique = [...new Set(input.ids)];
       const rejected = unique.filter((id) => {

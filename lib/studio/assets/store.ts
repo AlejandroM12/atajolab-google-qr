@@ -41,6 +41,8 @@ export type StudioAssetStore = {
   findById(id: string): Promise<StudioAssetRecord | null>;
   findByDraftSha(draftKeyHash: string, sha256: string): Promise<StudioAssetRecord | null>;
   countByDraft(draftKeyHash: string): Promise<number>;
+  /** Sum of byteLength for rows owned by a draft (any status). */
+  sumBytesByDraft(draftKeyHash: string): Promise<number>;
   retain(input: {
     ids: string[];
     draftKeyHash: string;

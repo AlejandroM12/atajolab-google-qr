@@ -49,6 +49,14 @@ export function createPrismaStudioAssetStore(client: StudioAssetDb): StudioAsset
       return client.studioAsset.count({ where: { draftKeyHash } });
     },
 
+    async sumBytesByDraft(draftKeyHash: string): Promise<number> {
+      const aggregate = await client.studioAsset.aggregate({
+        where: { draftKeyHash },
+        _sum: { byteLength: true },
+      });
+      return aggregate._sum.byteLength ?? 0;
+    },
+
     async retain(input): Promise<{ retained: string[]; rejected: string[] }> {
       const unique = [...new Set(input.ids)];
       const execute = async (db: Pick<PrismaClient, "studioAsset">) => {
