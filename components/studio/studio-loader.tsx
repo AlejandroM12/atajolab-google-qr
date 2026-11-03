@@ -14,6 +14,6 @@ const StudioEditor = dynamic(
   },
 );
 
-export function StudioLoader() {
-  return <StudioEditor />;
+export function StudioLoader({ exportEnabled = true }: { exportEnabled?: boolean }) {
+  return <StudioEditor exportEnabled={exportEnabled} />;
 }

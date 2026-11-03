@@ -13,6 +13,7 @@ import {
   type StudioElement,
   type TemplateId,
 } from "@/lib/studio/types";
+import type { ExportValidation } from "@/lib/studio/export/validate";
 import type { DesignValidation } from "@/lib/studio/validation";
 
 const toolButton =
@@ -123,6 +124,9 @@ export function StudioProperties({
   document,
   selected,
   validation,
+  exportValidation,
+  exportBusy,
+  exportEnabled,
   onSelect,
   onCommit,
   onEdit,
@@ -135,10 +139,14 @@ export function StudioProperties({
   onDiscard,
   onReplaceImage,
   onBringQrForward,
+  onExport,
 }: {
   document: DesignDocumentV8;
   selected: StudioElement | null;
   validation: DesignValidation;
+  exportValidation: ExportValidation;
+  exportBusy: boolean;
+  exportEnabled: boolean;
   onSelect: (id: string | null) => void;
   onCommit: (id: string, patch: ElementPatch) => void;
   onEdit: (id: string, patch: ElementPatch) => void;
@@ -151,24 +159,30 @@ export function StudioProperties({
   onDiscard: (id: string) => void;
   onReplaceImage: (id: string) => void;
   onBringQrForward: () => void;
+  onExport: (format: "png" | "svg" | "pdf") => void;
 }) {
   const index = selected ? document.elements.findIndex((element) => element.id === selected.id) : -1;
+  const statusIssues = exportValidation.issues;
   return (
     <div className="flex min-w-0 flex-col gap-4">
       <section className="rounded-3xl border border-line bg-card p-4">
         <h2 className="text-sm font-semibold">Estado del diseño</h2>
-        <p className={`mt-2 text-sm ${validation.ready ? "text-muted" : "text-warning"}`} role="status">
-          {validation.ready
-            ? "Listo para exportar cuando exista esa función: el QR se ve y el contraste básico alcanza."
+        <p className={`mt-2 text-sm ${exportValidation.ready ? "text-muted" : "text-warning"}`} role="status">
+          {exportValidation.ready
+            ? "Listo para una descarga de prueba (PNG, SVG o PDF)."
             : "Todavía no está listo para exportar. Revisá las advertencias."}
         </p>
-        {validation.warnings.length > 0 ? (
+        {statusIssues.length > 0 ? (
           <ul className="mt-3 flex flex-col gap-2">
-            {validation.warnings.map((warning) => (
+            {statusIssues.map((warning) => (
               <li key={`${warning.code}-${warning.elementId}-${warning.message}`}>
                 <button
                   type="button"
-                  className="w-full rounded-xl border border-warning/30 bg-warning-bg px-3 py-2 text-left text-sm text-warning"
+                  className={`w-full rounded-xl border px-3 py-2 text-left text-sm ${
+                    warning.blocking
+                      ? "border-warning/30 bg-warning-bg text-warning"
+                      : "border-line bg-background text-muted"
+                  }`}
                   onClick={() => warning.elementId && onSelect(warning.elementId)}
                 >
                   {warning.message}
@@ -183,6 +197,33 @@ export function StudioProperties({
           </button>
         ) : null}
       </section>
+
+      {exportEnabled ? (
+        <section className="rounded-3xl border border-line bg-card p-4">
+          <h2 className="text-sm font-semibold">Descarga de prueba</h2>
+          <p className="mt-2 text-sm text-muted">
+            Solo para probar el motor de Studio. No crea un pedido ni reemplaza las descargas comerciales.
+          </p>
+          <div className="mt-3 grid grid-cols-3 gap-2">
+            {(["png", "svg", "pdf"] as const).map((format) => (
+              <button
+                key={format}
+                type="button"
+                className={`${toolButton} uppercase`}
+                disabled={!exportValidation.ready || exportBusy}
+                onClick={() => onExport(format)}
+              >
+                {format}
+              </button>
+            ))}
+          </div>
+          {exportBusy ? (
+            <p className="mt-2 text-xs text-muted" role="status">
+              Generando archivo…
+            </p>
+          ) : null}
+        </section>
+      ) : null}
 
       <section className="rounded-3xl border border-line bg-card p-4">
         <h2 className="text-sm font-semibold">Propiedades</h2>
