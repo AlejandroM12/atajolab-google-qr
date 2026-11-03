@@ -1,5 +1,6 @@
 import { isDatabaseUnavailable } from "@/lib/db-error";
 import {
+  describeMailDispatchError,
   mailDispatchAuthorized,
   runMailDispatchJob,
 } from "@/lib/purchase-notify";
@@ -11,7 +12,7 @@ import {
  *   Every 1–5 minutes POST https://…/api/mail/dispatch
  *   Header: Authorization: Bearer $MAIL_DISPATCH_SECRET
  *
- * Uses a Postgres advisory lock so overlapping ticks do not double-send.
+ * Concurrent ticks are safe: claim() is atomic (status PENDING → PROCESSING).
  */
 export async function POST(request: Request) {
   if (!mailDispatchAuthorized(request.headers.get("authorization"))) {
@@ -23,17 +24,40 @@ export async function POST(request: Request) {
     if ("ok" in result && result.ok === false) {
       const status = result.error === "lock-failed" ? 200 : 500;
       return Response.json(
-        { ok: false, error: result.error },
+        {
+          ok: false,
+          error: result.error,
+          ...(result.reason ? { reason: result.reason } : {}),
+        },
         { status, headers: noStore() },
       );
     }
     return Response.json({ ok: true, ...result }, { status: 200, headers: noStore() });
   } catch (error) {
     if (isDatabaseUnavailable(error)) {
+      console.error(
+        "mail dispatch failed",
+        JSON.stringify({ kind: "database-unavailable", name: "DatabaseUnavailable" }),
+      );
       return Response.json({ error: "database-unavailable" }, { status: 503, headers: noStore() });
     }
-    console.error("mail dispatch failed", error instanceof Error ? error.name : "unknown");
-    return Response.json({ error: "dispatch-failed" }, { status: 500, headers: noStore() });
+    const described = describeMailDispatchError(error);
+    console.error(
+      "mail dispatch failed",
+      JSON.stringify({
+        name: described.name,
+        kind: described.kind,
+        prismaCode: described.prismaCode ?? null,
+        detail: described.detail ?? null,
+      }),
+    );
+    return Response.json(
+      {
+        error: "dispatch-failed",
+        reason: described.prismaCode ?? described.kind,
+      },
+      { status: 500, headers: noStore() },
+    );
   }
 }
 
