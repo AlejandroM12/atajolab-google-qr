@@ -82,6 +82,10 @@ function safeAccessPath(path: string): string {
   return path;
 }
 
+function safeMailLabel(value: string): string {
+  return value.replace(/[\r\n]/g, " ").trim().slice(0, 80) || "Tu diseño";
+}
+
 export function recoveryMail(
   origin: string,
   entries: { label: string; token: string }[],
@@ -90,8 +94,7 @@ export function recoveryMail(
   for (const entry of entries) {
     const url = accessLinkUrl(origin, entry.token);
     if (!url) return null;
-    const label = entry.label.replace(/[\r\n]/g, " ").trim().slice(0, 80) || "Tu diseño";
-    lines.push(`${label}\n${url}`);
+    lines.push(`${safeMailLabel(entry.label)}\n${url}`);
   }
   if (lines.length === 0) return null;
   return {
@@ -99,10 +102,45 @@ export function recoveryMail(
     text: [
       "Pediste entrar a tus descargas de AtajoLab Google QR.",
       "Cada enlace vence en 30 minutos y funciona una sola vez.",
+      "Desde la página del pedido podés bajar PNG, SVG y PDF.",
       "",
       lines.join("\n\n"),
       "",
       "Si no pediste este acceso, podés ignorar el mensaje.",
+    ].join("\n"),
+  };
+}
+
+/**
+ * Proactive access mail after a purchase becomes PAID (v7 and Studio v8).
+ * Includes a one-time access link — never draftKey, idempotencyKey, or asset ids.
+ */
+export function purchaseMail(input: {
+  origin: string;
+  label: string;
+  publicId: string;
+  token: string;
+}): { subject: string; text: string } | null {
+  const url = accessLinkUrl(input.origin, input.token);
+  if (!url) return null;
+  const label = safeMailLabel(input.label);
+  const publicId = input.publicId.replace(/[\r\n]/g, "").trim();
+  if (!publicId) return null;
+  return {
+    subject: "Tu compra de AtajoLab está lista",
+    text: [
+      "Confirmamos tu compra en AtajoLab Google QR.",
+      "",
+      `Diseño: ${label}`,
+      `Pedido: ${publicId}`,
+      "",
+      "Usá este enlace para abrir tus descargas. Vence en 30 minutos y funciona una sola vez:",
+      url,
+      "",
+      "En la página del pedido vas a poder descargar PNG, SVG y PDF listos para imprimir.",
+      "Si cerrás el navegador, recuperá el acceso en /recuperar con el mismo correo de la compra.",
+      "",
+      "Si no reconocés esta compra, ignorá el mensaje.",
     ].join("\n"),
   };
 }

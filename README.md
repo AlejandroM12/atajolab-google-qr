@@ -65,7 +65,9 @@ PNG, SVG y PDF se generan al descargar, solo si el pedido está pagado y la cook
 
 Un pedido nuevo pide un correo antes del pago y lo guarda normalizado. Los pedidos anteriores siguen con la cookie, sin correo. Desde el pedido pagado se puede generar un enlace privado de un solo uso, vigente 30 minutos. Desde otro dispositivo, `/recuperar` pide ese correo y, si hay compras pagadas, prepara el mismo tipo de enlace. La respuesta no dice si el correo tiene compras. El token se guarda solo como hash.
 
-El correo sale por Resend cuando `EMAIL_PROVIDER=resend` y el servidor tiene `RESEND_API_KEY` y `EMAIL_FROM`. Si falta la configuración o Resend rechaza el envío, el enlace no queda activo. En desarrollo, con el proveedor vacío, el mensaje queda en `.data/mail-outbox.jsonl`. Ese directorio no se commitea.
+Al pasar a `PAID`, el servidor encola de forma atómica una fila `MailNotification` (outbox en PostgreSQL) y intenta enviar en el mismo request. Si Resend falla de forma temporal, o el proceso cae entre el pago y el envío, el cron `POST /api/mail/dispatch` (Bearer `MAIL_DISPATCH_SECRET`) reintenta sin generar un segundo correo de compra. El enlace de acceso se reutiliza cifrado en la fila hasta el envío exitoso. Fallos permanentes marcan `FAILED` y revocan el enlace; el comprador puede usar `/recuperar`.
+
+En desarrollo, con `EMAIL_PROVIDER` vacío, el envío se “guarda” además en `.data/mail-outbox.jsonl` (mock local, no es el outbox durable). Ese directorio no se commitea.
 
 ## Comprobaciones
 

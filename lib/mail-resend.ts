@@ -44,9 +44,12 @@ export function createResendSender(config: ResendConfig, fetchImpl: ResendFetch 
           }),
         });
         await discard(response);
-        return response.ok ? "sent" : "refused";
-      } catch {
+        if (response.ok) return "sent";
+        // 429 / 5xx: retry later. Other 4xx: permanent (bad from, invalid key shape already filtered).
+        if (response.status === 429 || response.status >= 500) return "retryable";
         return "refused";
+      } catch {
+        return "retryable";
       }
     },
   };

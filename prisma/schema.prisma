@@ -35,8 +35,42 @@ model Order {
   accessCredentials        DownloadAccessCredential[]
   studioAssets             StudioAsset[]
   studioOrderAttempt       StudioOrderAttempt?
+  mailNotifications        MailNotification[]
 
   @@index([buyerEmail])
+}
+
+/// Outbox durable de correos post-pago. El token de acceso vive cifrado solo mientras PENDING.
+enum MailNotificationKind {
+  PURCHASE_ACCESS
+}
+
+enum MailNotificationStatus {
+  PENDING
+  PROCESSING
+  SENT
+  FAILED
+}
+
+model MailNotification {
+  id                String                 @id @default(cuid())
+  orderId           String
+  kind              MailNotificationKind
+  status            MailNotificationStatus @default(PENDING)
+  attempts          Int                    @default(0)
+  nextAttemptAt     DateTime               @default(now())
+  /// Código corto de error (sin tokens ni secretos).
+  lastError         String?
+  sentAt            DateTime?
+  /// Token de acceso AES-GCM; se borra al marcar SENT/FAILED.
+  accessTokenCipher Bytes?
+  accessTokenHash   String?
+  createdAt         DateTime               @default(now())
+  updatedAt         DateTime               @updatedAt
+  order             Order                  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@unique([orderId, kind])
+  @@index([status, nextAttemptAt])
 }
 
 /// Idempotencia de creación de pedidos Studio v8 (único por borrador + clave).
