@@ -34,8 +34,22 @@ model Order {
   accessLinks              DownloadAccessLink[]
   accessCredentials        DownloadAccessCredential[]
   studioAssets             StudioAsset[]
+  studioOrderAttempt       StudioOrderAttempt?
 
   @@index([buyerEmail])
+}
+
+/// Idempotencia de creación de pedidos Studio v8 (único por borrador + clave).
+model StudioOrderAttempt {
+  draftKeyHash       String
+  idempotencyKeyHash String
+  requestHash        String
+  orderId            String   @unique
+  createdAt          DateTime @default(now())
+  order              Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@id([draftKeyHash, idempotencyKeyHash])
+  @@index([createdAt])
 }
 
 /// TEMPORARY: borrador Studio (expira). RETAINED: ligado a un pedido, no limpia.

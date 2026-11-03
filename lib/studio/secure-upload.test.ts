@@ -19,6 +19,7 @@ import {
   studioRequestTrusted,
   STUDIO_DRAFT_COOKIE,
 } from "@/lib/studio/draft-session";
+import { createStudioOrderIdempotencyKey } from "@/lib/studio/order-idempotency";
 import { prepareStudioOrderDocument } from "@/lib/studio/prepare-order";
 import {
   createStudioTestRateLimiter,
@@ -200,6 +201,7 @@ async function pngOpaque(): Promise<Buffer> {
     version: 8,
     email: "cliente@example.com",
     document: withQr(createDocument("corporativo"), REVIEW_URL),
+    idempotencyKey: createStudioOrderIdempotencyKey(),
   };
   assert.equal(parseOrderDraft(body, { studioDraftKey: draftKey }).ok, true);
   assert.equal(parseOrderDraft(body).ok, false);

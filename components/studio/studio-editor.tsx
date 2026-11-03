@@ -28,6 +28,7 @@ import { createId } from "@/lib/studio/ids";
 import { prepareStudioImage } from "@/lib/studio/images.browser";
 import { loadSessionDesign, writeDesign } from "@/lib/studio/persistence";
 import { prepareStudioOrderDocument } from "@/lib/studio/prepare-order";
+import { createStudioOrderIdempotencyKey } from "@/lib/studio/order-idempotency";
 import { formatArs, PIECE_CURRENCY, PIECE_PRICE_ARS } from "@/lib/pricing";
 import { qrContrastIssue } from "@/lib/studio/qr-rules";
 import { validateForExport } from "@/lib/studio/export/validate";
@@ -71,6 +72,7 @@ export function StudioEditor({
   const commercialDocumentRef = useRef<DesignDocumentV8 | null>(null);
   const preparedFromRef = useRef<DesignDocumentV8 | null>(null);
   const createdPublicIdRef = useRef<string | null>(null);
+  const purchaseIdempotencyKeyRef = useRef<string | null>(null);
   const [drafting, setDrafting] = useState(false);
   const historyRef = useRef<HistoryState | null>(null);
   const selectedIdRef = useRef<string | null>(null);
@@ -102,6 +104,8 @@ export function StudioEditor({
       setPrepareReady(false);
       commercialDocumentRef.current = null;
       preparedFromRef.current = null;
+      purchaseIdempotencyKeyRef.current = null;
+      createdPublicIdRef.current = null;
       setSaveLabel("El diseño cambió. Volvé a preparar las imágenes antes de crear el pedido.");
     }
   }, [history.present, prepareReady]);
@@ -447,6 +451,8 @@ export function StudioEditor({
     setPrepareReady(false);
     commercialDocumentRef.current = null;
     preparedFromRef.current = null;
+    purchaseIdempotencyKeyRef.current = null;
+    createdPublicIdRef.current = null;
     try {
       const prepared = await prepareStudioOrderDocument({
         document: current,
@@ -477,6 +483,8 @@ export function StudioEditor({
       }
       commercialDocumentRef.current = prepared.commercialDocument;
       preparedFromRef.current = current;
+      purchaseIdempotencyKeyRef.current = createStudioOrderIdempotencyKey();
+      createdPublicIdRef.current = null;
       setPrepareReady(true);
       setPrepareProgress(null);
       setSaveLabel(
@@ -523,6 +531,10 @@ export function StudioEditor({
       return;
     }
 
+    if (!purchaseIdempotencyKeyRef.current) {
+      purchaseIdempotencyKeyRef.current = createStudioOrderIdempotencyKey();
+    }
+
     setOrderBusy(true);
     setError(null);
     setNotice(null);
@@ -535,6 +547,7 @@ export function StudioEditor({
           version: STUDIO_VERSION,
           email,
           document: commercial,
+          idempotencyKey: purchaseIdempotencyKeyRef.current,
         }),
       });
       const body = (await response.json().catch(() => null)) as
@@ -799,6 +812,12 @@ function studioOrderErrorMessage(code: string): string {
   }
   if (code === "studio-assets") {
     return "Alguna imagen del pedido no pertenece a esta sesión. Volvé a preparar las imágenes.";
+  }
+  if (code === "studio-idempotency-conflict") {
+    return "Esta compra ya se inició con otro diseño. Prepará de nuevo e intentá otra vez.";
+  }
+  if (code === "studio-idempotency-key") {
+    return "No pudimos validar el intento de compra. Prepará de nuevo e intentá otra vez.";
   }
   if (code === "invalid-email") return "Revisá el correo antes de continuar.";
   if (code === "rate-limited") return "Llegaste al límite de pedidos. Esperá un rato y reintentá.";

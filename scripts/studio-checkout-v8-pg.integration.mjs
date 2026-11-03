@@ -33,6 +33,7 @@ const {
 const { studioCheckoutAllowed } = await import("../lib/studio/checkout-access.ts");
 const { updateElement } = await import("../lib/studio/document.ts");
 const { createDocument } = await import("../lib/studio/templates.ts");
+const { createStudioOrderIdempotencyKey } = await import("../lib/studio/order-idempotency.ts");
 
 const INIT_POINT = "https://www.mercadopago.com.ar/checkout/v1/redirect?pref_id=studio-v8-test";
 const REVIEW_URL = "https://search.google.com/local/writereview?placeid=ChIJabcdefghijklmnop";
@@ -154,6 +155,7 @@ try {
   const parsed = parseOrderDraft(
     {
       version: 8,
+      idempotencyKey: createStudioOrderIdempotencyKey(),
       email: "studio-checkout-v8@example.com",
       document: dehydrated.document,
     },
@@ -170,15 +172,84 @@ try {
   assert.equal(pending?.artwork.version, 8);
   assert.equal(pending?.artwork.document.elements.find((el) => el.type === "text")?.text, frozenTitle);
 
-  // Retry / double-submit with same retained assets reuses the PENDING order.
+  // Idempotent replay: same publicId and same deliveryKey (no rotation).
   const replay = await savePendingOrder(parsed.draft);
   assert.equal(replay.publicId, created.publicId);
-  assert.notEqual(replay.deliveryKey, created.deliveryKey);
+  assert.equal(replay.deliveryKey, created.deliveryKey);
 
   const deliveryKey = replay.deliveryKey;
   const replayRecord = await findPaymentRecord(created.publicId);
   assert.ok(deliveryKeysMatch(deliveryKey, replayRecord.deliveryKeyHash));
-  assert.equal(deliveryKeysMatch(created.deliveryKey, replayRecord.deliveryKeyHash), false);
+  assert.ok(deliveryKeysMatch(created.deliveryKey, replayRecord.deliveryKeyHash));
+
+  // Concurrent same-key creates collapse to one order.
+  const concurrent = await Promise.all([
+    savePendingOrder(parsed.draft),
+    savePendingOrder(parsed.draft),
+  ]);
+  assert.equal(concurrent[0].publicId, created.publicId);
+  assert.equal(concurrent[1].publicId, created.publicId);
+  assert.equal(concurrent[0].deliveryKey, created.deliveryKey);
+  assert.equal(concurrent[1].deliveryKey, created.deliveryKey);
+
+  // Same idempotency key + different payload → conflict.
+  const conflictBody = {
+    version: 8,
+    idempotencyKey: parsed.draft.studioIdempotencyKey,
+    email: "other-checkout@example.com",
+    document: dehydrated.document,
+  };
+  const conflictParsed = parseOrderDraft(conflictBody, { studioDraftKey: draftKey });
+  assert.equal(conflictParsed.ok, true);
+  await assert.rejects(() => savePendingOrder(conflictParsed.draft), /order-idempotency-conflict/);
+
+  // Intentional second purchase uses a new idempotency key.
+  const secondParsed = parseOrderDraft(
+    {
+      version: 8,
+      idempotencyKey: createStudioOrderIdempotencyKey(),
+      email: "studio-checkout-v8@example.com",
+      document: dehydrated.document,
+    },
+    { studioDraftKey: draftKey },
+  );
+  assert.equal(secondParsed.ok, true);
+  // Second create with same assets fails ownership (already RETAINED) — expected for same design
+  // assets; zero-image path is covered below separately when applicable.
+  await assert.rejects(() => savePendingOrder(secondParsed.draft), /order-assets/);
+
+  // Zero-image design: two keys → two orders; same key → one order.
+  const plainDoc = withQr(createDocument("creativo"), REVIEW_URL);
+  const zeroKey = createStudioOrderIdempotencyKey();
+  const zeroParsed = parseOrderDraft(
+    {
+      version: 8,
+      idempotencyKey: zeroKey,
+      email: "zero-image@example.com",
+      document: plainDoc,
+    },
+    { studioDraftKey: draftKey },
+  );
+  assert.equal(zeroParsed.ok, true);
+  const zeroFirst = await savePendingOrder(zeroParsed.draft);
+  createdOrderIds.push(zeroFirst.publicId);
+  const zeroReplay = await savePendingOrder(zeroParsed.draft);
+  assert.equal(zeroReplay.publicId, zeroFirst.publicId);
+  assert.equal(zeroReplay.deliveryKey, zeroFirst.deliveryKey);
+
+  const zeroOther = parseOrderDraft(
+    {
+      version: 8,
+      idempotencyKey: createStudioOrderIdempotencyKey(),
+      email: "zero-image@example.com",
+      document: plainDoc,
+    },
+    { studioDraftKey: draftKey },
+  );
+  assert.equal(zeroOther.ok, true);
+  const zeroSecond = await savePendingOrder(zeroOther.draft);
+  createdOrderIds.push(zeroSecond.publicId);
+  assert.notEqual(zeroSecond.publicId, zeroFirst.publicId);
 
   const paymentStore = {
     async find(publicId) {

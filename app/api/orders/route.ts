@@ -96,6 +96,12 @@ export async function POST(request: Request) {
     if (error instanceof Error && error.message === "order-assets") {
       return orderError(400, "studio-assets");
     }
+    if (error instanceof Error && error.message === "order-idempotency-conflict") {
+      return orderError(409, "studio-idempotency-conflict");
+    }
+    if (error instanceof Error && (error.message === "order-idempotency" || error.message === "order-access-secret")) {
+      return orderError(503, "order-failed");
+    }
     console.error("order create failed", error instanceof Error ? error.name : "unknown");
     if (isDatabaseUnavailable(error)) return orderError(503, "database-unavailable");
     return orderError(500, "order-failed");

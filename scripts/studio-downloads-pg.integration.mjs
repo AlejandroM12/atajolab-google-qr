@@ -34,6 +34,7 @@ const { updateElement } = await import("../lib/studio/document.ts");
 const { A6_HEIGHT_MM, A6_WIDTH_MM } = await import("../lib/studio/types.ts");
 const { studioPrintPixels } = await import("../lib/studio/export/units.ts");
 const { createDocument } = await import("../lib/studio/templates.ts");
+const { createStudioOrderIdempotencyKey } = await import("../lib/studio/order-idempotency.ts");
 
 const store = createPrismaStudioAssetStore(prisma);
 const draftKey = createStudioDraftKey();
@@ -99,6 +100,7 @@ try {
   const parsed = parseOrderDraft(
     {
       version: 8,
+      idempotencyKey: createStudioOrderIdempotencyKey(),
       email: "studio-v8-download@example.com",
       document: dehydrated.document,
     },
