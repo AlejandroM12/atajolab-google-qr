@@ -1,13 +1,15 @@
 import { isPremiumTemplate, templateSpec, type ArtworkExportFormat, type ProductArtwork } from "@/lib/artwork";
 import { DIGITAL_DOWNLOADS_ENABLED, type OrderStatus } from "@/lib/delivery";
+import type { OrderArtwork } from "@/lib/order-draft";
 import { digitalDeliveryAllowed } from "@/lib/payments/access";
 import { isPublicId } from "@/lib/public-id";
 import { isArtworkFormat, renderArtworkFile } from "@/lib/print/render";
+import { STUDIO_COMMERCIAL_ARTWORK_VERSION } from "@/lib/studio/commercial-artwork";
 
 export type DownloadOrder = {
   publicId: string;
   status: OrderStatus;
-  artwork: ProductArtwork;
+  artwork: OrderArtwork;
   deliveryKeyHash: string | null;
   accessKeyHashes?: string[];
 };
@@ -49,6 +51,10 @@ export function resolveArtworkDownload(input: {
   }
   if (!input.order || input.order.publicId !== input.publicId || !input.order.artwork.href) {
     return { ok: false, status: 404, error: "not-found" };
+  }
+  // Studio v8 digital delivery ships in a later PR — never route through layoutArtwork v1–v7.
+  if (input.order.artwork.version === STUDIO_COMMERCIAL_ARTWORK_VERSION) {
+    return { ok: false, status: 403, error: "download-unavailable" };
   }
   if (
     !digitalDeliveryAllowed({

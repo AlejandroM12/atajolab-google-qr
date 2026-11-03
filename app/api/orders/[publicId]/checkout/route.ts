@@ -5,6 +5,7 @@ import { createPreferenceLimiter, credentialShape } from "@/lib/payments/checkou
 import { readAppOrigin, startCheckout } from "@/lib/payments/checkout-service";
 import { paymentAccessToken, paymentRuntime } from "@/lib/payments/mercadopago";
 import { compositionChecked, pieceComposes } from "@/lib/print/layout";
+import { STUDIO_COMMERCIAL_ARTWORK_VERSION } from "@/lib/studio/commercial-artwork";
 
 const limiter = createPreferenceLimiter();
 
@@ -22,6 +23,10 @@ export async function POST(
 
   try {
     const stored = await findOrder(publicId);
+    // Studio v8 checkout ships later — keep Mercado Pago preference flow on v1–v7 only.
+    if (stored?.artwork.version === STUDIO_COMMERCIAL_ARTWORK_VERSION) {
+      return paymentError(409, "checkout-unavailable");
+    }
     if (
       stored?.artwork &&
       compositionChecked(stored.artwork) &&

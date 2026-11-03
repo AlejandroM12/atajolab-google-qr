@@ -52,6 +52,16 @@ import { layoutSignage } from "@/lib/print/signage";
 import { parseBuyerEmail } from "@/lib/buyer-email";
 import { PIECE_CURRENCY, PIECE_PRICE_ARS } from "@/lib/pricing";
 import { QR_SIZES, type QrSize } from "@/lib/product";
+import {
+  buildStudioCommercialArtwork,
+  readStudioCommercialArtwork,
+  type StudioCommercialArtworkV8,
+  STUDIO_COMMERCIAL_ARTWORK_VERSION,
+} from "@/lib/studio/commercial-artwork";
+import { documentHasDataUrls, isStudioDraftKey, hashStudioDraftKey } from "@/lib/studio/assets/index";
+import { parseDesign } from "@/lib/studio/serialize";
+import { STUDIO_VERSION } from "@/lib/studio/types";
+import { validateForExport } from "@/lib/studio/export/validate";
 
 const LEGACY_FIELDS = [
   "goal",
@@ -85,6 +95,12 @@ const STUDIO_FIELDS = [
 const COMMERCIAL_FIELDS = [...STUDIO_FIELDS, "version"] as const;
 
 const PREVIEW_FIELDS = COMMERCIAL_FIELDS.filter((field) => field !== "email");
+
+/** Studio v8 commercial order body. Document must already be dehydrated (asset refs only). */
+const STUDIO_V8_FIELDS = ["version", "email", "draftKey", "document"] as const;
+
+/** Soft cap for dehydrated Studio documents in an order body (no embedded images). */
+const STUDIO_V8_DOCUMENT_MAX_CHARS = 200_000;
 
 const SIGNAGE_FIELDS = [
   "version",
@@ -162,19 +178,33 @@ export type OrderDraftError =
   | "subtitle-overflow"
   | "composition"
   | "accent-contrast"
-  | "review-unverified";
+  | "review-unverified"
+  | "studio-not-ready"
+  | "studio-draft-key"
+  | "studio-embedded-image"
+  | "studio-assets";
+
+export type OrderArtwork = ProductArtwork | StudioCommercialArtworkV8;
 
 export type OrderDraft = {
   amountArs: typeof PIECE_PRICE_ARS;
   currency: typeof PIECE_CURRENCY;
-  artwork: ProductArtwork;
+  artwork: OrderArtwork;
   buyerEmail: string;
+  /**
+   * Studio v8 only. Hash of the draft key that owns temporary assets to retain.
+   * Never sent by the client as a hash — derived server-side from draftKey.
+   */
+  studioDraftKeyHash?: string;
 };
 
 export function parseOrderDraft(
   input: unknown,
 ): { ok: true; draft: OrderDraft } | { ok: false; error: OrderDraftError } {
   if (!isRecord(input)) return { ok: false, error: "invalid-body" };
+  if (input.version === STUDIO_COMMERCIAL_ARTWORK_VERSION || input.version === STUDIO_VERSION) {
+    return parseStudioV8Draft(input);
+  }
   if (input.version === PREMIUM_ARTWORK_VERSION) return parsePremiumDraft(input);
   if (input.version === PRESS_ARTWORK_VERSION) return parsePressDraft(input);
   if (input.version === SIGNAGE_ARTWORK_VERSION || isSignageTemplate(input.templateId)) {
@@ -192,8 +222,9 @@ export function parseOrderDraft(
   return { ok: false, error: "invalid-template" };
 }
 
-export function readArtworkSnapshot(value: unknown): ProductArtwork | null {
+export function readArtworkSnapshot(value: unknown): OrderArtwork | null {
   if (!isRecord(value)) return null;
+  if (value.version === STUDIO_COMMERCIAL_ARTWORK_VERSION) return readStudioCommercialArtwork(value);
   if (value.version === PREMIUM_ARTWORK_VERSION) return readPremiumSnapshot(value);
   if (value.version === PRESS_ARTWORK_VERSION) return readPressSnapshot(value);
   if (value.version === SIGNAGE_ARTWORK_VERSION) return readSignageSnapshot(value);
@@ -983,6 +1014,65 @@ function readStoredLogo(value: unknown): ArtworkLogo | null | undefined {
   const logo = readPngLogo(value.data);
   if (!logo || logo.width !== value.width || logo.height !== value.height) return undefined;
   return logo;
+}
+
+function parseStudioV8Draft(
+  input: Record<string, unknown>,
+): { ok: true; draft: OrderDraft } | { ok: false; error: OrderDraftError } {
+  if (!exactFields(input, STUDIO_V8_FIELDS)) return { ok: false, error: fieldError(input, STUDIO_V8_FIELDS) };
+
+  const buyerEmail = readBuyerEmail(input.email);
+  if (!buyerEmail) return { ok: false, error: "invalid-email" };
+
+  if (typeof input.draftKey !== "string" || !isStudioDraftKey(input.draftKey)) {
+    return { ok: false, error: "studio-draft-key" };
+  }
+
+  if (!isRecord(input.document)) return { ok: false, error: "invalid-body" };
+  let documentJson: string;
+  try {
+    documentJson = JSON.stringify(input.document);
+  } catch {
+    return { ok: false, error: "invalid-body" };
+  }
+  if (documentJson.length > STUDIO_V8_DOCUMENT_MAX_CHARS) return { ok: false, error: "invalid-body" };
+
+  const parsed = parseDesign(documentJson);
+  if (!parsed) return { ok: false, error: "invalid-body" };
+
+  // Commercial snapshot must not embed images — client dehydrates first.
+  if (documentHasDataUrls(parsed.document)) return { ok: false, error: "studio-embedded-image" };
+
+  const exportCheck = validateForExport(parsed.document);
+  if (!exportCheck.ready) {
+    const codes = new Set(exportCheck.errors.map((issue) => issue.code));
+    if (codes.has("qr-covered") || codes.has("out-of-bounds") || codes.has("composition" as never)) {
+      return { ok: false, error: "composition" };
+    }
+    if (codes.has("qr-empty") || codes.has("missing-qr") || codes.has("qr-url") || codes.has("qr-size")) {
+      return { ok: false, error: "studio-not-ready" };
+    }
+    if (codes.has("image-src")) return { ok: false, error: "studio-embedded-image" };
+    return { ok: false, error: "studio-not-ready" };
+  }
+
+  const built = buildStudioCommercialArtwork(parsed.document);
+  if (!built.ok) {
+    if (built.error === "studio-embedded-image") return { ok: false, error: "studio-embedded-image" };
+    if (built.error === "studio-not-ready") return { ok: false, error: "studio-not-ready" };
+    return { ok: false, error: "invalid-body" };
+  }
+
+  return {
+    ok: true,
+    draft: {
+      amountArs: PIECE_PRICE_ARS,
+      currency: PIECE_CURRENCY,
+      artwork: built.artwork,
+      buyerEmail,
+      studioDraftKeyHash: hashStudioDraftKey(input.draftKey),
+    },
+  };
 }
 
 function draftFor(artwork: ProductArtwork, buyerEmail: string): OrderDraft {

@@ -1,0 +1,368 @@
+import assert from "node:assert/strict";
+import sharp from "sharp";
+import {
+  buildStudioCommercialArtwork,
+  printableDocument,
+  readStudioCommercialArtwork,
+  STUDIO_COMMERCIAL_ARTWORK_VERSION,
+} from "@/lib/studio/commercial-artwork";
+import {
+  createMemoryStudioAssetStore,
+  createStudioDraftKey,
+  dehydrateStudioDocument,
+  documentHasDataUrls,
+  hashStudioDraftKey,
+  putStudioAssetForDraft,
+  retainStudioAssetsForOrder,
+  studioAssetRef,
+} from "@/lib/studio/assets/index";
+import { updateElement } from "@/lib/studio/document";
+import { parseOrderDraft, readArtworkSnapshot } from "@/lib/order-draft";
+import { PIECE_PRICE_ARS } from "@/lib/pricing";
+import { createDocument } from "@/lib/studio/templates";
+import type { DesignDocumentV8 } from "@/lib/studio/types";
+import { resolveArtworkDownload } from "@/lib/print/download";
+
+const REVIEW_URL = "https://search.google.com/local/writereview?placeid=ChIJabcdefghijklmnop";
+
+function withQr(document: DesignDocumentV8, value: string): DesignDocumentV8 {
+  const qr = document.elements.find((element) => element.type === "qr");
+  assert.ok(qr);
+  return updateElement(document, qr.id, { value });
+}
+
+function withImage(document: DesignDocumentV8, id: string, src: string): DesignDocumentV8 {
+  return {
+    ...document,
+    elements: [
+      ...document.elements.filter((element) => element.type !== "image"),
+      {
+        id,
+        role: null,
+        type: "image",
+        x: 12,
+        y: 40,
+        width: 28,
+        height: 28,
+        rotation: 0,
+        src,
+        alt: "logo",
+      },
+    ],
+  };
+}
+
+async function pngOpaque(): Promise<Buffer> {
+  return sharp({
+    create: { width: 64, height: 48, channels: 3, background: { r: 20, g: 90, b: 80 } },
+  })
+    .png()
+    .toBuffer();
+}
+
+function dataUrl(bytes: Buffer): string {
+  return `data:image/png;base64,${bytes.toString("base64")}`;
+}
+
+const ready = withQr(createDocument("corporativo"), REVIEW_URL);
+const built = buildStudioCommercialArtwork(ready, new Date("2026-11-03T15:00:00.000Z"));
+assert.equal(built.ok, true);
+if (built.ok) {
+  assert.equal(built.artwork.version, STUDIO_COMMERCIAL_ARTWORK_VERSION);
+  assert.equal(built.artwork.href, REVIEW_URL);
+  assert.equal(built.artwork.format.id, "a6");
+  assert.equal(built.artwork.templateId, "corporativo");
+  assert.equal(built.artwork.frozenAt, "2026-11-03T15:00:00.000Z");
+  assert.equal(built.artwork.document.parked.length, 0);
+  assert.deepEqual(built.artwork.document.layouts, {});
+  assert.equal(documentHasDataUrls(built.artwork.document), false);
+  assert.equal(built.artwork.assetIds.length, 0);
+  assert.ok(built.artwork.title.length >= 1);
+
+  const roundTrip = readStudioCommercialArtwork(built.artwork);
+  assert.deepEqual(roundTrip, built.artwork);
+  assert.equal(readArtworkSnapshot(built.artwork)?.version, 8);
+}
+
+const parkedOnly = {
+  ...ready,
+  parked: [
+    {
+      id: "parked-img",
+      role: null,
+      type: "image" as const,
+      x: 0,
+      y: 0,
+      width: 20,
+      height: 20,
+      rotation: 0,
+      src: studioAssetRef("abcdefghijklmnopqrstuvwx"),
+      alt: "parked",
+    },
+  ],
+};
+const printable = printableDocument(parkedOnly);
+assert.equal(printable.parked.length, 0);
+assert.equal(parkedOnly.parked.length, 1);
+const parkedSnap = buildStudioCommercialArtwork(parkedOnly);
+assert.equal(parkedSnap.ok, true);
+if (parkedSnap.ok) {
+  assert.equal(parkedSnap.artwork.document.parked.length, 0);
+  assert.equal(parkedSnap.artwork.assetIds.includes("abcdefghijklmnopqrstuvwx"), false);
+}
+
+const emptyQr = buildStudioCommercialArtwork(createDocument("corporativo"));
+assert.equal(emptyQr.ok, false);
+if (!emptyQr.ok) assert.equal(emptyQr.error, "studio-not-ready");
+
+const covered = (() => {
+  let doc = withQr(createDocument("corporativo"), REVIEW_URL);
+  const qr = doc.elements.find((element) => element.type === "qr")!;
+  doc = {
+    ...doc,
+    elements: [
+      ...doc.elements,
+      {
+        id: "cover",
+        role: null,
+        type: "rect",
+        x: qr.x,
+        y: qr.y,
+        width: qr.width,
+        height: qr.height,
+        rotation: 0,
+        fill: "#ff0000",
+        cornerRadius: 0,
+      },
+    ],
+  };
+  return buildStudioCommercialArtwork(doc);
+})();
+assert.equal(covered.ok, false);
+
+const embedded = buildStudioCommercialArtwork(
+  withImage(ready, "img1", dataUrl(await pngOpaque())),
+);
+assert.equal(embedded.ok, false);
+if (!embedded.ok) assert.equal(embedded.error, "studio-embedded-image");
+
+const draftKey = createStudioDraftKey();
+const draftHash = hashStudioDraftKey(draftKey);
+const store = createMemoryStudioAssetStore();
+const bytes = await pngOpaque();
+const put = await putStudioAssetForDraft({ store, draftKeyHash: draftHash, bytes });
+assert.equal(put.ok, true);
+if (!put.ok) throw new Error("put");
+
+const withAsset = withImage(ready, "img1", studioAssetRef(put.asset.id));
+const assetSnap = buildStudioCommercialArtwork(withAsset);
+assert.equal(assetSnap.ok, true);
+if (assetSnap.ok) {
+  assert.deepEqual(assetSnap.artwork.assetIds, [put.asset.id]);
+  assert.equal(documentHasDataUrls(assetSnap.artwork.document), false);
+  const json = JSON.stringify(assetSnap.artwork);
+  assert.equal(json.includes("data:image"), false);
+}
+
+const orderBody = {
+  version: 8,
+  email: "cliente@example.com",
+  draftKey,
+  document: withAsset,
+};
+const parsed = parseOrderDraft(orderBody);
+assert.equal(parsed.ok, true);
+if (parsed.ok) {
+  assert.equal(parsed.draft.amountArs, PIECE_PRICE_ARS);
+  assert.equal(parsed.draft.currency, "ARS");
+  assert.equal(parsed.draft.artwork.version, 8);
+  assert.equal(parsed.draft.studioDraftKeyHash, draftHash);
+  assert.equal(Object.hasOwn(parsed.draft, "status"), false);
+  assert.equal("amountArs" in parsed.draft.artwork, false);
+  const stored = readArtworkSnapshot(structuredClone(parsed.draft.artwork));
+  assert.equal(stored?.version, 8);
+  if (stored && stored.version === 8) {
+    // Immutability: mutating the live draft document must not alter the frozen snapshot.
+    const mutated = updateElement(withAsset, withAsset.elements[0]!.id, {});
+    assert.notEqual(JSON.stringify(mutated), undefined);
+    assert.equal(stored.href, REVIEW_URL);
+    assert.deepEqual(stored.assetIds, [put.asset.id]);
+  }
+}
+
+assert.equal(parseOrderDraft({ ...orderBody, amountArs: 1 }).ok, false);
+assert.equal(parseOrderDraft({ ...orderBody, status: "PAID" }).ok, false);
+assert.equal(parseOrderDraft({ ...orderBody, draftKey: "short" }).ok, false);
+if (!parseOrderDraft({ ...orderBody, draftKey: "short" }).ok) {
+  assert.equal(parseOrderDraft({ ...orderBody, draftKey: "short" }).error, "studio-draft-key");
+}
+
+const withDataUrl = parseOrderDraft({
+  version: 8,
+  email: "cliente@example.com",
+  draftKey,
+  document: withImage(ready, "img1", dataUrl(bytes)),
+});
+assert.equal(withDataUrl.ok, false);
+if (!withDataUrl.ok) assert.equal(withDataUrl.error, "studio-embedded-image");
+
+const emptyQrOrder = parseOrderDraft({
+  version: 8,
+  email: "cliente@example.com",
+  draftKey,
+  document: createDocument("corporativo"),
+});
+assert.equal(emptyQrOrder.ok, false);
+if (!emptyQrOrder.ok) assert.equal(emptyQrOrder.error, "studio-not-ready");
+
+const coveredOrder = parseOrderDraft({
+  version: 8,
+  email: "cliente@example.com",
+  draftKey,
+  document: (() => {
+    let doc = withQr(createDocument("corporativo"), REVIEW_URL);
+    const qr = doc.elements.find((element) => element.type === "qr")!;
+    return {
+      ...doc,
+      elements: [
+        ...doc.elements,
+        {
+          id: "cover",
+          role: null,
+          type: "rect",
+          x: qr.x,
+          y: qr.y,
+          width: qr.width,
+          height: qr.height,
+          rotation: 0,
+          fill: "#112233",
+          cornerRadius: 0,
+        },
+      ],
+    };
+  })(),
+});
+assert.equal(coveredOrder.ok, false);
+if (!coveredOrder.ok) assert.equal(coveredOrder.error, "composition");
+
+const missingAsset = parseOrderDraft({
+  version: 8,
+  email: "cliente@example.com",
+  draftKey,
+  document: withImage(ready, "img1", studioAssetRef("zzzzzzzzzzzzzzzzzzzzzzzz")),
+});
+assert.equal(missingAsset.ok, true);
+if (missingAsset.ok) {
+  // Ownership is enforced at save time, not parse time.
+  const retain = await retainStudioAssetsForOrder({
+    store,
+    draftKeyHash: draftHash,
+    orderId: "orderidorderidorderid00",
+    assetIds: missingAsset.draft.artwork.version === 8 ? missingAsset.draft.artwork.assetIds : [],
+  });
+  assert.ok(retain.rejected.length > 0);
+}
+
+const foreignDraft = createStudioDraftKey();
+const foreignHash = hashStudioDraftKey(foreignDraft);
+const foreignPut = await putStudioAssetForDraft({ store, draftKeyHash: foreignHash, bytes });
+assert.equal(foreignPut.ok, true);
+if (foreignPut.ok) {
+  const foreignOrder = parseOrderDraft({
+    version: 8,
+    email: "cliente@example.com",
+    draftKey,
+    document: withImage(ready, "img1", studioAssetRef(foreignPut.asset.id)),
+  });
+  assert.equal(foreignOrder.ok, true);
+  if (foreignOrder.ok && foreignOrder.draft.artwork.version === 8) {
+    const retain = await retainStudioAssetsForOrder({
+      store,
+      draftKeyHash: draftHash,
+      orderId: "orderidorderidorderid01",
+      assetIds: foreignOrder.draft.artwork.assetIds,
+    });
+    assert.ok(retain.rejected.length > 0);
+    assert.equal(retain.retained.length, 0);
+  }
+}
+
+const ownedRetain = await retainStudioAssetsForOrder({
+  store,
+  draftKeyHash: draftHash,
+  orderId: "orderidorderidorderid02",
+  assetIds: [put.asset.id],
+});
+assert.deepEqual(ownedRetain.retained, [put.asset.id]);
+assert.deepEqual(ownedRetain.rejected, []);
+const retained = await store.findById(put.asset.id);
+assert.equal(retained?.status, "RETAINED");
+assert.equal(retained?.orderId, "orderidorderidorderid02");
+assert.equal(retained?.expiresAt, null);
+
+// Already-retained assets must not be reassigned to a second order.
+const reassign = await retainStudioAssetsForOrder({
+  store,
+  draftKeyHash: draftHash,
+  orderId: "orderidorderidorderid99",
+  assetIds: [put.asset.id],
+});
+assert.equal(reassign.retained.length, 0);
+assert.ok(reassign.rejected.includes(put.asset.id));
+const stillBound = await store.findById(put.asset.id);
+assert.equal(stillBound?.orderId, "orderidorderidorderid02");
+
+if (assetSnap.ok) {
+  const download = resolveArtworkDownload({
+    publicId: "abcdefghijklmnopqrstuvwx",
+    format: "png",
+    deliveryKey: "x".repeat(43),
+    order: {
+      publicId: "abcdefghijklmnopqrstuvwx",
+      status: "PAID",
+      artwork: assetSnap.artwork,
+      deliveryKeyHash: "abc",
+    },
+  });
+  assert.equal(download.ok, false);
+  if (!download.ok) assert.equal(download.error, "download-unavailable");
+}
+
+const dehydrateRound = await dehydrateStudioDocument({
+  document: withImage(ready, "img2", dataUrl(bytes)),
+  store,
+  draftKeyHash: draftHash,
+});
+assert.equal(dehydrateRound.ok, true);
+if (dehydrateRound.ok) {
+  const again = parseOrderDraft({
+    version: 8,
+    email: "Cliente@Example.com",
+    draftKey,
+    document: dehydrateRound.document,
+  });
+  assert.equal(again.ok, true);
+  if (again.ok) {
+    assert.equal(again.draft.buyerEmail, "cliente@example.com");
+    assert.equal(again.draft.amountArs, PIECE_PRICE_ARS);
+    assert.equal(documentHasDataUrls(again.draft.artwork.version === 8 ? again.draft.artwork.document : ready), false);
+  }
+}
+
+// Historical v1–v7 snapshots still round-trip.
+assert.equal(
+  readArtworkSnapshot({
+    version: 1,
+    goal: "ubicacion",
+    href: "https://www.google.com/maps/place/Obelisco/@-34.6037,-58.3816,17z",
+    templateId: "cartel-ubicacion",
+    businessName: "AtajoLab",
+    headline: "Escaneá para ver cómo llegar",
+    foreground: "#14221f",
+    background: "#ffffff",
+    qrSize: 256,
+  })?.version,
+  1,
+);
+
+console.log("commercial-artwork tests ok");

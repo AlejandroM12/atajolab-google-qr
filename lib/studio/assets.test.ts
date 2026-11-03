@@ -203,6 +203,19 @@ const retained = await retainStudioAssetsForOrder({
 assert.ok(retained.retained.length > 0);
 assert.equal(retained.rejected.length, 0);
 
+const rebind = await retainStudioAssetsForOrder({
+  store,
+  draftKeyHash: draftHash,
+  orderId: "order-test-public-id0099",
+  assetIds: ids,
+});
+assert.equal(rebind.retained.length, 0);
+assert.ok(rebind.rejected.length > 0);
+for (const id of ids) {
+  const row = await store.findById(id);
+  assert.equal(row?.orderId, "order-test-public-id0001");
+}
+
 const orderHydrate = await hydrateStudioDocument({
   document: dehydrated.document,
   store,

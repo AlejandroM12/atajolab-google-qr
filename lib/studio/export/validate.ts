@@ -1,3 +1,4 @@
+import { isStudioAssetRef } from "@/lib/studio/assets/refs";
 import { imageSrcIssue } from "@/lib/studio/images";
 import { axisAlignedBounds } from "@/lib/studio/geometry";
 import { STUDIO_PRINT_DPI } from "@/lib/studio/export/units";
@@ -131,6 +132,9 @@ function imageIssues(element: ImageElement): ExportIssue[] {
       },
     ];
   }
+
+  // Private asset refs are validated for ownership at order/export time; pixel DPI needs hydration.
+  if (isStudioAssetRef(element.src)) return [];
 
   const pixels = imagePixelSize(element.src);
   if (!pixels) return [];
