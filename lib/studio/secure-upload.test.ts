@@ -99,18 +99,40 @@ async function pngOpaque(): Promise<Buffer> {
 }
 
 {
+  // Default trust=off: forgeable headers collapse to the shared untrusted bucket.
+  const offEnv = { RATE_LIMIT_TRUST_PROXY: "" };
+  const spoofed = studioClientKeyFromRequest(
+    new Request("http://localhost/api/studio/draft", {
+      headers: {
+        "cf-connecting-ip": "203.0.113.10",
+        "cf-ray": "aaaaaaaaaaaaaaaa-EZE",
+        "x-forwarded-for": "198.51.100.1, 203.0.113.10",
+        "x-real-ip": "198.51.100.55",
+      },
+    }),
+    offEnv,
+  );
+  assert.equal(spoofed, "untrusted");
+
+  const cfEnv = { RATE_LIMIT_TRUST_PROXY: "cloudflare" };
   const viaCf = studioClientKeyFromRequest(
     new Request("http://localhost/api/studio/draft", {
       headers: {
         "cf-connecting-ip": "203.0.113.10",
+        "cf-ray": "aaaaaaaaaaaaaaaa-EZE",
         "x-forwarded-for": "198.51.100.1, 203.0.113.10",
       },
     }),
+    cfEnv,
   );
   const viaCfAgain = studioClientKeyFromRequest(
     new Request("http://localhost/api/studio/draft", {
-      headers: { "cf-connecting-ip": "203.0.113.10" },
+      headers: {
+        "cf-connecting-ip": "203.0.113.10",
+        "cf-ray": "bbbbbbbbbbbbbbbb-EZE",
+      },
     }),
+    cfEnv,
   );
   assert.equal(viaCf, viaCfAgain);
   assert.equal(viaCf.length, 32);
@@ -120,6 +142,7 @@ async function pngOpaque(): Promise<Buffer> {
     new Request("http://localhost/api/studio/draft", {
       headers: { "x-forwarded-for": "198.51.100.1, 203.0.113.10" },
     }),
+    cfEnv,
   );
   assert.equal(spoofedXff, "untrusted");
 
@@ -127,9 +150,9 @@ async function pngOpaque(): Promise<Buffer> {
     new Request("http://localhost/api/studio/draft", {
       headers: { "x-real-ip": "198.51.100.55" },
     }),
+    cfEnv,
   );
-  assert.notEqual(viaRealIp, "untrusted");
-  assert.notEqual(viaRealIp, viaCf);
+  assert.equal(viaRealIp, "untrusted");
 }
 
 {

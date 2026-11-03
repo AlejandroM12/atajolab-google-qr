@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 import {
   createStudioDraftKey,
   hashStudioDraftKey,
@@ -6,6 +5,10 @@ import {
 } from "@/lib/studio/assets/draft-key";
 import { STUDIO_ASSET_TEMP_TTL_MS } from "@/lib/studio/assets/limits";
 import { appOrigin } from "@/lib/payments/checkout-policy";
+import {
+  rateLimitClientKeyFromRequest,
+  RATE_LIMIT_UNTRUSTED_KEY,
+} from "@/lib/client-ip";
 
 export const STUDIO_DRAFT_COOKIE = "atajo_studio_draft";
 
@@ -114,41 +117,20 @@ export function studioRequestTrusted(
 }
 
 /**
- * Rate-limit identity derived from proxy-guaranteed headers only.
- *
- * Prefer CF-Connecting-IP (Cloudflare overwrites this; clients cannot spoof it
- * when traffic reaches the app through Cloudflare). Fall back to a single-value
- * X-Real-IP when present.
- *
- * Never trust the leftmost X-Forwarded-For entry: clients can prepend spoofed
- * IPs before a proxy appends the real hop. Without a configured trusted-hop
- * count, collapse to the shared "untrusted" bucket. Draft-scoped limits still
- * apply independently. Raw IPs are hashed — never stored.
+ * Studio rate-limit identity. Delegates to the shared client-IP policy
+ * (`lib/client-ip.ts`). Default ignores forgeable headers.
  */
-export function studioClientKeyFromRequest(request: Request): string {
-  const cf = request.headers.get("cf-connecting-ip")?.trim() ?? "";
-  if (isClientIpLiteral(cf)) return hashClientIp(cf);
-
-  const realIp = request.headers.get("x-real-ip")?.trim() ?? "";
-  if (isClientIpLiteral(realIp)) return hashClientIp(realIp);
-
-  return "untrusted";
+export function studioClientKeyFromRequest(
+  request: Request,
+  env: NodeJS.ProcessEnv = process.env,
+): string {
+  return rateLimitClientKeyFromRequest(request, env);
 }
 
 /** @deprecated Prefer studioClientKeyFromRequest — XFF leftmost is spoofable. */
 export function studioClientKey(forwardedFor: string | null): string {
   void forwardedFor;
-  return "untrusted";
-}
-
-function isClientIpLiteral(value: string): boolean {
-  if (value.length < 2 || value.length > 64) return false;
-  if (value.includes(",")) return false;
-  return /^[0-9a-fA-F:.]+$/.test(value);
-}
-
-function hashClientIp(ip: string): string {
-  return createHash("sha256").update(ip).digest("hex").slice(0, 32);
+  return RATE_LIMIT_UNTRUSTED_KEY;
 }
 
 export {
