@@ -11,7 +11,7 @@ import {
   createRecoveryLimiter,
   parseRecoveryBody,
   recoveryAcknowledgement,
-  recoveryClientKey,
+  recoveryClientKeyFromRequest,
   requestRecovery,
 } from "@/lib/recovery";
 
@@ -29,7 +29,7 @@ export async function POST(request: Request) {
       email: parsed.email,
       now: new Date(),
       origin: origin?.href ?? "",
-      limited: !limiter.allow(recoveryClientKey(request.headers.get("x-forwarded-for")), parsed.email),
+      limited: !limiter.allow(recoveryClientKeyFromRequest(request), parsed.email),
       store: {
         findOrders: findRecoveryCandidates,
         countActiveLinks: countActiveAccessLinks,

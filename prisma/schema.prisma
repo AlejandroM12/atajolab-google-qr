@@ -33,8 +33,89 @@ model Order {
   buyerEmail               String?
   accessLinks              DownloadAccessLink[]
   accessCredentials        DownloadAccessCredential[]
+  studioAssets             StudioAsset[]
+  studioOrderAttempt       StudioOrderAttempt?
+  mailNotifications        MailNotification[]
 
   @@index([buyerEmail])
+}
+
+/// Outbox durable de correos post-pago. El token de acceso vive cifrado solo mientras PENDING.
+enum MailNotificationKind {
+  PURCHASE_ACCESS
+}
+
+enum MailNotificationStatus {
+  PENDING
+  PROCESSING
+  SENT
+  FAILED
+}
+
+model MailNotification {
+  id                String                 @id @default(cuid())
+  orderId           String
+  kind              MailNotificationKind
+  status            MailNotificationStatus @default(PENDING)
+  attempts          Int                    @default(0)
+  nextAttemptAt     DateTime               @default(now())
+  /// Código corto de error (sin tokens ni secretos).
+  lastError         String?
+  sentAt            DateTime?
+  /// Token de acceso AES-GCM; se borra al marcar SENT/FAILED.
+  accessTokenCipher Bytes?
+  accessTokenHash   String?
+  createdAt         DateTime               @default(now())
+  updatedAt         DateTime               @updatedAt
+  order             Order                  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@unique([orderId, kind])
+  @@index([status, nextAttemptAt])
+}
+
+/// Idempotencia de creación de pedidos Studio v8 (único por borrador + clave).
+model StudioOrderAttempt {
+  draftKeyHash       String
+  idempotencyKeyHash String
+  requestHash        String
+  orderId            String   @unique
+  createdAt          DateTime @default(now())
+  order              Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@id([draftKeyHash, idempotencyKeyHash])
+  @@index([createdAt])
+}
+
+/// TEMPORARY: borrador Studio (expira). RETAINED: ligado a un pedido, no limpia.
+enum StudioAssetStatus {
+  TEMPORARY
+  RETAINED
+}
+
+/// Bytes privados de Studio v8. No se sirven por URL pública.
+model StudioAsset {
+  id           String            @id
+  sha256       String
+  mime         String
+  width        Int
+  height       Int
+  byteLength   Int
+  bytes        Bytes
+  status       StudioAssetStatus @default(TEMPORARY)
+  /// Hash del draft key del borrador. Obligatorio mientras TEMPORARY.
+  draftKeyHash String?
+  /// Pedido que retiene el asset. Null mientras es temporal.
+  orderId      String?
+  createdAt    DateTime          @default(now())
+  /// Solo TEMPORARY. RETAINED queda en null.
+  expiresAt    DateTime?
+  order        Order?            @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([sha256])
+  @@index([draftKeyHash, status])
+  @@index([orderId])
+  @@index([status, expiresAt])
+  @@unique([draftKeyHash, sha256])
 }
 
 /// El id es el hash del token. El token en claro no se guarda.
@@ -57,4 +138,14 @@ model DownloadAccessCredential {
   order     Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
 
   @@index([orderId])
+}
+
+/// Contadores de rate limit compartidos entre instancias (Studio upload/draft/orders).
+model RateLimitBucket {
+  bucketKey   String   @id
+  count       Int      @default(0)
+  windowStart DateTime
+  expiresAt   DateTime
+
+  @@index([expiresAt])
 }

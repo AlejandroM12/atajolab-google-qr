@@ -65,3 +65,14 @@ h3 {
     scroll-behavior: auto;
   }
 }
+
+/* Studio v8: Tailwind utility scanning missed these in the canvas wrapper. */
+.studio-canvas-surface {
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.studio-shell {
+  overflow-x: hidden;
+}

@@ -8,7 +8,8 @@ export type MailMessage = {
   text: string;
 };
 
-export type MailResult = "held" | "sent" | "refused";
+/** held = local outbox; sent = provider accepted; retryable = temporary; refused = permanent. */
+export type MailResult = "held" | "sent" | "retryable" | "refused";
 
 export type MailMode = "dev-outbox" | "resend" | "unconfigured";
 

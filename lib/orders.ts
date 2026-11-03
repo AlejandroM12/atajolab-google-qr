@@ -4,11 +4,22 @@ import { prisma } from "@/lib/db";
 import { orderStatuses, type OrderStatus } from "@/lib/delivery";
 import { readArtworkSnapshot, type OrderDraft } from "@/lib/order-draft";
 import { ACCESS_TOKEN_PATTERN, consumeAccessLink, hashAccessToken, issueAccessLink, linkCapOpen, type AccessLinkRecord } from "@/lib/access-link";
-import { createDeliveryKey, hashDeliveryKey } from "@/lib/payments/access";
+import { createDeliveryKey, deliveryKeysMatch, hashDeliveryKey } from "@/lib/payments/access";
 import { paymentEnvironmentMode } from "@/lib/payments/checkout-policy";
 import { decidePayment, type VerifiedPayment } from "@/lib/payments/decision";
 import { PIECE_CURRENCY, PIECE_PRICE_ARS } from "@/lib/pricing";
 import { createPublicId, isPublicId } from "@/lib/public-id";
+import { orderArtworkLabel } from "@/lib/order-label";
+import { STUDIO_COMMERCIAL_ARTWORK_VERSION } from "@/lib/studio/commercial-artwork";
+import { createPrismaStudioAssetStore, retainStudioAssetsForOrder } from "@/lib/studio/assets/index";
+import {
+  deriveStudioV8DeliveryKey,
+  hashStudioOrderIdempotencyKey,
+  hashStudioOrderRequest,
+  orderAccessSecret,
+  studioOrderRequestHashesMatch,
+} from "@/lib/studio/order-idempotency";
+import { dispatchPurchaseAccessMail } from "@/lib/purchase-notify";
 
 export type StoredOrder = {
   publicId: string;
@@ -37,15 +48,22 @@ export async function savePendingOrder(
   if (draft.amountArs !== PIECE_PRICE_ARS || draft.currency !== PIECE_CURRENCY) {
     throw new Error("order-price");
   }
+  if (!draft.artwork.href) {
+    throw new Error("order-artwork");
+  }
+
+  if (draft.artwork.version === STUDIO_COMMERCIAL_ARTWORK_VERSION) {
+    return savePendingStudioV8Order(draft);
+  }
+
   if (
-    (draft.artwork.version !== ARTWORK_VERSION &&
-      draft.artwork.version !== STUDIO_ARTWORK_VERSION &&
-      draft.artwork.version !== COMMERCIAL_ARTWORK_VERSION &&
-      draft.artwork.version !== COUNTER_ARTWORK_VERSION &&
-      draft.artwork.version !== SIGNAGE_ARTWORK_VERSION &&
-      draft.artwork.version !== PRESS_ARTWORK_VERSION &&
-      draft.artwork.version !== PREMIUM_ARTWORK_VERSION) ||
-    !draft.artwork.href
+    draft.artwork.version !== ARTWORK_VERSION &&
+    draft.artwork.version !== STUDIO_ARTWORK_VERSION &&
+    draft.artwork.version !== COMMERCIAL_ARTWORK_VERSION &&
+    draft.artwork.version !== COUNTER_ARTWORK_VERSION &&
+    draft.artwork.version !== SIGNAGE_ARTWORK_VERSION &&
+    draft.artwork.version !== PRESS_ARTWORK_VERSION &&
+    draft.artwork.version !== PREMIUM_ARTWORK_VERSION
   ) {
     throw new Error("order-artwork");
   }
@@ -74,6 +92,153 @@ export async function savePendingOrder(
   }
 
   throw new Error("order-id");
+}
+
+/**
+ * Create a PENDING Studio v8 order and retain draft-owned assets atomically.
+ * Idempotency is enforced by StudioOrderAttempt unique(draftKeyHash, idempotencyKeyHash).
+ * deliveryKey is derived (not rotated) so lost responses can re-mint the same cookie.
+ */
+async function savePendingStudioV8Order(
+  draft: OrderDraft,
+): Promise<{ publicId: string; deliveryKey: string }> {
+  if (draft.artwork.version !== STUDIO_COMMERCIAL_ARTWORK_VERSION) {
+    throw new Error("order-artwork");
+  }
+  if (!draft.studioDraftKeyHash) {
+    throw new Error("order-assets");
+  }
+  if (!draft.studioIdempotencyKey) {
+    throw new Error("order-idempotency");
+  }
+
+  const secret = orderAccessSecret();
+  if (!secret) {
+    throw new Error("order-access-secret");
+  }
+
+  const artwork = draft.artwork;
+  const assetIds = artwork.assetIds;
+  const draftKeyHash = draft.studioDraftKeyHash;
+  const idempotencyKey = draft.studioIdempotencyKey;
+  const idempotencyKeyHash = hashStudioOrderIdempotencyKey(idempotencyKey);
+  const artworkJson = JSON.stringify(artwork);
+  const requestHash = hashStudioOrderRequest({
+    buyerEmail: draft.buyerEmail,
+    artworkJson,
+  });
+
+  const existing = await resolveStudioV8IdempotentReplay({
+    draftKeyHash,
+    idempotencyKeyHash,
+    requestHash,
+    idempotencyKey,
+    secret,
+  });
+  if (existing) return existing;
+
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const publicId = createPublicId();
+    const deliveryKey = deriveStudioV8DeliveryKey({
+      publicId,
+      draftKeyHash,
+      idempotencyKey,
+      secret,
+    });
+    try {
+      await prisma.$transaction(async (tx) => {
+        await tx.order.create({
+          data: {
+            id: publicId,
+            status: "PENDING",
+            amountArs: PIECE_PRICE_ARS,
+            currency: PIECE_CURRENCY,
+            artworkVersion: STUDIO_COMMERCIAL_ARTWORK_VERSION,
+            artwork: artwork as unknown as Prisma.InputJsonValue,
+            deliveryKeyHash: hashDeliveryKey(deliveryKey),
+            buyerEmail: draft.buyerEmail,
+          },
+        });
+
+        await tx.studioOrderAttempt.create({
+          data: {
+            draftKeyHash,
+            idempotencyKeyHash,
+            requestHash,
+            orderId: publicId,
+          },
+        });
+
+        if (assetIds.length > 0) {
+          const store = createPrismaStudioAssetStore(tx);
+          const retained = await retainStudioAssetsForOrder({
+            store,
+            draftKeyHash,
+            orderId: publicId,
+            assetIds,
+          });
+          if (retained.rejected.length > 0) {
+            throw new Error("order-assets");
+          }
+        }
+      });
+
+      return { publicId, deliveryKey };
+    } catch (error) {
+      if (error instanceof Error && error.message === "order-assets") throw error;
+      if (isUniqueViolation(error)) {
+        const raced = await resolveStudioV8IdempotentReplay({
+          draftKeyHash,
+          idempotencyKeyHash,
+          requestHash,
+          idempotencyKey,
+          secret,
+        });
+        if (raced) return raced;
+        if (attempt < 2) continue;
+      }
+      throw error;
+    }
+  }
+
+  throw new Error("order-id");
+}
+
+async function resolveStudioV8IdempotentReplay(input: {
+  draftKeyHash: string;
+  idempotencyKeyHash: string;
+  requestHash: string;
+  idempotencyKey: string;
+  secret: string;
+}): Promise<{ publicId: string; deliveryKey: string } | null> {
+  const attempt = await prisma.studioOrderAttempt.findUnique({
+    where: {
+      draftKeyHash_idempotencyKeyHash: {
+        draftKeyHash: input.draftKeyHash,
+        idempotencyKeyHash: input.idempotencyKeyHash,
+      },
+    },
+    select: { orderId: true, requestHash: true },
+  });
+  if (!attempt) return null;
+  if (!studioOrderRequestHashesMatch(attempt.requestHash, input.requestHash)) {
+    throw new Error("order-idempotency-conflict");
+  }
+
+  const deliveryKey = deriveStudioV8DeliveryKey({
+    publicId: attempt.orderId,
+    draftKeyHash: input.draftKeyHash,
+    idempotencyKey: input.idempotencyKey,
+    secret: input.secret,
+  });
+  const order = await prisma.order.findUnique({
+    where: { id: attempt.orderId },
+    select: { deliveryKeyHash: true },
+  });
+  if (!order || !deliveryKeysMatch(deliveryKey, order.deliveryKeyHash)) {
+    throw new Error("order-idempotency");
+  }
+  return { publicId: attempt.orderId, deliveryKey };
 }
 
 export async function findOrder(publicId: string): Promise<StoredOrder | null> {
@@ -191,6 +356,13 @@ export async function applyVerifiedPayment(
   publicId: string,
   payment: VerifiedPayment,
   checkedAt: Date,
+  options?: {
+    /**
+     * Test hook invoked only after a durable outbox row was enqueued.
+     * Production callers omit this; the default dispatches pending purchase mail.
+     */
+    dispatch?: (orderPublicId: string) => Promise<unknown>;
+  },
 ): Promise<void> {
   const order = await findPaymentRecord(publicId);
   if (!order) return;
@@ -210,16 +382,42 @@ export async function applyVerifiedPayment(
     return;
   }
 
-  await prisma.order.updateMany({
-    where: { id: publicId, status: "PENDING" },
-    data: {
-      status: "PAID",
-      mercadoPagoPaymentId: decision.paymentId,
-      mercadoPagoPaymentStatus: decision.paymentStatus,
-      paymentCheckedAt: checkedAt,
-      paidAt: decision.paidAt,
-    },
+  // PAID + outbox intent are atomic. If enqueue fails, the whole txn rolls back and MP can retry.
+  const enqueued = await prisma.$transaction(async (tx) => {
+    const paid = await tx.order.updateMany({
+      where: { id: publicId, status: "PENDING" },
+      data: {
+        status: "PAID",
+        mercadoPagoPaymentId: decision.paymentId,
+        mercadoPagoPaymentStatus: decision.paymentStatus,
+        paymentCheckedAt: checkedAt,
+        paidAt: decision.paidAt,
+      },
+    });
+    if (paid.count !== 1) return false;
+
+    await tx.mailNotification.create({
+      data: {
+        orderId: publicId,
+        kind: "PURCHASE_ACCESS",
+        status: "PENDING",
+        nextAttemptAt: checkedAt,
+      },
+    });
+    return true;
   });
+
+  if (!enqueued) return;
+
+  try {
+    await (options?.dispatch ?? defaultPurchaseDispatch)(publicId);
+  } catch (error) {
+    console.error("purchase notify dispatch failed", error instanceof Error ? error.name : "unknown");
+  }
+}
+
+async function defaultPurchaseDispatch(orderPublicId: string): Promise<void> {
+  await dispatchPurchaseAccessMail({ orderId: orderPublicId, limit: 1 });
 }
 
 export async function findOrderAccessHashes(publicId: string): Promise<string[]> {
@@ -370,13 +568,7 @@ function isUniqueViolation(error: unknown): boolean {
 }
 
 function pieceLabel(artwork: Prisma.JsonValue): string {
-  if (typeof artwork !== "object" || artwork === null || Array.isArray(artwork) || !("businessName" in artwork)) {
-    return "Tu diseño";
-  }
-  const name = artwork.businessName;
-  if (typeof name !== "string") return "Tu diseño";
-  const label = name.replace(/[\r\n]/g, " ").trim();
-  return label.length > 0 ? label.slice(0, 80) : "Tu diseño";
+  return orderArtworkLabel(artwork);
 }
 
 function isOrderStatus(value: string): value is OrderStatus {

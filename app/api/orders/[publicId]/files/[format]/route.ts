@@ -1,4 +1,4 @@
-import { artworkAttachment, resolveArtworkDownload } from "@/lib/print/download";
+import { buildOrderDownloadAttachment } from "@/lib/print/download";
 import { readOrderAccess } from "@/lib/payments/access";
 import { findDownloadOrder } from "@/lib/orders";
 
@@ -8,28 +8,21 @@ export async function GET(
 ) {
   const { publicId, format } = await context.params;
   const order = await findDownloadOrder(publicId);
-  const decision = resolveArtworkDownload({
+
+  // Authorize with the stored Order snapshot only — never accept a client design body.
+  const file = await buildOrderDownloadAttachment({
     publicId,
     format,
     deliveryKey: readOrderAccess(request.headers.get("cookie"), publicId),
     order,
   });
 
-  if (!decision.ok) {
+  if (!file.ok) {
     return Response.json(
-      { error: decision.error },
-      { status: decision.status, headers: { "cache-control": "no-store" } },
+      { error: file.error },
+      { status: file.status, headers: { "cache-control": "no-store" } },
     );
   }
 
-  try {
-    const file = await artworkAttachment(decision.artwork, decision.format);
-    return new Response(new Uint8Array(file.body), { headers: file.headers });
-  } catch (error) {
-    console.error("artwork export failed", error instanceof Error ? error.name : "unknown");
-    return Response.json(
-      { error: "export-failed" },
-      { status: 500, headers: { "cache-control": "no-store" } },
-    );
-  }
+  return new Response(new Uint8Array(file.body), { headers: file.headers });
 }

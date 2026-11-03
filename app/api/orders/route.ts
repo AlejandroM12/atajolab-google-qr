@@ -4,8 +4,18 @@ import { savePendingOrder } from "@/lib/orders";
 import { orderAccessCookie } from "@/lib/payments/access";
 import { appOrigin } from "@/lib/payments/checkout-policy";
 import { PIECE_CURRENCY, PIECE_PRICE_ARS } from "@/lib/pricing";
+import {
+  readStudioDraftKey,
+  studioClientKeyFromRequest,
+  studioRequestTrusted,
+} from "@/lib/studio/draft-session";
+import { hashStudioDraftKey } from "@/lib/studio/assets/draft-key";
+import { studioCheckoutAllowed } from "@/lib/studio/checkout-access";
+import { limitStudioOrderCreate } from "@/lib/studio/rate-limits";
 
 const MAX_BODY_CHARS = 320_000;
+/** Dehydrated Studio v8 documents stay well under this; blocks accidental embedded images. */
+const MAX_STUDIO_V8_BODY_CHARS = 400_000;
 
 export async function POST(request: Request) {
   const contentType = request.headers.get("content-type") ?? "";
@@ -19,7 +29,6 @@ export async function POST(request: Request) {
   } catch {
     return orderError(400, "invalid-body");
   }
-  if (raw.length > MAX_BODY_CHARS) return orderError(400, "invalid-body");
 
   let body: unknown;
   try {
@@ -28,7 +37,39 @@ export async function POST(request: Request) {
     return orderError(400, "invalid-body");
   }
 
-  const parsed = parseOrderDraft(body);
+  const studioV8 =
+    typeof body === "object" &&
+    body !== null &&
+    !Array.isArray(body) &&
+    (body as { version?: unknown }).version === 8;
+
+  if (raw.length > (studioV8 ? MAX_STUDIO_V8_BODY_CHARS : MAX_BODY_CHARS)) {
+    return orderError(400, "invalid-body");
+  }
+
+  if (studioV8 && !studioCheckoutAllowed()) {
+    return orderError(403, "studio-checkout-disabled");
+  }
+
+  if (studioV8 && !studioRequestTrusted(request)) {
+    return orderError(403, "origin-rejected");
+  }
+
+  const studioDraftKey = studioV8 ? readStudioDraftKey(request.headers.get("cookie")) : null;
+  if (studioV8) {
+    if (!studioDraftKey) return orderError(401, "studio-draft-key");
+    const limited = await limitStudioOrderCreate(
+      studioClientKeyFromRequest(request),
+      hashStudioDraftKey(studioDraftKey),
+    );
+    if (!limited.ok) {
+      return orderError(429, "rate-limited", {
+        "retry-after": String(limited.retryAfterSec),
+      });
+    }
+  }
+
+  const parsed = parseOrderDraft(body, { studioDraftKey });
   if (!parsed.ok) return orderError(400, parsed.error);
 
   try {
@@ -52,12 +93,24 @@ export async function POST(request: Request) {
       { status: 201, headers },
     );
   } catch (error) {
+    if (error instanceof Error && error.message === "order-assets") {
+      return orderError(400, "studio-assets");
+    }
+    if (error instanceof Error && error.message === "order-idempotency-conflict") {
+      return orderError(409, "studio-idempotency-conflict");
+    }
+    if (error instanceof Error && (error.message === "order-idempotency" || error.message === "order-access-secret")) {
+      return orderError(503, "order-failed");
+    }
     console.error("order create failed", error instanceof Error ? error.name : "unknown");
     if (isDatabaseUnavailable(error)) return orderError(503, "database-unavailable");
     return orderError(500, "order-failed");
   }
 }
 
-function orderError(status: number, error: string) {
-  return Response.json({ error }, { status, headers: { "cache-control": "no-store" } });
+function orderError(status: number, error: string, extraHeaders?: Record<string, string>) {
+  return Response.json(
+    { error },
+    { status, headers: { "cache-control": "no-store", ...extraHeaders } },
+  );
 }

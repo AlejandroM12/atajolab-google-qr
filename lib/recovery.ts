@@ -62,11 +62,16 @@ export function parseEmptyBody(body: unknown): "invalid-body" | "unexpected-fiel
   return Object.keys(body).length === 0 ? null : "unexpected-field";
 }
 
+/**
+ * @deprecated Prefer recoveryClientKeyFromRequest — XFF leftmost is spoofable.
+ * Kept as a no-op sink so old call sites cannot mint distinct buckets from XFF.
+ */
 export function recoveryClientKey(forwardedFor: string | null): string {
-  const first = forwardedFor?.split(",")[0]?.trim() ?? "";
-  if (/^[0-9a-fA-F:.]+$/.test(first) && first.length >= 2 && first.length <= 64) return first;
-  return "direct";
+  void forwardedFor;
+  return "untrusted";
 }
+
+export { rateLimitClientKeyFromRequest as recoveryClientKeyFromRequest } from "@/lib/client-ip";
 
 export function createRecoveryLimiter(now: () => number = Date.now) {
   const byClient = new Map<string, number[]>();
@@ -141,7 +146,9 @@ export async function requestRecovery(input: {
       dispatch = "refused";
     }
   }
-  if (dispatch === "refused") await input.store.revoke(issued.map((item) => item.tokenHash));
+  if (dispatch === "refused" || dispatch === "retryable") {
+    await input.store.revoke(issued.map((item) => item.tokenHash));
+  }
   return recoveryAcknowledgement();
 }
 
