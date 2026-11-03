@@ -24,6 +24,7 @@ jobs:
       - run: pnpm exec prisma generate
       - run: pnpm lint
       - run: pnpm test:links
+      - run: pnpm test:studio
       - run: pnpm test:orders
       - run: pnpm test:payments
       - run: pnpm test:files

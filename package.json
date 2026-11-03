@@ -9,6 +9,7 @@
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
     "test:links": "node --experimental-strip-types --disable-warning=MODULE_TYPELESS_PACKAGE_JSON lib/google-link.test.ts",
+    "test:studio": "node --experimental-strip-types --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --import ./scripts/register-test.mjs lib/studio/studio.test.ts",
     "test:orders": "node --experimental-strip-types --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --import ./scripts/register-test.mjs lib/order-draft.test.ts",
     "test:payments": "node --experimental-strip-types --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --import ./scripts/register-test.mjs lib/payments/payment-flow.test.ts",
     "test:files": "node --experimental-strip-types --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --import ./scripts/register-test.mjs lib/print/download.test.ts && node --experimental-strip-types --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --import ./scripts/register-test.mjs lib/print/commercial.test.ts && node --experimental-strip-types --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --import ./scripts/register-test.mjs lib/print/counter.test.ts && node --experimental-strip-types --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --import ./scripts/register-test.mjs lib/print/signage.test.ts && node --experimental-strip-types --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --import ./scripts/register-test.mjs lib/print/press.test.ts && node --experimental-strip-types --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --import ./scripts/register-test.mjs lib/print/premium.test.ts",
@@ -18,12 +19,14 @@
     "@prisma/client": "^6.19.3",
     "@resvg/resvg-js": "^2.6.2",
     "fontkit": "^2.0.4",
+    "konva": "^10.9.1",
     "mercadopago": "^3.6.1",
     "next": "16.4.3",
     "pdfkit": "^0.20.2",
     "qrcode": "^1.5.4",
     "react": "19.3.0",
-    "react-dom": "19.3.0"
+    "react-dom": "19.3.0",
+    "react-konva": "^19.3.2"
   },
   "devDependencies": {
     "@tailwindcss/turbopack": "^4",

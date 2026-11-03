@@ -1,0 +1,545 @@
+"use client";
+
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
+import { StudioCanvas } from "@/components/studio/studio-canvas";
+import { StudioProperties, StudioToolbar } from "@/components/studio/studio-panels";
+import {
+  addImage,
+  addRect,
+  addText,
+  discardParked,
+  duplicateElement,
+  elementBox,
+  ensureQrOnTop,
+  moveLayer,
+  removeElement,
+  replaceElement,
+  replaceImage,
+  restoreAllParked,
+  restoreParked,
+  setBackground,
+  updateElement,
+  withGeometry,
+} from "@/lib/studio/document";
+import { commitDraft, flushDraft, historyFrom, redo, replacePresent, undo, type HistoryState } from "@/lib/studio/history";
+import { createId } from "@/lib/studio/ids";
+import { prepareStudioImage } from "@/lib/studio/images.browser";
+import { loadSessionDesign, writeDesign } from "@/lib/studio/persistence";
+import { qrContrastIssue } from "@/lib/studio/qr-rules";
+import { applySuggestedColors, applyTemplate, createDocument } from "@/lib/studio/templates";
+import {
+  MAX_ELEMENTS,
+  QR_MIN_MM,
+  type DesignDocumentV8,
+  type ElementBox,
+  type ElementPatch,
+  type QrElement,
+  type TemplateId,
+} from "@/lib/studio/types";
+import { elementsCoveringQr, validateDesign } from "@/lib/studio/validation";
+
+export function StudioEditor() {
+  const [session] = useState(loadInitial);
+  const [history, setHistory] = useState<HistoryState>(() => historyFrom(session.document));
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(session.notice);
+  const [saveLabel, setSaveLabel] = useState(
+    session.recovered ? "Recuperamos el diseño de esta sesión." : "El diseño se guarda en esta sesión.",
+  );
+  const [imageBusy, setImageBusy] = useState(false);
+  const [drafting, setDrafting] = useState(false);
+  const historyRef = useRef<HistoryState | null>(null);
+  const selectedIdRef = useRef<string | null>(null);
+  const liveBase = useRef<DesignDocumentV8 | null>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
+  const replaceId = useRef<string | null>(null);
+  const imageBusyRef = useRef(false);
+  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const handlers = useRef<{ undo: () => void; redo: () => void; remove: (id: string) => void }>({
+    undo: () => {},
+    redo: () => {},
+    remove: () => {},
+  });
+
+  useEffect(() => {
+    function onKey(event: KeyboardEvent) {
+      if (isField(event.target)) return;
+      const meta = event.metaKey || event.ctrlKey;
+      const key = event.key.toLowerCase();
+      if (meta && key === "z") {
+        event.preventDefault();
+        if (event.shiftKey) handlers.current.redo();
+        else handlers.current.undo();
+        return;
+      }
+      if (meta && key === "y") {
+        event.preventDefault();
+        handlers.current.redo();
+        return;
+      }
+      if ((event.key === "Delete" || event.key === "Backspace") && selectedIdRef.current) {
+        event.preventDefault();
+        handlers.current.remove(selectedIdRef.current);
+      }
+    }
+    function flush() {
+      if (saveTimer.current) clearTimeout(saveTimer.current);
+      const present = historyRef.current?.present;
+      if (present) writeDesign(window.sessionStorage, present);
+    }
+    window.addEventListener("keydown", onKey);
+    window.addEventListener("pagehide", flush);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      window.removeEventListener("pagehide", flush);
+      flush();
+    };
+  }, []);
+
+  function remember() {
+    if (saveTimer.current) clearTimeout(saveTimer.current);
+    saveTimer.current = setTimeout(() => {
+      const present = historyRef.current?.present;
+      if (!present) return;
+      const result = writeDesign(window.sessionStorage, present);
+      if (!result.ok && result.reason === "quota") {
+        setError("El diseño es muy pesado para guardarlo en esta sesión. Si recargás la página, puede perderse.");
+        setSaveLabel("No se pudo guardar en esta sesión.");
+        return;
+      }
+      setSaveLabel(result.ok ? "Guardado en esta sesión." : "No se pudo guardar en esta sesión.");
+    }, 250);
+  }
+
+  function publish(nextHistory: HistoryState) {
+    historyRef.current = nextHistory;
+    setHistory(nextHistory);
+    setSelectedId((current) => {
+      if (!current) return current;
+      return nextHistory.present.elements.some((element) => element.id === current) ? current : null;
+    });
+    remember();
+  }
+
+  function commitDocument(next: DesignDocumentV8) {
+    const current = historyRef.current;
+    if (!current) return;
+    const base = liveBase.current;
+    liveBase.current = null;
+    if (base) setDrafting(false);
+    const nextHistory = commitDraft(current, base, next);
+    if (nextHistory === current) return;
+    publish(nextHistory);
+  }
+
+  function finishDraft() {
+    const current = historyRef.current;
+    if (!current || !liveBase.current) return;
+    const base = liveBase.current;
+    liveBase.current = null;
+    setDrafting(false);
+    const flushed = flushDraft(current, base);
+    if (flushed !== current) publish(flushed);
+  }
+
+  function editLive(id: string, patch: ElementPatch) {
+    const current = historyRef.current;
+    if (!current) return;
+    if (!liveBase.current) {
+      liveBase.current = current.present;
+      setDrafting(true);
+    }
+    const nextHistory = replacePresent(current, updateElement(current.present, id, patch));
+    historyRef.current = nextHistory;
+    setHistory(nextHistory);
+    remember();
+  }
+
+  function onUndo() {
+    const current = historyRef.current;
+    if (!current) return;
+    const base = liveBase.current;
+    liveBase.current = null;
+    if (base) setDrafting(false);
+    const flushed = flushDraft(current, base);
+    const nextHistory = undo(flushed);
+    if (nextHistory === current && flushed === current) return;
+    publish(nextHistory);
+  }
+
+  function onRedo() {
+    finishDraft();
+    const latest = historyRef.current;
+    if (!latest) return;
+    const nextHistory = redo(latest);
+    if (nextHistory === latest) return;
+    publish(nextHistory);
+  }
+
+  function onGeometry(id: string, raw: ElementBox): ElementBox {
+    const current = historyRef.current?.present;
+    const element = current?.elements.find((item) => item.id === id);
+    if (!current || !element) return raw;
+    const nextElement = withGeometry(element, raw);
+    if (element.type === "qr" && nextElement.type === "qr" && qrWasClamped(element, raw, nextElement)) {
+      setNotice("El QR se mantiene cuadrado, dentro del cartel y con al menos 22 mm de lado.");
+    }
+    const nextDoc = replaceElement(current, nextElement);
+    if (elementsCoveringQr(nextDoc).length > 0) {
+      setNotice("Hay elementos sobre el QR o su margen. El diseño no está listo para exportar.");
+    }
+    commitDocument(nextDoc);
+    const stored = historyRef.current?.present.elements.find((item) => item.id === id) ?? nextElement;
+    return elementBox(stored);
+  }
+
+  function onTemplate(templateId: TemplateId) {
+    const current = historyRef.current?.present;
+    if (!current || current.templateId === templateId) return;
+    const next = applyTemplate(current, templateId, { applyPalette: false });
+    commitDocument(next);
+    setError(null);
+    if (next.parked.length === 1) {
+      setNotice("Quedó 1 elemento fuera de la composición. Podés recuperarlo desde el panel.");
+    } else if (next.parked.length > 1) {
+      setNotice(`Quedaron ${next.parked.length} elementos fuera de la composición. Podés recuperarlos desde el panel.`);
+    } else {
+      setNotice("Cambiamos la composición. Tu fondo y tus textos se conservaron.");
+    }
+  }
+
+  function onApplyPalette() {
+    const current = historyRef.current?.present;
+    if (!current) return;
+    commitDocument(applySuggestedColors(current));
+    setNotice("Aplicamos los colores sugeridos de esta plantilla. Podés volver a cambiarlos.");
+  }
+
+  function onBringQrForward() {
+    const current = historyRef.current?.present;
+    if (!current) return;
+    const next = ensureQrOnTop(current);
+    if (next === current) return;
+    commitDocument(next);
+    setNotice("El código QR quedó al frente.");
+  }
+
+  function onAddText() {
+    const current = historyRef.current?.present;
+    if (!current) return;
+    if (current.elements.length >= MAX_ELEMENTS) {
+      setError("Llegaste al máximo de 40 elementos.");
+      return;
+    }
+    const id = createId("text");
+    const next = addText(current, id);
+    if (next === current) {
+      setError("No pudimos agregar el texto.");
+      return;
+    }
+    setError(null);
+    commitDocument(next);
+    setSelectedId(id);
+  }
+
+  function onAddRect() {
+    const current = historyRef.current?.present;
+    if (!current) return;
+    if (current.elements.length >= MAX_ELEMENTS) {
+      setError("Llegaste al máximo de 40 elementos.");
+      return;
+    }
+    const id = createId("rect");
+    const next = addRect(current, id);
+    if (next === current) {
+      setError("No pudimos agregar el rectángulo.");
+      return;
+    }
+    setError(null);
+    commitDocument(next);
+    setSelectedId(id);
+  }
+
+  function onCommit(id: string, patch: ElementPatch) {
+    const currentHistory = historyRef.current;
+    const current = currentHistory?.present;
+    const element = current?.elements.find((item) => item.id === id);
+    if (!currentHistory || !current || !element) return;
+    if (element.type === "qr" && (patch.foreground !== undefined || patch.background !== undefined)) {
+      const issue = qrContrastIssue(patch.foreground ?? element.foreground, patch.background ?? element.background);
+      if (issue) {
+        setError(issue.message);
+        return;
+      }
+    }
+    const next = updateElement(current, id, patch);
+    if (next === current) return;
+    const updated = next.elements.find((item) => item.id === id);
+    if (element.type === "qr" && updated?.type === "qr" && qrPatchClamped(element, patch, updated)) {
+      setNotice("El QR se mantiene cuadrado, dentro del cartel y con al menos 22 mm de lado.");
+    }
+    if (elementsCoveringQr(next).length > 0) {
+      setNotice("Hay elementos sobre el QR o su margen. El diseño no está listo para exportar.");
+    }
+    setError(null);
+    commitDocument(next);
+  }
+
+  function onDelete(id: string) {
+    const current = historyRef.current?.present;
+    if (!current) return;
+    const element = current.elements.find((item) => item.id === id);
+    if (element?.type === "qr") {
+      setNotice("El código QR se queda en el cartel.");
+      return;
+    }
+    commitDocument(removeElement(current, id));
+  }
+
+  function onDuplicate(id: string) {
+    const current = historyRef.current?.present;
+    if (!current) return;
+    const element = current.elements.find((item) => item.id === id);
+    if (element?.type === "qr") {
+      setNotice("El código QR no se duplica. Tiene que haber uno solo.");
+      return;
+    }
+    if (current.elements.length >= MAX_ELEMENTS) {
+      setError("Llegaste al máximo de 40 elementos.");
+      return;
+    }
+    const newId = createId("copy");
+    const next = duplicateElement(current, id, newId);
+    if (next === current) return;
+    setError(null);
+    commitDocument(next);
+    setSelectedId(newId);
+  }
+
+  function onRestore(id: string) {
+    const current = historyRef.current?.present;
+    if (!current) return;
+    if (current.elements.length >= MAX_ELEMENTS) {
+      setError("Llegaste al máximo de 40 elementos. Quitá uno para recuperar este.");
+      return;
+    }
+    const next = restoreParked(current, id);
+    if (next === current) return;
+    setError(null);
+    setNotice(null);
+    commitDocument(next);
+    setSelectedId(id);
+  }
+
+  function onRestoreAll() {
+    const current = historyRef.current?.present;
+    if (!current) return;
+    const next = restoreAllParked(current);
+    setError(null);
+    commitDocument(next);
+    setNotice(
+      next.parked.length > 0
+        ? "Recuperamos los que entraron. Todavía quedan elementos fuera porque el cartel llegó a 40."
+        : null,
+    );
+  }
+
+  async function onFile(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file || imageBusyRef.current) return;
+    imageBusyRef.current = true;
+    setImageBusy(true);
+    setError(null);
+    const prepared = await prepareStudioImage(file);
+    imageBusyRef.current = false;
+    setImageBusy(false);
+    const current = historyRef.current?.present;
+    if (!current) return;
+    if (!prepared.ok) {
+      setError(prepared.message);
+      return;
+    }
+    const target = replaceId.current;
+    replaceId.current = null;
+    if (target) {
+      const next = replaceImage(current, target, prepared.src, prepared.alt);
+      if (!next) {
+        setError("No pudimos usar esa imagen.");
+        return;
+      }
+      commitDocument(next);
+      setSelectedId(target);
+      return;
+    }
+    if (current.elements.length >= MAX_ELEMENTS) {
+      setError("Llegaste al máximo de 40 elementos.");
+      return;
+    }
+    const id = createId("image");
+    const next = addImage(current, id, prepared.src, prepared.alt, prepared.width, prepared.height);
+    if (!next) {
+      setError("No pudimos usar esa imagen.");
+      return;
+    }
+    commitDocument(next);
+    setSelectedId(id);
+  }
+
+  useLayoutEffect(() => {
+    historyRef.current = history;
+    selectedIdRef.current = selectedId;
+    handlers.current = { undo: onUndo, redo: onRedo, remove: onDelete };
+  });
+
+  const selected = history.present.elements.find((element) => element.id === selectedId) ?? null;
+  const validation = useMemo(() => validateDesign(history.present), [history.present]);
+  const toolbar = {
+    templateId: history.present.templateId,
+    canUndo: history.past.length > 0 || drafting,
+    canRedo: history.future.length > 0,
+    imageBusy,
+    background: history.present.background,
+    onUndo,
+    onRedo,
+    onTemplate,
+    onApplyPalette,
+    onAddText,
+    onAddRect,
+    onAddImage: () => {
+      replaceId.current = null;
+      fileRef.current?.click();
+    },
+    onBackground: (color: string) => {
+      const current = historyRef.current?.present;
+      if (current) commitDocument(setBackground(current, color));
+    },
+  };
+
+  return (
+    <div className="studio-shell mx-auto w-full max-w-7xl overflow-x-hidden px-4 py-6">
+      <header className="mb-5 max-w-3xl">
+        <p className="text-sm font-semibold text-accent">AtajoLab Studio</p>
+        <h1 className="mt-1 text-3xl text-foreground">Editor de cartel</h1>
+        <p className="mt-2 text-sm leading-6 text-muted">
+          Es un editor de prueba para un cartel A6. Lo que armes acá queda en esta sesión: no crea un pedido ni se
+          descarga para imprimir.
+        </p>
+      </header>
+      {error ? (
+        <div className="mb-4 flex items-start justify-between gap-3 rounded-2xl border border-danger/30 bg-danger-bg px-4 py-3 text-sm text-danger" role="alert">
+          <p>{error}</p>
+          <button type="button" className="shrink-0 font-semibold" onClick={() => setError(null)}>
+            Cerrar
+          </button>
+        </div>
+      ) : null}
+      {notice ? (
+        <div className="mb-4 flex items-start justify-between gap-3 rounded-2xl border border-warning/30 bg-warning-bg px-4 py-3 text-sm text-warning" role="status">
+          <p>{notice}</p>
+          <button type="button" className="shrink-0 font-semibold" onClick={() => setNotice(null)}>
+            Cerrar
+          </button>
+        </div>
+      ) : null}
+      <p className="mb-4 text-xs text-muted" role="status">
+        {saveLabel}
+        {imageBusy ? " Estamos preparando la imagen…" : ""}
+      </p>
+      <div className="grid min-w-0 items-start gap-4 lg:grid-cols-[15rem_minmax(0,1fr)_18rem]">
+        <aside className="hidden min-w-0 lg:block">
+          <StudioToolbar layout="column" {...toolbar} />
+        </aside>
+        <div className="min-w-0">
+          <div className="mb-3 min-w-0 lg:hidden">
+            <StudioToolbar layout="row" {...toolbar} />
+          </div>
+          <StudioCanvas
+            document={history.present}
+            selectedId={selectedId}
+            onSelect={setSelectedId}
+            onGeometry={onGeometry}
+          />
+        </div>
+        <aside className="min-w-0 lg:sticky lg:top-24 lg:max-h-[calc(100dvh-7rem)] lg:overflow-auto">
+          <StudioProperties
+            document={history.present}
+            selected={selected}
+            validation={validation}
+            onSelect={setSelectedId}
+            onCommit={onCommit}
+            onEdit={editLive}
+            onEditEnd={finishDraft}
+            onLayer={(id, direction) => {
+              const current = historyRef.current?.present;
+              if (!current) return;
+              const next = moveLayer(current, id, direction);
+              if (elementsCoveringQr(next).length > 0) {
+                setNotice("Ese cambio deja algo sobre el QR. El diseño no está listo para exportar.");
+              }
+              commitDocument(next);
+            }}
+            onDuplicate={onDuplicate}
+            onDelete={onDelete}
+            onRestore={onRestore}
+            onRestoreAll={onRestoreAll}
+            onDiscard={(id) => {
+              const current = historyRef.current?.present;
+              if (current) commitDocument(discardParked(current, id));
+            }}
+            onReplaceImage={(id) => {
+              replaceId.current = id;
+              fileRef.current?.click();
+            }}
+            onBringQrForward={onBringQrForward}
+          />
+        </aside>
+      </div>
+      <input
+        ref={fileRef}
+        className="sr-only"
+        type="file"
+        accept="image/png,image/jpeg,image/webp,image/heic,image/heif,.heic,.heif"
+        aria-label="Subir imagen"
+        onChange={onFile}
+      />
+    </div>
+  );
+}
+
+function loadInitial() {
+  if (typeof window === "undefined") {
+    return { document: createDocument("corporativo"), notice: null, persist: false, recovered: false };
+  }
+  const loaded = loadSessionDesign(window.sessionStorage);
+  if (loaded.persist) writeDesign(window.sessionStorage, loaded.document);
+  return loaded;
+}
+
+function isField(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) return false;
+  const tag = target.tagName;
+  return tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || target.isContentEditable;
+}
+
+function qrWasClamped(element: QrElement, raw: ElementBox, next: QrElement): boolean {
+  const requested = Math.max(raw.width, raw.height);
+  return (
+    Math.abs(raw.width - raw.height) > 0.5 ||
+    requested < QR_MIN_MM - 0.1 ||
+    Math.abs(next.width - requested) > 0.5 ||
+    Math.abs(next.x - element.x) > 0.5 ||
+    Math.abs(next.y - element.y) > 0.5
+  );
+}
+
+function qrPatchClamped(element: QrElement, patch: ElementPatch, next: QrElement): boolean {
+  const requestedWidth = patch.width ?? element.width;
+  const requestedHeight = patch.height ?? element.height;
+  return (
+    Math.abs(next.width - requestedWidth) > 0.05 ||
+    Math.abs(next.height - requestedHeight) > 0.05 ||
+    (patch.rotation !== undefined && next.width !== element.width)
+  );
+}
