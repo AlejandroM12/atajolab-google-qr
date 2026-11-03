@@ -96,8 +96,11 @@ const COMMERCIAL_FIELDS = [...STUDIO_FIELDS, "version"] as const;
 
 const PREVIEW_FIELDS = COMMERCIAL_FIELDS.filter((field) => field !== "email");
 
-/** Studio v8 commercial order body. Document must already be dehydrated (asset refs only). */
-const STUDIO_V8_FIELDS = ["version", "email", "draftKey", "document"] as const;
+/**
+ * Studio v8 commercial order body. Document must already be dehydrated (asset refs only).
+ * draftKey comes from the HttpOnly studio draft cookie — never from the JSON body.
+ */
+const STUDIO_V8_FIELDS = ["version", "email", "document"] as const;
 
 /** Soft cap for dehydrated Studio documents in an order body (no embedded images). */
 const STUDIO_V8_DOCUMENT_MAX_CHARS = 200_000;
@@ -198,12 +201,18 @@ export type OrderDraft = {
   studioDraftKeyHash?: string;
 };
 
+export type ParseOrderDraftOptions = {
+  /** Server-owned Studio draft key from the HttpOnly cookie. Required for version 8. */
+  studioDraftKey?: string | null;
+};
+
 export function parseOrderDraft(
   input: unknown,
+  options: ParseOrderDraftOptions = {},
 ): { ok: true; draft: OrderDraft } | { ok: false; error: OrderDraftError } {
   if (!isRecord(input)) return { ok: false, error: "invalid-body" };
   if (input.version === STUDIO_COMMERCIAL_ARTWORK_VERSION || input.version === STUDIO_VERSION) {
-    return parseStudioV8Draft(input);
+    return parseStudioV8Draft(input, options.studioDraftKey ?? null);
   }
   if (input.version === PREMIUM_ARTWORK_VERSION) return parsePremiumDraft(input);
   if (input.version === PRESS_ARTWORK_VERSION) return parsePressDraft(input);
@@ -1018,13 +1027,14 @@ function readStoredLogo(value: unknown): ArtworkLogo | null | undefined {
 
 function parseStudioV8Draft(
   input: Record<string, unknown>,
+  studioDraftKey: string | null,
 ): { ok: true; draft: OrderDraft } | { ok: false; error: OrderDraftError } {
   if (!exactFields(input, STUDIO_V8_FIELDS)) return { ok: false, error: fieldError(input, STUDIO_V8_FIELDS) };
 
   const buyerEmail = readBuyerEmail(input.email);
   if (!buyerEmail) return { ok: false, error: "invalid-email" };
 
-  if (typeof input.draftKey !== "string" || !isStudioDraftKey(input.draftKey)) {
+  if (!studioDraftKey || !isStudioDraftKey(studioDraftKey)) {
     return { ok: false, error: "studio-draft-key" };
   }
 
@@ -1070,7 +1080,7 @@ function parseStudioV8Draft(
       currency: PIECE_CURRENCY,
       artwork: built.artwork,
       buyerEmail,
-      studioDraftKeyHash: hashStudioDraftKey(input.draftKey),
+      studioDraftKeyHash: hashStudioDraftKey(studioDraftKey),
     },
   };
 }

@@ -127,6 +127,9 @@ export function StudioProperties({
   exportValidation,
   exportBusy,
   exportEnabled,
+  prepareBusy,
+  prepareProgress,
+  prepareReady,
   onSelect,
   onCommit,
   onEdit,
@@ -140,6 +143,7 @@ export function StudioProperties({
   onReplaceImage,
   onBringQrForward,
   onExport,
+  onPrepareOrder,
 }: {
   document: DesignDocumentV8;
   selected: StudioElement | null;
@@ -147,6 +151,9 @@ export function StudioProperties({
   exportValidation: ExportValidation;
   exportBusy: boolean;
   exportEnabled: boolean;
+  prepareBusy: boolean;
+  prepareProgress: string | null;
+  prepareReady: boolean;
   onSelect: (id: string | null) => void;
   onCommit: (id: string, patch: ElementPatch) => void;
   onEdit: (id: string, patch: ElementPatch) => void;
@@ -160,6 +167,7 @@ export function StudioProperties({
   onReplaceImage: (id: string) => void;
   onBringQrForward: () => void;
   onExport: (format: "png" | "svg" | "pdf") => void;
+  onPrepareOrder: () => void;
 }) {
   const index = selected ? document.elements.findIndex((element) => element.id === selected.id) : -1;
   const statusIssues = exportValidation.issues;
@@ -195,6 +203,32 @@ export function StudioProperties({
           <button type="button" className={`${toolButton} mt-3 w-full`} onClick={onBringQrForward}>
             Traer QR al frente
           </button>
+        ) : null}
+      </section>
+
+      <section className="rounded-3xl border border-line bg-card p-4">
+        <h2 className="text-sm font-semibold">Preparar pedido</h2>
+        <p className="mt-2 text-sm text-muted">
+          Sube las imágenes al servidor de forma privada. El lienzo sigue editable con la vista previa
+          local. El cobro se habilita en un paso posterior.
+        </p>
+        <button
+          type="button"
+          className={`${toolButton} mt-3 w-full`}
+          disabled={!exportValidation.ready || prepareBusy}
+          onClick={onPrepareOrder}
+        >
+          {prepareBusy ? "Subiendo imágenes…" : prepareReady ? "Volver a preparar imágenes" : "Preparar imágenes"}
+        </button>
+        {prepareProgress ? (
+          <p className="mt-2 text-xs text-muted" role="status">
+            {prepareProgress}
+          </p>
+        ) : null}
+        {prepareReady && !prepareBusy ? (
+          <p className="mt-2 text-sm text-accent" role="status">
+            Imágenes listas en el servidor. Todavía no hay botón de compra.
+          </p>
         ) : null}
       </section>
 

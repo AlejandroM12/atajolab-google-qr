@@ -167,10 +167,13 @@ if (assetSnap.ok) {
 const orderBody = {
   version: 8,
   email: "cliente@example.com",
-  draftKey,
   document: withAsset,
 };
-const parsed = parseOrderDraft(orderBody);
+function parseV8(body: Record<string, unknown>, key: string | null = draftKey) {
+  return parseOrderDraft(body, { studioDraftKey: key });
+}
+
+const parsed = parseV8(orderBody);
 assert.equal(parsed.ok, true);
 if (parsed.ok) {
   assert.equal(parsed.draft.amountArs, PIECE_PRICE_ARS);
@@ -190,35 +193,36 @@ if (parsed.ok) {
   }
 }
 
-assert.equal(parseOrderDraft({ ...orderBody, amountArs: 1 }).ok, false);
-assert.equal(parseOrderDraft({ ...orderBody, status: "PAID" }).ok, false);
-assert.equal(parseOrderDraft({ ...orderBody, draftKey: "short" }).ok, false);
-if (!parseOrderDraft({ ...orderBody, draftKey: "short" }).ok) {
-  assert.equal(parseOrderDraft({ ...orderBody, draftKey: "short" }).error, "studio-draft-key");
+assert.equal(parseV8({ ...orderBody, amountArs: 1 }).ok, false);
+assert.equal(parseV8({ ...orderBody, status: "PAID" }).ok, false);
+assert.equal(parseV8({ ...orderBody, draftKey }).ok, false);
+if (!parseV8({ ...orderBody, draftKey }).ok) {
+  assert.equal(parseV8({ ...orderBody, draftKey }).error, "unexpected-field");
 }
+assert.equal(parseV8(orderBody, null).ok, false);
+if (!parseV8(orderBody, null).ok) assert.equal(parseV8(orderBody, null).error, "studio-draft-key");
+assert.equal(parseV8(orderBody, "short").ok, false);
+if (!parseV8(orderBody, "short").ok) assert.equal(parseV8(orderBody, "short").error, "studio-draft-key");
 
-const withDataUrl = parseOrderDraft({
+const withDataUrl = parseV8({
   version: 8,
   email: "cliente@example.com",
-  draftKey,
   document: withImage(ready, "img1", dataUrl(bytes)),
 });
 assert.equal(withDataUrl.ok, false);
 if (!withDataUrl.ok) assert.equal(withDataUrl.error, "studio-embedded-image");
 
-const emptyQrOrder = parseOrderDraft({
+const emptyQrOrder = parseV8({
   version: 8,
   email: "cliente@example.com",
-  draftKey,
   document: createDocument("corporativo"),
 });
 assert.equal(emptyQrOrder.ok, false);
 if (!emptyQrOrder.ok) assert.equal(emptyQrOrder.error, "studio-not-ready");
 
-const coveredOrder = parseOrderDraft({
+const coveredOrder = parseV8({
   version: 8,
   email: "cliente@example.com",
-  draftKey,
   document: (() => {
     let doc = withQr(createDocument("corporativo"), REVIEW_URL);
     const qr = doc.elements.find((element) => element.type === "qr")!;
@@ -245,10 +249,9 @@ const coveredOrder = parseOrderDraft({
 assert.equal(coveredOrder.ok, false);
 if (!coveredOrder.ok) assert.equal(coveredOrder.error, "composition");
 
-const missingAsset = parseOrderDraft({
+const missingAsset = parseV8({
   version: 8,
   email: "cliente@example.com",
-  draftKey,
   document: withImage(ready, "img1", studioAssetRef("zzzzzzzzzzzzzzzzzzzzzzzz")),
 });
 assert.equal(missingAsset.ok, true);
@@ -268,10 +271,9 @@ const foreignHash = hashStudioDraftKey(foreignDraft);
 const foreignPut = await putStudioAssetForDraft({ store, draftKeyHash: foreignHash, bytes });
 assert.equal(foreignPut.ok, true);
 if (foreignPut.ok) {
-  const foreignOrder = parseOrderDraft({
+  const foreignOrder = parseV8({
     version: 8,
     email: "cliente@example.com",
-    draftKey,
     document: withImage(ready, "img1", studioAssetRef(foreignPut.asset.id)),
   });
   assert.equal(foreignOrder.ok, true);
@@ -336,10 +338,9 @@ const dehydrateRound = await dehydrateStudioDocument({
 });
 assert.equal(dehydrateRound.ok, true);
 if (dehydrateRound.ok) {
-  const again = parseOrderDraft({
+  const again = parseV8({
     version: 8,
     email: "Cliente@Example.com",
-    draftKey,
     document: dehydrateRound.document,
   });
   assert.equal(again.ok, true);

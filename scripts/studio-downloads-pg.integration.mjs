@@ -96,12 +96,14 @@ try {
   assert.equal(documentHasDataUrls(dehydrated.document), false);
   for (const id of dehydrated.assetIds) createdAssetIds.push(id);
 
-  const parsed = parseOrderDraft({
-    version: 8,
-    email: "studio-v8-download@example.com",
-    draftKey,
-    document: dehydrated.document,
-  });
+  const parsed = parseOrderDraft(
+    {
+      version: 8,
+      email: "studio-v8-download@example.com",
+      document: dehydrated.document,
+    },
+    { studioDraftKey: draftKey },
+  );
   assert.equal(parsed.ok, true);
 
   const created = await savePendingOrder(parsed.draft);

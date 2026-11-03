@@ -91,3 +91,13 @@ model DownloadAccessCredential {
 
   @@index([orderId])
 }
+
+/// Contadores de rate limit compartidos entre instancias (Studio upload/draft/orders).
+model RateLimitBucket {
+  bucketKey   String   @id
+  count       Int      @default(0)
+  windowStart DateTime
+  expiresAt   DateTime
+
+  @@index([expiresAt])
+}

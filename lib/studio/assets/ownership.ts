@@ -1,5 +1,9 @@
 import { createPublicId } from "@/lib/public-id";
-import { STUDIO_ASSET_MAX_PER_DRAFT, STUDIO_ASSET_TEMP_TTL_MS } from "@/lib/studio/assets/limits";
+import {
+  STUDIO_ASSET_MAX_DRAFT_BYTES,
+  STUDIO_ASSET_MAX_PER_DRAFT,
+  STUDIO_ASSET_TEMP_TTL_MS,
+} from "@/lib/studio/assets/limits";
 import { processStudioImageBytes, type ProcessStudioImageError } from "@/lib/studio/assets/process";
 import type { StudioAssetRecord, StudioAssetStore } from "@/lib/studio/assets/store";
 
@@ -7,6 +11,7 @@ export type PutStudioAssetError =
   | ProcessStudioImageError
   | "draft-required"
   | "draft-quota"
+  | "draft-bytes"
   | "store-failed";
 
 export type PutStudioAssetResult =
@@ -30,6 +35,11 @@ export async function putStudioAssetForDraft(input: {
 
   const count = await input.store.countByDraft(input.draftKeyHash);
   if (count >= STUDIO_ASSET_MAX_PER_DRAFT) return { ok: false, error: "draft-quota" };
+
+  const usedBytes = await input.store.sumBytesByDraft(input.draftKeyHash);
+  if (usedBytes + processed.byteLength > STUDIO_ASSET_MAX_DRAFT_BYTES) {
+    return { ok: false, error: "draft-bytes" };
+  }
 
   const now = input.now ?? new Date();
   try {

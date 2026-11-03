@@ -101,12 +101,14 @@ try {
     if (!createdAssetIds.includes(id)) createdAssetIds.push(id);
   }
 
-  const parsed = parseOrderDraft({
-    version: 8,
-    email: "studio-v8-test@example.com",
-    draftKey,
-    document: dehydrated.document,
-  });
+  const parsed = parseOrderDraft(
+    {
+      version: 8,
+      email: "studio-v8-test@example.com",
+      document: dehydrated.document,
+    },
+    { studioDraftKey: draftKey },
+  );
   assert.equal(parsed.ok, true);
   assert.equal(parsed.draft.amountArs, PIECE_PRICE_ARS);
   assert.equal(parsed.draft.artwork.version, 8);
@@ -146,13 +148,14 @@ try {
   assert.equal(again.artwork.frozenAt, order.artwork.frozenAt);
   assert.deepEqual(again.artwork.assetIds, order.artwork.assetIds);
 
+  const parseV8 = (document, extra = {}) =>
+    parseOrderDraft(
+      { version: 8, email: "studio-v8-test@example.com", document, ...extra },
+      { studioDraftKey: draftKey },
+    );
+
   // Already-retained assets cannot be rebound to a second order
-  const secondParsed = parseOrderDraft({
-    version: 8,
-    email: "studio-v8-test@example.com",
-    draftKey,
-    document: dehydrated.document,
-  });
+  const secondParsed = parseV8(dehydrated.document);
   assert.equal(secondParsed.ok, true);
   const ordersBeforeRebind = await prisma.order.count();
   await assert.rejects(() => savePendingOrder(secondParsed.draft), /order-assets/);
@@ -166,12 +169,7 @@ try {
     "stolen",
     `asset:${foreign.asset.id}`,
   );
-  const foreignParsed = parseOrderDraft({
-    version: 8,
-    email: "studio-v8-test@example.com",
-    draftKey,
-    document: foreignDoc,
-  });
+  const foreignParsed = parseV8(foreignDoc);
   assert.equal(foreignParsed.ok, true);
   const ordersBeforeRollback = await prisma.order.count();
   await assert.rejects(() => savePendingOrder(foreignParsed.draft), /order-assets/);
@@ -183,26 +181,12 @@ try {
     "ghost",
     "asset:zzzzzzzzzzzzzzzzzzzzzzzz",
   );
-  const missingParsed = parseOrderDraft({
-    version: 8,
-    email: "studio-v8-test@example.com",
-    draftKey,
-    document: missingDoc,
-  });
+  const missingParsed = parseV8(missingDoc);
   assert.equal(missingParsed.ok, true);
   await assert.rejects(() => savePendingOrder(missingParsed.draft), /order-assets/);
 
   // Reject client price / paid status at parse
-  assert.equal(
-    parseOrderDraft({
-      version: 8,
-      email: "studio-v8-test@example.com",
-      draftKey,
-      document: dehydrated.document,
-      amountArs: 1,
-    }).ok,
-    false,
-  );
+  assert.equal(parseV8(dehydrated.document, { amountArs: 1 }).ok, false);
 
   const afterOrders = await prisma.order.count();
   const afterAssets = await prisma.studioAsset.count();
