@@ -294,8 +294,7 @@ function QrNode({
 }: NodeProps & { element: QrElement; picture: HTMLImageElement | null }) {
   const width = element.width * px;
   const height = element.height * px;
-  const quiet = Math.max(1.5 * px, Math.min(width, height) * 0.08);
-  const inner = Math.max(1, Math.min(width, height) - quiet * 2);
+  // Quiet zone (4 modules) is baked into the QR bitmap — same policy as export/print.
   return (
     <Group
       ref={register}
@@ -309,14 +308,14 @@ function QrNode({
     >
       <Rect width={width} height={height} fill={element.background} />
       {picture ? (
-        <KonvaImage x={quiet} y={quiet} width={inner} height={inner} image={picture} listening={false} />
+        <KonvaImage width={width} height={height} image={picture} listening={false} />
       ) : (
         <Text
-          x={quiet}
-          y={height / 2 - 8}
-          width={inner}
+          width={width}
+          height={height}
           text="QR"
           align="center"
+          verticalAlign="middle"
           fontSize={Math.max(14, 5 * px)}
           fill={element.foreground}
           listening={false}
@@ -462,9 +461,10 @@ function useQrPicture(value: string, foreground: string, background: string) {
     if (!content) return;
     let cancelled = false;
     QRCode.toDataURL(content, {
-      margin: 0,
+      // 4-module quiet zone — keep in sync with STUDIO_QR_MARGIN_MODULES / export render.
+      margin: 4,
       width: 512,
-      errorCorrectionLevel: "Q",
+      errorCorrectionLevel: "M",
       color: { dark: foreground, light: background },
     })
       .then((url) => {

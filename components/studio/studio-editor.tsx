@@ -26,6 +26,8 @@ import { createId } from "@/lib/studio/ids";
 import { prepareStudioImage } from "@/lib/studio/images.browser";
 import { loadSessionDesign, writeDesign } from "@/lib/studio/persistence";
 import { qrContrastIssue } from "@/lib/studio/qr-rules";
+import { validateForExport } from "@/lib/studio/export/validate";
+import { serializeDesign } from "@/lib/studio/serialize";
 import { applySuggestedColors, applyTemplate, createDocument } from "@/lib/studio/templates";
 import {
   MAX_ELEMENTS,
@@ -38,7 +40,7 @@ import {
 } from "@/lib/studio/types";
 import { elementsCoveringQr, validateDesign } from "@/lib/studio/validation";
 
-export function StudioEditor() {
+export function StudioEditor({ exportEnabled = true }: { exportEnabled?: boolean }) {
   const [session] = useState(loadInitial);
   const [history, setHistory] = useState<HistoryState>(() => historyFrom(session.document));
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -48,6 +50,7 @@ export function StudioEditor() {
     session.recovered ? "Recuperamos el diseño de esta sesión." : "El diseño se guarda en esta sesión.",
   );
   const [imageBusy, setImageBusy] = useState(false);
+  const [exportBusy, setExportBusy] = useState(false);
   const [drafting, setDrafting] = useState(false);
   const historyRef = useRef<HistoryState | null>(null);
   const selectedIdRef = useRef<string | null>(null);
@@ -387,6 +390,58 @@ export function StudioEditor() {
     setSelectedId(id);
   }
 
+  async function onExport(format: "png" | "svg" | "pdf") {
+    if (!exportEnabled) {
+      setError("La descarga de prueba no está habilitada en este entorno.");
+      return;
+    }
+    const current = historyRef.current?.present;
+    if (!current || exportBusy) return;
+    const gate = validateForExport(current);
+    if (!gate.ready) {
+      setNotice(gate.errors[0]?.message ?? "El diseño todavía no está listo para exportar.");
+      return;
+    }
+    setExportBusy(true);
+    setError(null);
+    setNotice(null);
+    try {
+      const response = await fetch(`/api/studio/export/${format}`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: serializeDesign(current),
+      });
+      if (!response.ok) {
+        let message = "No pudimos generar el archivo.";
+        try {
+          const payload = (await response.json()) as { error?: string; issues?: { message: string }[] };
+          message = payload.issues?.[0]?.message ?? message;
+        } catch {
+          /* keep default */
+        }
+        setError(message);
+        return;
+      }
+      const blob = await response.blob();
+      const header = response.headers.get("content-disposition") ?? "";
+      const match = /filename\*=UTF-8''([^;]+)|filename="([^"]+)"/i.exec(header);
+      const filename = match
+        ? decodeURIComponent(match[1] ?? match[2] ?? `atajolab-studio.${format}`)
+        : `atajolab-studio.${format}`;
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = filename;
+      anchor.click();
+      URL.revokeObjectURL(url);
+      setSaveLabel(`Descargamos ${filename} (prueba interna).`);
+    } catch {
+      setError("No pudimos generar el archivo. Probá de nuevo.");
+    } finally {
+      setExportBusy(false);
+    }
+  }
+
   useLayoutEffect(() => {
     historyRef.current = history;
     selectedIdRef.current = selectedId;
@@ -395,6 +450,7 @@ export function StudioEditor() {
 
   const selected = history.present.elements.find((element) => element.id === selectedId) ?? null;
   const validation = useMemo(() => validateDesign(history.present), [history.present]);
+  const exportValidation = useMemo(() => validateForExport(history.present), [history.present]);
   const toolbar = {
     templateId: history.present.templateId,
     canUndo: history.past.length > 0 || drafting,
@@ -423,8 +479,8 @@ export function StudioEditor() {
         <p className="text-sm font-semibold text-accent">AtajoLab Studio</p>
         <h1 className="mt-1 text-3xl text-foreground">Editor de cartel</h1>
         <p className="mt-2 text-sm leading-6 text-muted">
-          Es un editor de prueba para un cartel A6. Lo que armes acá queda en esta sesión: no crea un pedido ni se
-          descarga para imprimir.
+          Editor de prueba A6. El diseño queda en esta sesión. Las descargas PNG/SVG/PDF son solo internas y no
+          crean un pedido ni reemplazan las descargas comerciales.
         </p>
       </header>
       {error ? (
@@ -467,6 +523,9 @@ export function StudioEditor() {
             document={history.present}
             selected={selected}
             validation={validation}
+            exportValidation={exportValidation}
+            exportBusy={exportBusy}
+            exportEnabled={exportEnabled}
             onSelect={setSelectedId}
             onCommit={onCommit}
             onEdit={editLive}
@@ -493,6 +552,7 @@ export function StudioEditor() {
               fileRef.current?.click();
             }}
             onBringQrForward={onBringQrForward}
+            onExport={onExport}
           />
         </aside>
       </div>
