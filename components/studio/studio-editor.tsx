@@ -1,8 +1,10 @@
 "use client";
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
+import { useRouter } from "next/navigation";
 import { StudioCanvas } from "@/components/studio/studio-canvas";
 import { StudioProperties, StudioToolbar } from "@/components/studio/studio-panels";
+import { parseBuyerEmail } from "@/lib/buyer-email";
 import {
   addImage,
   addRect,
@@ -26,6 +28,8 @@ import { createId } from "@/lib/studio/ids";
 import { prepareStudioImage } from "@/lib/studio/images.browser";
 import { loadSessionDesign, writeDesign } from "@/lib/studio/persistence";
 import { prepareStudioOrderDocument } from "@/lib/studio/prepare-order";
+import { createStudioOrderIdempotencyKey } from "@/lib/studio/order-idempotency";
+import { formatArs, PIECE_CURRENCY, PIECE_PRICE_ARS } from "@/lib/pricing";
 import { qrContrastIssue } from "@/lib/studio/qr-rules";
 import { validateForExport } from "@/lib/studio/export/validate";
 import { serializeDesign } from "@/lib/studio/serialize";
@@ -33,6 +37,7 @@ import { applySuggestedColors, applyTemplate, createDocument } from "@/lib/studi
 import {
   MAX_ELEMENTS,
   QR_MIN_MM,
+  STUDIO_VERSION,
   type DesignDocumentV8,
   type ElementBox,
   type ElementPatch,
@@ -41,7 +46,14 @@ import {
 } from "@/lib/studio/types";
 import { elementsCoveringQr, validateDesign } from "@/lib/studio/validation";
 
-export function StudioEditor({ exportEnabled = true }: { exportEnabled?: boolean }) {
+export function StudioEditor({
+  exportEnabled = true,
+  checkoutEnabled = false,
+}: {
+  exportEnabled?: boolean;
+  checkoutEnabled?: boolean;
+}) {
+  const router = useRouter();
   const [session] = useState(loadInitial);
   const [history, setHistory] = useState<HistoryState>(() => historyFrom(session.document));
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -55,7 +67,12 @@ export function StudioEditor({ exportEnabled = true }: { exportEnabled?: boolean
   const [prepareBusy, setPrepareBusy] = useState(false);
   const [prepareProgress, setPrepareProgress] = useState<string | null>(null);
   const [prepareReady, setPrepareReady] = useState(false);
+  const [orderBusy, setOrderBusy] = useState(false);
+  const [buyerEmail, setBuyerEmail] = useState("");
   const commercialDocumentRef = useRef<DesignDocumentV8 | null>(null);
+  const preparedFromRef = useRef<DesignDocumentV8 | null>(null);
+  const createdPublicIdRef = useRef<string | null>(null);
+  const purchaseIdempotencyKeyRef = useRef<string | null>(null);
   const [drafting, setDrafting] = useState(false);
   const historyRef = useRef<HistoryState | null>(null);
   const selectedIdRef = useRef<string | null>(null);
@@ -71,6 +88,7 @@ export function StudioEditor({ exportEnabled = true }: { exportEnabled?: boolean
   });
 
   useEffect(() => {
+    if (!checkoutEnabled) return;
     void fetch("/api/studio/draft", {
       method: "POST",
       credentials: "same-origin",
@@ -78,7 +96,19 @@ export function StudioEditor({ exportEnabled = true }: { exportEnabled?: boolean
     }).catch(() => {
       /* Draft cookie is best-effort on first paint; prepare flow retries. */
     });
-  }, []);
+  }, [checkoutEnabled]);
+
+  useEffect(() => {
+    if (!prepareReady) return;
+    if (preparedFromRef.current !== history.present) {
+      setPrepareReady(false);
+      commercialDocumentRef.current = null;
+      preparedFromRef.current = null;
+      purchaseIdempotencyKeyRef.current = null;
+      createdPublicIdRef.current = null;
+      setSaveLabel("El diseño cambió. Volvé a preparar las imágenes antes de crear el pedido.");
+    }
+  }, [history.present, prepareReady]);
 
   useEffect(() => {
     function onKey(event: KeyboardEvent) {
@@ -406,8 +436,9 @@ export function StudioEditor({ exportEnabled = true }: { exportEnabled?: boolean
   }
 
   async function onPrepareOrder() {
+    if (!checkoutEnabled) return;
     const current = historyRef.current?.present;
-    if (!current || prepareBusy) return;
+    if (!current || prepareBusy || orderBusy) return;
     const gate = validateForExport(current);
     if (!gate.ready) {
       setNotice(gate.errors[0]?.message ?? "El diseño todavía no está listo para preparar el pedido.");
@@ -418,6 +449,10 @@ export function StudioEditor({ exportEnabled = true }: { exportEnabled?: boolean
     setError(null);
     setNotice(null);
     setPrepareReady(false);
+    commercialDocumentRef.current = null;
+    preparedFromRef.current = null;
+    purchaseIdempotencyKeyRef.current = null;
+    createdPublicIdRef.current = null;
     try {
       const prepared = await prepareStudioOrderDocument({
         document: current,
@@ -434,30 +469,107 @@ export function StudioEditor({ exportEnabled = true }: { exportEnabled?: boolean
       if (!prepared.ok) {
         setPrepareReady(false);
         commercialDocumentRef.current = null;
+        preparedFromRef.current = null;
         setError(
           prepared.error === "draft-failed"
             ? "No pudimos abrir la sesión segura del borrador. Recargá e intentá de nuevo."
             : prepared.error === "rate-limited"
               ? "Llegaste al límite de subidas. Esperá un rato y reintentá."
-              : "No pudimos subir una imagen. Revisá el archivo y reintentá.",
+              : prepared.error === "studio-checkout-disabled"
+                ? "El cobro de Studio no está habilitado en este momento."
+                : "No pudimos subir una imagen. Revisá el archivo y reintentá.",
         );
         return;
       }
       commercialDocumentRef.current = prepared.commercialDocument;
+      preparedFromRef.current = current;
+      purchaseIdempotencyKeyRef.current = createStudioOrderIdempotencyKey();
+      createdPublicIdRef.current = null;
       setPrepareReady(true);
       setPrepareProgress(null);
       setSaveLabel(
         prepared.uploaded + prepared.reused > 0
           ? `Imágenes privadas listas (${prepared.uploaded} nuevas, ${prepared.reused} reutilizadas). El lienzo no cambió.`
-          : "Diseño listo sin imágenes nuevas. El cobro se habilita después.",
+          : "Diseño listo sin imágenes nuevas. Podés crear el pedido.",
       );
     } catch {
       setPrepareReady(false);
       commercialDocumentRef.current = null;
+      preparedFromRef.current = null;
       setError("No pudimos preparar las imágenes. Probá de nuevo.");
     } finally {
       setPrepareBusy(false);
       setPrepareProgress(null);
+    }
+  }
+
+  async function onCreateOrder() {
+    if (!checkoutEnabled || orderBusy || prepareBusy) return;
+    if (createdPublicIdRef.current) {
+      router.push(`/pedido/${createdPublicIdRef.current}`);
+      return;
+    }
+    const commercial = commercialDocumentRef.current;
+    const current = historyRef.current?.present;
+    if (!commercial || !current || preparedFromRef.current !== current || !prepareReady) {
+      setError("Prepará de nuevo las imágenes antes de crear el pedido.");
+      setPrepareReady(false);
+      return;
+    }
+    const email = parseBuyerEmail(buyerEmail);
+    if (!email) {
+      setError(
+        buyerEmail.trim().length === 0
+          ? "Dejá tu correo para poder recuperar los archivos."
+          : "Revisá el correo. Tiene que ser una dirección válida.",
+      );
+      return;
+    }
+    const gate = validateForExport(current);
+    if (!gate.ready) {
+      setNotice(gate.errors[0]?.message ?? "El diseño todavía no está listo para el pedido.");
+      return;
+    }
+
+    if (!purchaseIdempotencyKeyRef.current) {
+      purchaseIdempotencyKeyRef.current = createStudioOrderIdempotencyKey();
+    }
+
+    setOrderBusy(true);
+    setError(null);
+    setNotice(null);
+    try {
+      const response = await fetch("/api/orders", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "content-type": "application/json", accept: "application/json" },
+        body: JSON.stringify({
+          version: STUDIO_VERSION,
+          email,
+          document: commercial,
+          idempotencyKey: purchaseIdempotencyKeyRef.current,
+        }),
+      });
+      const body = (await response.json().catch(() => null)) as
+        | { publicId?: unknown; error?: unknown }
+        | null;
+      if (!response.ok) {
+        setError(studioOrderErrorMessage(typeof body?.error === "string" ? body.error : ""));
+        setOrderBusy(false);
+        return;
+      }
+      const publicId = typeof body?.publicId === "string" ? body.publicId : "";
+      if (!publicId) {
+        setError("No pudimos crear el pedido. Intentá de nuevo.");
+        setOrderBusy(false);
+        return;
+      }
+      createdPublicIdRef.current = publicId;
+      router.push(`/pedido/${publicId}`);
+      // Keep orderBusy true after success to block double-submit while navigating.
+    } catch {
+      setError("No pudimos crear el pedido. Intentá de nuevo en un momento.");
+      setOrderBusy(false);
     }
   }
 
@@ -550,8 +662,11 @@ export function StudioEditor({ exportEnabled = true }: { exportEnabled?: boolean
         <p className="text-sm font-semibold text-accent">AtajoLab Studio</p>
         <h1 className="mt-1 text-3xl text-foreground">Editor de cartel</h1>
         <p className="mt-2 text-sm leading-6 text-muted">
-          Editor A6. El diseño queda en esta sesión. Podés preparar imágenes privadas para un pedido futuro; el
-          cobro todavía no está conectado. Las descargas PNG/SVG/PDF de prueba son solo internas.
+          Editor A6. El diseño queda en esta sesión
+          {checkoutEnabled
+            ? `. Podés preparar imágenes privadas, crear un pedido congelado y pagar ${formatArs(PIECE_PRICE_ARS)} ${PIECE_CURRENCY}.`
+            : ". El cobro comercial no está habilitado en este entorno."}
+          {exportEnabled ? " Las descargas PNG/SVG/PDF de prueba son solo internas." : ""}
         </p>
       </header>
       {error ? (
@@ -597,9 +712,13 @@ export function StudioEditor({ exportEnabled = true }: { exportEnabled?: boolean
             exportValidation={exportValidation}
             exportBusy={exportBusy}
             exportEnabled={exportEnabled}
+            checkoutEnabled={checkoutEnabled}
             prepareBusy={prepareBusy}
             prepareProgress={prepareProgress}
             prepareReady={prepareReady}
+            orderBusy={orderBusy}
+            buyerEmail={buyerEmail}
+            onBuyerEmailChange={setBuyerEmail}
             onSelect={setSelectedId}
             onCommit={onCommit}
             onEdit={editLive}
@@ -629,6 +748,9 @@ export function StudioEditor({ exportEnabled = true }: { exportEnabled?: boolean
             onExport={onExport}
             onPrepareOrder={() => {
               void onPrepareOrder();
+            }}
+            onCreateOrder={() => {
+              void onCreateOrder();
             }}
           />
         </aside>
@@ -679,4 +801,28 @@ function qrPatchClamped(element: QrElement, patch: ElementPatch, next: QrElement
     Math.abs(next.height - requestedHeight) > 0.05 ||
     (patch.rotation !== undefined && next.width !== element.width)
   );
+}
+
+function studioOrderErrorMessage(code: string): string {
+  if (code === "studio-checkout-disabled" || code === "checkout-unavailable") {
+    return "El cobro de Studio no está habilitado en este momento.";
+  }
+  if (code === "studio-draft-key" || code === "origin-rejected") {
+    return "La sesión del borrador no es válida. Recargá e intentá de nuevo.";
+  }
+  if (code === "studio-assets") {
+    return "Alguna imagen del pedido no pertenece a esta sesión. Volvé a preparar las imágenes.";
+  }
+  if (code === "studio-idempotency-conflict") {
+    return "Esta compra ya se inició con otro diseño. Prepará de nuevo e intentá otra vez.";
+  }
+  if (code === "studio-idempotency-key") {
+    return "No pudimos validar el intento de compra. Prepará de nuevo e intentá otra vez.";
+  }
+  if (code === "invalid-email") return "Revisá el correo antes de continuar.";
+  if (code === "rate-limited") return "Llegaste al límite de pedidos. Esperá un rato y reintentá.";
+  if (code === "database-unavailable" || code === "order-failed") {
+    return "No pudimos guardar el pedido. Intentá de nuevo en un momento.";
+  }
+  return "No pudimos crear el pedido. Intentá de nuevo.";
 }

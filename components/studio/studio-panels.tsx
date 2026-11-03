@@ -2,6 +2,7 @@
 
 import { NumberField } from "@/components/studio/number-field";
 import { elementLabel } from "@/lib/studio/document";
+import { formatArs, PIECE_CURRENCY, PIECE_PRICE_ARS } from "@/lib/pricing";
 import { qrContrastIssue } from "@/lib/studio/qr-rules";
 import { templateList } from "@/lib/studio/templates";
 import {
@@ -127,9 +128,13 @@ export function StudioProperties({
   exportValidation,
   exportBusy,
   exportEnabled,
+  checkoutEnabled,
   prepareBusy,
   prepareProgress,
   prepareReady,
+  orderBusy,
+  buyerEmail,
+  onBuyerEmailChange,
   onSelect,
   onCommit,
   onEdit,
@@ -144,6 +149,7 @@ export function StudioProperties({
   onBringQrForward,
   onExport,
   onPrepareOrder,
+  onCreateOrder,
 }: {
   document: DesignDocumentV8;
   selected: StudioElement | null;
@@ -151,9 +157,13 @@ export function StudioProperties({
   exportValidation: ExportValidation;
   exportBusy: boolean;
   exportEnabled: boolean;
+  checkoutEnabled: boolean;
   prepareBusy: boolean;
   prepareProgress: string | null;
   prepareReady: boolean;
+  orderBusy: boolean;
+  buyerEmail: string;
+  onBuyerEmailChange: (value: string) => void;
   onSelect: (id: string | null) => void;
   onCommit: (id: string, patch: ElementPatch) => void;
   onEdit: (id: string, patch: ElementPatch) => void;
@@ -168,6 +178,7 @@ export function StudioProperties({
   onBringQrForward: () => void;
   onExport: (format: "png" | "svg" | "pdf") => void;
   onPrepareOrder: () => void;
+  onCreateOrder: () => void;
 }) {
   const index = selected ? document.elements.findIndex((element) => element.id === selected.id) : -1;
   const statusIssues = exportValidation.issues;
@@ -206,31 +217,60 @@ export function StudioProperties({
         ) : null}
       </section>
 
-      <section className="rounded-3xl border border-line bg-card p-4">
-        <h2 className="text-sm font-semibold">Preparar pedido</h2>
-        <p className="mt-2 text-sm text-muted">
-          Sube las imágenes al servidor de forma privada. El lienzo sigue editable con la vista previa
-          local. El cobro se habilita en un paso posterior.
-        </p>
-        <button
-          type="button"
-          className={`${toolButton} mt-3 w-full`}
-          disabled={!exportValidation.ready || prepareBusy}
-          onClick={onPrepareOrder}
-        >
-          {prepareBusy ? "Subiendo imágenes…" : prepareReady ? "Volver a preparar imágenes" : "Preparar imágenes"}
-        </button>
-        {prepareProgress ? (
-          <p className="mt-2 text-xs text-muted" role="status">
-            {prepareProgress}
+      {checkoutEnabled ? (
+        <section className="rounded-3xl border border-line bg-card p-4">
+          <h2 className="text-sm font-semibold">Comprar este diseño</h2>
+          <p className="mt-2 text-sm text-muted">
+            Prepará las imágenes en privado, creá el pedido con una copia congelada del diseño y
+            continuá al pago de {formatPriceHint()}. Cambios posteriores en el editor no modifican el
+            pedido ya creado.
           </p>
-        ) : null}
-        {prepareReady && !prepareBusy ? (
-          <p className="mt-2 text-sm text-accent" role="status">
-            Imágenes listas en el servidor. Todavía no hay botón de compra.
-          </p>
-        ) : null}
-      </section>
+          <button
+            type="button"
+            className={`${toolButton} mt-3 w-full`}
+            disabled={!exportValidation.ready || prepareBusy || orderBusy}
+            onClick={onPrepareOrder}
+          >
+            {prepareBusy ? "Subiendo imágenes…" : prepareReady ? "Volver a preparar imágenes" : "Preparar imágenes"}
+          </button>
+          {prepareProgress ? (
+            <p className="mt-2 text-xs text-muted" role="status">
+              {prepareProgress}
+            </p>
+          ) : null}
+          {prepareReady && !prepareBusy ? (
+            <div className="mt-3 space-y-3">
+              <p className="text-sm text-accent" role="status">
+                Imágenes listas. El pedido guardará una copia congelada de este diseño.
+              </p>
+              <label className="block text-sm">
+                <span className="font-semibold">Correo para recuperar archivos</span>
+                <input
+                  type="email"
+                  inputMode="email"
+                  autoComplete="email"
+                  spellCheck={false}
+                  autoCapitalize="none"
+                  maxLength={254}
+                  value={buyerEmail}
+                  onChange={(event) => onBuyerEmailChange(event.target.value)}
+                  disabled={orderBusy}
+                  required
+                  className="mt-2 h-11 w-full rounded-xl border border-line bg-background px-3 text-sm"
+                />
+              </label>
+              <button
+                type="button"
+                className={`${toolButton} w-full bg-accent text-white hover:bg-accent-strong disabled:opacity-50`}
+                disabled={!exportValidation.ready || prepareBusy || orderBusy || !buyerEmail.trim()}
+                onClick={onCreateOrder}
+              >
+                {orderBusy ? "Creando el pedido…" : "Continuar al pedido"}
+              </button>
+            </div>
+          ) : null}
+        </section>
+      ) : null}
 
       {exportEnabled ? (
         <section className="rounded-3xl border border-line bg-card p-4">
@@ -529,4 +569,8 @@ function ColorField({ label, value, onChange }: { label: string; value: string; 
       />
     </label>
   );
+}
+
+function formatPriceHint(): string {
+  return `${formatArs(PIECE_PRICE_ARS)} ${PIECE_CURRENCY}`;
 }

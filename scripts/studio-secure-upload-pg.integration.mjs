@@ -23,6 +23,7 @@ const {
 const { runStudioAssetCleanup } = await import("../lib/studio/assets/cleanup-job.ts");
 const { updateElement } = await import("../lib/studio/document.ts");
 const { createDocument } = await import("../lib/studio/templates.ts");
+const { createStudioOrderIdempotencyKey } = await import("../lib/studio/order-idempotency.ts");
 const { createPostgresRateLimiter } = await import("../lib/rate-limit/postgres.ts");
 
 const store = createPrismaStudioAssetStore(prisma);
@@ -112,6 +113,7 @@ try {
   const parsed = parseOrderDraft(
     {
       version: 8,
+      idempotencyKey: createStudioOrderIdempotencyKey(),
       email: "studio-secure-upload@example.com",
       document: dehydrated.document,
     },
@@ -132,6 +134,7 @@ try {
   const stolen = parseOrderDraft(
     {
       version: 8,
+      idempotencyKey: createStudioOrderIdempotencyKey(),
       email: "studio-secure-upload@example.com",
       document: withImage(
         withQr(createDocument("creativo"), REVIEW_URL),

@@ -59,6 +59,7 @@ import {
   STUDIO_COMMERCIAL_ARTWORK_VERSION,
 } from "@/lib/studio/commercial-artwork";
 import { documentHasDataUrls, isStudioDraftKey, hashStudioDraftKey } from "@/lib/studio/assets/index";
+import { isStudioOrderIdempotencyKey } from "@/lib/studio/order-idempotency";
 import { parseDesign } from "@/lib/studio/serialize";
 import { STUDIO_VERSION } from "@/lib/studio/types";
 import { validateForExport } from "@/lib/studio/export/validate";
@@ -100,7 +101,7 @@ const PREVIEW_FIELDS = COMMERCIAL_FIELDS.filter((field) => field !== "email");
  * Studio v8 commercial order body. Document must already be dehydrated (asset refs only).
  * draftKey comes from the HttpOnly studio draft cookie — never from the JSON body.
  */
-const STUDIO_V8_FIELDS = ["version", "email", "document"] as const;
+const STUDIO_V8_FIELDS = ["version", "email", "document", "idempotencyKey"] as const;
 
 /** Soft cap for dehydrated Studio documents in an order body (no embedded images). */
 const STUDIO_V8_DOCUMENT_MAX_CHARS = 200_000;
@@ -185,7 +186,9 @@ export type OrderDraftError =
   | "studio-not-ready"
   | "studio-draft-key"
   | "studio-embedded-image"
-  | "studio-assets";
+  | "studio-assets"
+  | "studio-idempotency-key"
+  | "studio-idempotency-conflict";
 
 export type OrderArtwork = ProductArtwork | StudioCommercialArtworkV8;
 
@@ -199,6 +202,11 @@ export type OrderDraft = {
    * Never sent by the client as a hash — derived server-side from draftKey.
    */
   studioDraftKeyHash?: string;
+  /**
+   * Studio v8 only. Client idempotency key for one logical purchase attempt.
+   * Stored hashed in StudioOrderAttempt; plaintext never persisted.
+   */
+  studioIdempotencyKey?: string;
 };
 
 export type ParseOrderDraftOptions = {
@@ -1038,6 +1046,10 @@ function parseStudioV8Draft(
     return { ok: false, error: "studio-draft-key" };
   }
 
+  if (typeof input.idempotencyKey !== "string" || !isStudioOrderIdempotencyKey(input.idempotencyKey)) {
+    return { ok: false, error: "studio-idempotency-key" };
+  }
+
   if (!isRecord(input.document)) return { ok: false, error: "invalid-body" };
   let documentJson: string;
   try {
@@ -1081,6 +1093,7 @@ function parseStudioV8Draft(
       artwork: built.artwork,
       buyerEmail,
       studioDraftKeyHash: hashStudioDraftKey(studioDraftKey),
+      studioIdempotencyKey: input.idempotencyKey,
     },
   };
 }

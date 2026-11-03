@@ -10,6 +10,7 @@ import {
   studioRequestTrusted,
 } from "@/lib/studio/draft-session";
 import { hashStudioDraftKey } from "@/lib/studio/assets/draft-key";
+import { studioCheckoutAllowed } from "@/lib/studio/checkout-access";
 import { limitStudioOrderCreate } from "@/lib/studio/rate-limits";
 
 const MAX_BODY_CHARS = 320_000;
@@ -44,6 +45,10 @@ export async function POST(request: Request) {
 
   if (raw.length > (studioV8 ? MAX_STUDIO_V8_BODY_CHARS : MAX_BODY_CHARS)) {
     return orderError(400, "invalid-body");
+  }
+
+  if (studioV8 && !studioCheckoutAllowed()) {
+    return orderError(403, "studio-checkout-disabled");
   }
 
   if (studioV8 && !studioRequestTrusted(request)) {
@@ -90,6 +95,12 @@ export async function POST(request: Request) {
   } catch (error) {
     if (error instanceof Error && error.message === "order-assets") {
       return orderError(400, "studio-assets");
+    }
+    if (error instanceof Error && error.message === "order-idempotency-conflict") {
+      return orderError(409, "studio-idempotency-conflict");
+    }
+    if (error instanceof Error && (error.message === "order-idempotency" || error.message === "order-access-secret")) {
+      return orderError(503, "order-failed");
     }
     console.error("order create failed", error instanceof Error ? error.name : "unknown");
     if (isDatabaseUnavailable(error)) return orderError(503, "database-unavailable");

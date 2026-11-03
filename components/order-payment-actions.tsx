@@ -16,6 +16,8 @@ const errors: Record<string, string> = {
   "order-failed": "No se pudo preparar el pago.",
   "order-price": "El precio del pedido no coincide con el catálogo.",
   "composition-invalid": "El texto no entra en el diseño. Volvé al editor y acortalo antes de pagar.",
+  "checkout-unavailable": "El cobro de Studio no está habilitado en este momento.",
+  "studio-checkout-disabled": "El cobro de Studio no está habilitado en este momento.",
   "not-found": "No encontramos el pedido.",
 };
 

@@ -1043,4 +1043,130 @@ for (const status of ["rejected", "pending", "cancelled", "in_process"] as const
   assert.equal(JSON.stringify(failed).includes(TOKEN), false);
 }
 
+{
+  // Studio v8 reuses the same startCheckout / webhook / reconcile path as v1–v7.
+  // Artwork version is gated only in the HTTP route via STUDIO_CHECKOUT_ENABLED.
+  const { studioCheckoutAllowed } = await import("../studio/checkout-access.ts");
+  assert.equal(studioCheckoutAllowed({ STUDIO_CHECKOUT_ENABLED: "" }), false);
+  assert.equal(studioCheckoutAllowed({ STUDIO_CHECKOUT_ENABLED: "true" }), true);
+
+  let preferenceCreates = 0;
+  const store = memory(record({ deliveryKeyHash: hash }));
+  const idempotentGateway = gateway({
+    async createPreference(input) {
+      preferenceCreates += 1;
+      assert.equal("amount" in input, false);
+      return {
+        id: "pref-studio-v8",
+        initPoint: INIT_POINT,
+        externalReference: input.publicId,
+        amount: PIECE_PRICE_ARS,
+        currency: "ARS",
+      };
+    },
+    async getPreference(id) {
+      if (id !== "pref-studio-v8") return null;
+      return {
+        id,
+        initPoint: INIT_POINT,
+        externalReference: PUBLIC_ID,
+        amount: PIECE_PRICE_ARS,
+        currency: "ARS",
+      };
+    },
+  });
+  const first = await startCheckout({
+    publicId: PUBLIC_ID,
+    body: {},
+    deliveryKey: key,
+    accessToken: TOKEN,
+    origin: ORIGIN,
+    gateway: idempotentGateway,
+    limiter: createPreferenceLimiter(() => 1_000),
+    store,
+  });
+  assert.equal(first.ok, true);
+  const again = await startCheckout({
+    publicId: PUBLIC_ID,
+    body: {},
+    deliveryKey: key,
+    accessToken: TOKEN,
+    origin: ORIGIN,
+    gateway: idempotentGateway,
+    limiter: createPreferenceLimiter(() => 1_000),
+    store,
+  });
+  assert.equal(again.ok, true);
+  assert.equal(preferenceCreates, 1);
+
+  const mpFail = await startCheckout({
+    publicId: PUBLIC_ID,
+    body: {},
+    deliveryKey: key,
+    accessToken: TOKEN,
+    origin: ORIGIN,
+    gateway: gateway({
+      async createPreference() {
+        throw new PaymentProviderError("upstream");
+      },
+      async getPreference() {
+        return null;
+      },
+    }),
+    limiter: createPreferenceLimiter(() => 1_000),
+    store: memory(record({ deliveryKeyHash: hash, preferenceId: null })),
+  });
+  assert.deepEqual(mpFail, { ok: false, status: 503, error: "payment-provider" });
+
+  const retryStore = memory(record({ deliveryKeyHash: hash }));
+  const recovered = await startCheckout({
+    publicId: PUBLIC_ID,
+    body: {},
+    deliveryKey: key,
+    accessToken: TOKEN,
+    origin: ORIGIN,
+    gateway: trackingGateway().gateway,
+    limiter: createPreferenceLimiter(() => 1_000),
+    store: retryStore,
+  });
+  assert.equal(recovered.ok, true);
+
+  const paidStatus = await processPaymentNotification({
+    authentic: true,
+    topic: "payment",
+    dataId: "9001",
+    accessToken: TOKEN,
+    gateway: gateway({
+      async getPayment() {
+        return payment({ id: "9001", externalReference: PUBLIC_ID });
+      },
+    }),
+    findOrder: retryStore.find,
+    apply: retryStore.apply,
+    environment: "test",
+  });
+  assert.equal(paidStatus, 200);
+  assert.equal(retryStore.order().status, "PAID");
+  assert.equal(
+    digitalDeliveryAllowed({
+      downloadsEnabled: true,
+      status: retryStore.order().status,
+      key,
+      storedHash: hash,
+    }),
+    true,
+  );
+  // Flag off must not revoke already-paid delivery (downloads ignore STUDIO_CHECKOUT_ENABLED).
+  assert.equal(studioCheckoutAllowed({ STUDIO_CHECKOUT_ENABLED: "false" }), false);
+  assert.equal(
+    digitalDeliveryAllowed({
+      downloadsEnabled: true,
+      status: "PAID",
+      key,
+      storedHash: hash,
+    }),
+    true,
+  );
+}
+
 console.log("payment flow checks passed");

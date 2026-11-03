@@ -19,9 +19,19 @@ import {
 import { updateElement } from "@/lib/studio/document";
 import { parseOrderDraft, readArtworkSnapshot } from "@/lib/order-draft";
 import { PIECE_PRICE_ARS } from "@/lib/pricing";
+import { createStudioOrderIdempotencyKey } from "@/lib/studio/order-idempotency";
 import { createDocument } from "@/lib/studio/templates";
 import type { DesignDocumentV8 } from "@/lib/studio/types";
 import { resolveArtworkDownload } from "@/lib/print/download";
+
+function v8Body(document: DesignDocumentV8, email = "cliente@example.com") {
+  return {
+    version: 8,
+    email,
+    document,
+    idempotencyKey: createStudioOrderIdempotencyKey(),
+  };
+}
 
 const REVIEW_URL = "https://search.google.com/local/writereview?placeid=ChIJabcdefghijklmnop";
 
@@ -164,11 +174,7 @@ if (assetSnap.ok) {
   assert.equal(json.includes("data:image"), false);
 }
 
-const orderBody = {
-  version: 8,
-  email: "cliente@example.com",
-  document: withAsset,
-};
+const orderBody = v8Body(withAsset);
 function parseV8(body: Record<string, unknown>, key: string | null = draftKey) {
   return parseOrderDraft(body, { studioDraftKey: key });
 }
@@ -204,27 +210,17 @@ if (!parseV8(orderBody, null).ok) assert.equal(parseV8(orderBody, null).error, "
 assert.equal(parseV8(orderBody, "short").ok, false);
 if (!parseV8(orderBody, "short").ok) assert.equal(parseV8(orderBody, "short").error, "studio-draft-key");
 
-const withDataUrl = parseV8({
-  version: 8,
-  email: "cliente@example.com",
-  document: withImage(ready, "img1", dataUrl(bytes)),
-});
+const withDataUrl = parseV8(v8Body(withImage(ready, "img1", dataUrl(bytes))));
 assert.equal(withDataUrl.ok, false);
 if (!withDataUrl.ok) assert.equal(withDataUrl.error, "studio-embedded-image");
 
-const emptyQrOrder = parseV8({
-  version: 8,
-  email: "cliente@example.com",
-  document: createDocument("corporativo"),
-});
+const emptyQrOrder = parseV8(v8Body(createDocument("corporativo")));
 assert.equal(emptyQrOrder.ok, false);
 if (!emptyQrOrder.ok) assert.equal(emptyQrOrder.error, "studio-not-ready");
 
-const coveredOrder = parseV8({
-  version: 8,
-  email: "cliente@example.com",
-  document: (() => {
-    let doc = withQr(createDocument("corporativo"), REVIEW_URL);
+const coveredOrder = parseV8(
+  v8Body((() => {
+    const doc = withQr(createDocument("corporativo"), REVIEW_URL);
     const qr = doc.elements.find((element) => element.type === "qr")!;
     return {
       ...doc,
@@ -244,16 +240,17 @@ const coveredOrder = parseV8({
         },
       ],
     };
-  })(),
-});
+  })()),
+);
 assert.equal(coveredOrder.ok, false);
 if (!coveredOrder.ok) assert.equal(coveredOrder.error, "composition");
 
-const missingAsset = parseV8({
-  version: 8,
-  email: "cliente@example.com",
-  document: withImage(ready, "img1", studioAssetRef("zzzzzzzzzzzzzzzzzzzzzzzz")),
-});
+assert.equal(parseV8({ ...orderBody, idempotencyKey: "short" }).ok, false);
+if (!parseV8({ ...orderBody, idempotencyKey: "short" }).ok) {
+  assert.equal(parseV8({ ...orderBody, idempotencyKey: "short" }).error, "studio-idempotency-key");
+}
+
+const missingAsset = parseV8(v8Body(withImage(ready, "img1", studioAssetRef("zzzzzzzzzzzzzzzzzzzzzzzz"))));
 assert.equal(missingAsset.ok, true);
 if (missingAsset.ok) {
   // Ownership is enforced at save time, not parse time.
@@ -271,11 +268,7 @@ const foreignHash = hashStudioDraftKey(foreignDraft);
 const foreignPut = await putStudioAssetForDraft({ store, draftKeyHash: foreignHash, bytes });
 assert.equal(foreignPut.ok, true);
 if (foreignPut.ok) {
-  const foreignOrder = parseV8({
-    version: 8,
-    email: "cliente@example.com",
-    document: withImage(ready, "img1", studioAssetRef(foreignPut.asset.id)),
-  });
+  const foreignOrder = parseV8(v8Body(withImage(ready, "img1", studioAssetRef(foreignPut.asset.id))));
   assert.equal(foreignOrder.ok, true);
   if (foreignOrder.ok && foreignOrder.draft.artwork.version === 8) {
     const retain = await retainStudioAssetsForOrder({
@@ -338,11 +331,7 @@ const dehydrateRound = await dehydrateStudioDocument({
 });
 assert.equal(dehydrateRound.ok, true);
 if (dehydrateRound.ok) {
-  const again = parseV8({
-    version: 8,
-    email: "Cliente@Example.com",
-    document: dehydrateRound.document,
-  });
+  const again = parseV8(v8Body(dehydrateRound.document, "Cliente@Example.com"));
   assert.equal(again.ok, true);
   if (again.ok) {
     assert.equal(again.draft.buyerEmail, "cliente@example.com");
