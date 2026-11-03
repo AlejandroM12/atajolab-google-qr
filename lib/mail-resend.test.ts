@@ -211,7 +211,23 @@ function memory(orders: RecoveryCandidate[]) {
         subject: "Acceso",
         text: echoed,
       }),
-      "refused",
+      "retryable",
+    );
+    assert.equal(
+      await createResendSender({ apiKey, from }, fakeResend({ emailStatus: 503 }).fetchImpl).send({
+        to: buyer,
+        subject: "Acceso",
+        text: echoed,
+      }),
+      "retryable",
+    );
+    assert.equal(
+      await createResendSender({ apiKey, from }, fakeResend({ emailStatus: 429 }).fetchImpl).send({
+        to: buyer,
+        subject: "Acceso",
+        text: echoed,
+      }),
+      "retryable",
     );
     assert.equal(
       await createResendSender({ apiKey, from }, fakeResend({}).fetchImpl).send({

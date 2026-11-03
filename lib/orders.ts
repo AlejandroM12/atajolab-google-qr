@@ -9,6 +9,7 @@ import { paymentEnvironmentMode } from "@/lib/payments/checkout-policy";
 import { decidePayment, type VerifiedPayment } from "@/lib/payments/decision";
 import { PIECE_CURRENCY, PIECE_PRICE_ARS } from "@/lib/pricing";
 import { createPublicId, isPublicId } from "@/lib/public-id";
+import { orderArtworkLabel } from "@/lib/order-label";
 import { STUDIO_COMMERCIAL_ARTWORK_VERSION } from "@/lib/studio/commercial-artwork";
 import { createPrismaStudioAssetStore, retainStudioAssetsForOrder } from "@/lib/studio/assets/index";
 import {
@@ -18,6 +19,7 @@ import {
   orderAccessSecret,
   studioOrderRequestHashesMatch,
 } from "@/lib/studio/order-idempotency";
+import { dispatchPurchaseAccessMail } from "@/lib/purchase-notify";
 
 export type StoredOrder = {
   publicId: string;
@@ -354,6 +356,13 @@ export async function applyVerifiedPayment(
   publicId: string,
   payment: VerifiedPayment,
   checkedAt: Date,
+  options?: {
+    /**
+     * Test hook invoked only after a durable outbox row was enqueued.
+     * Production callers omit this; the default dispatches pending purchase mail.
+     */
+    dispatch?: (orderPublicId: string) => Promise<unknown>;
+  },
 ): Promise<void> {
   const order = await findPaymentRecord(publicId);
   if (!order) return;
@@ -373,16 +382,42 @@ export async function applyVerifiedPayment(
     return;
   }
 
-  await prisma.order.updateMany({
-    where: { id: publicId, status: "PENDING" },
-    data: {
-      status: "PAID",
-      mercadoPagoPaymentId: decision.paymentId,
-      mercadoPagoPaymentStatus: decision.paymentStatus,
-      paymentCheckedAt: checkedAt,
-      paidAt: decision.paidAt,
-    },
+  // PAID + outbox intent are atomic. If enqueue fails, the whole txn rolls back and MP can retry.
+  const enqueued = await prisma.$transaction(async (tx) => {
+    const paid = await tx.order.updateMany({
+      where: { id: publicId, status: "PENDING" },
+      data: {
+        status: "PAID",
+        mercadoPagoPaymentId: decision.paymentId,
+        mercadoPagoPaymentStatus: decision.paymentStatus,
+        paymentCheckedAt: checkedAt,
+        paidAt: decision.paidAt,
+      },
+    });
+    if (paid.count !== 1) return false;
+
+    await tx.mailNotification.create({
+      data: {
+        orderId: publicId,
+        kind: "PURCHASE_ACCESS",
+        status: "PENDING",
+        nextAttemptAt: checkedAt,
+      },
+    });
+    return true;
   });
+
+  if (!enqueued) return;
+
+  try {
+    await (options?.dispatch ?? defaultPurchaseDispatch)(publicId);
+  } catch (error) {
+    console.error("purchase notify dispatch failed", error instanceof Error ? error.name : "unknown");
+  }
+}
+
+async function defaultPurchaseDispatch(orderPublicId: string): Promise<void> {
+  await dispatchPurchaseAccessMail({ orderId: orderPublicId, limit: 1 });
 }
 
 export async function findOrderAccessHashes(publicId: string): Promise<string[]> {
@@ -533,13 +568,7 @@ function isUniqueViolation(error: unknown): boolean {
 }
 
 function pieceLabel(artwork: Prisma.JsonValue): string {
-  if (typeof artwork !== "object" || artwork === null || Array.isArray(artwork) || !("businessName" in artwork)) {
-    return "Tu diseño";
-  }
-  const name = artwork.businessName;
-  if (typeof name !== "string") return "Tu diseño";
-  const label = name.replace(/[\r\n]/g, " ").trim();
-  return label.length > 0 ? label.slice(0, 80) : "Tu diseño";
+  return orderArtworkLabel(artwork);
 }
 
 function isOrderStatus(value: string): value is OrderStatus {

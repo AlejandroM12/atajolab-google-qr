@@ -141,7 +141,9 @@ export async function requestRecovery(input: {
       dispatch = "refused";
     }
   }
-  if (dispatch === "refused") await input.store.revoke(issued.map((item) => item.tokenHash));
+  if (dispatch === "refused" || dispatch === "retryable") {
+    await input.store.revoke(issued.map((item) => item.tokenHash));
+  }
   return recoveryAcknowledgement();
 }
 
