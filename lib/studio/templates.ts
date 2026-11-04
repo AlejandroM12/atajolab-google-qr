@@ -51,7 +51,30 @@ type QrFrame = FrameBase & {
 
 type Frame = TextFrame | RectFrame | QrFrame;
 
+/** Suggested starting designs shown first on /crear and the landing. */
+export const suggestedTemplateIds: TemplateId[] = ["clasico", "vivo", "nocturno", "negocio"];
+
 export const templateList: { id: TemplateId; name: string; description: string }[] = [
+  {
+    id: "clasico",
+    name: "Clásico",
+    description: "Papel claro y un marco alrededor del código.",
+  },
+  {
+    id: "vivo",
+    name: "Vivo",
+    description: "Riel verde y franja naranja.",
+  },
+  {
+    id: "nocturno",
+    name: "Nocturno",
+    description: "Fondo oscuro y el código sobre una placa clara.",
+  },
+  {
+    id: "negocio",
+    name: "Mi negocio",
+    description: "El nombre grande y una franja de color.",
+  },
   {
     id: "corporativo",
     name: "Corporativo",
@@ -64,11 +87,54 @@ export const templateList: { id: TemplateId; name: string; description: string }
   },
 ];
 
+export const suggestedTemplates = templateList.filter((template) =>
+  suggestedTemplateIds.includes(template.id),
+);
+
 /** Suggested palette for each template. Applied only when the user asks. */
 export const templatePalettes: Record<
   TemplateId,
   { background: string; fills: Record<string, string> }
 > = {
+  clasico: {
+    background: "#fffcf8",
+    fills: {
+      rubro: "#1c1915",
+      titulo: "#1c1915",
+      ayuda: "#1c1915",
+      marco: "#1c1915",
+      acento: "#a16207",
+    },
+  },
+  vivo: {
+    background: "#f3ecdf",
+    fills: {
+      riel: "#0c3b32",
+      banda: "#ff4d00",
+      titulo: "#ffffff",
+      placa: "#ffffff",
+      ayuda: "#1c1915",
+    },
+  },
+  nocturno: {
+    background: "#121417",
+    fills: {
+      franja: "#ffb000",
+      rubro: "#f7f4ee",
+      titulo: "#f7f4ee",
+      placa: "#ffffff",
+      ayuda: "#f7f4ee",
+    },
+  },
+  negocio: {
+    background: "#f7f1e8",
+    fills: {
+      rubro: "#1c1915",
+      banda: "#1c1915",
+      titulo: "#ffffff",
+      ayuda: "#ffffff",
+    },
+  },
   corporativo: {
     background: "#f4f0e6",
     fills: {
@@ -91,6 +157,228 @@ export const templatePalettes: Record<
     },
   },
 };
+
+const clasico: Frame[] = [
+  {
+    type: "text",
+    role: "rubro",
+    x: 10,
+    y: 10,
+    width: 85,
+    height: 10,
+    rotation: 0,
+    text: "Tu negocio",
+    font: "fraunces",
+    fontSize: 5,
+    fill: "#1c1915",
+    align: "center",
+  },
+  {
+    type: "text",
+    role: "titulo",
+    x: 10,
+    y: 24,
+    width: 85,
+    height: 18,
+    rotation: 0,
+    text: "Tu opinión nos importa",
+    font: "fraunces",
+    fontSize: 7,
+    fill: "#1c1915",
+    align: "center",
+  },
+  { type: "rect", role: "acento", x: 36, y: 44, width: 33, height: 3, rotation: 0, fill: "#a16207", cornerRadius: 1 },
+  { type: "rect", role: "marco", x: 22, y: 52, width: 61, height: 61, rotation: 0, fill: "#ffffff", cornerRadius: 0 },
+  {
+    type: "qr",
+    role: "qr",
+    x: 26.5,
+    y: 56.5,
+    width: 52,
+    height: 52,
+    rotation: 0,
+    value: "",
+    foreground: QR_INK,
+    background: QR_PAPER,
+  },
+  {
+    type: "text",
+    role: "ayuda",
+    x: 10,
+    y: 120,
+    width: 85,
+    height: 16,
+    rotation: 0,
+    text: "Escaneá y dejanos tu reseña en Google",
+    font: "source",
+    fontSize: 4,
+    fill: "#1c1915",
+    align: "center",
+  },
+];
+
+const vivo: Frame[] = [
+  { type: "rect", role: "riel", x: 0, y: 0, width: 17, height: 148, rotation: 0, fill: "#0c3b32", cornerRadius: 0 },
+  { type: "rect", role: "banda", x: 17, y: 0, width: 88, height: 48, rotation: 0, fill: "#ff4d00", cornerRadius: 0 },
+  {
+    type: "text",
+    role: "titulo",
+    x: 22,
+    y: 12,
+    width: 76,
+    height: 28,
+    rotation: 0,
+    text: "Dejanos tu reseña",
+    font: "sora",
+    fontSize: 8,
+    fill: "#ffffff",
+    align: "left",
+  },
+  { type: "rect", role: "placa", x: 12, y: 54, width: 86, height: 58, rotation: 0, fill: "#ffffff", cornerRadius: 2 },
+  {
+    type: "qr",
+    role: "qr",
+    x: 28,
+    y: 58,
+    width: 48,
+    height: 48,
+    rotation: 0,
+    value: "",
+    foreground: QR_INK,
+    background: QR_PAPER,
+  },
+  {
+    type: "text",
+    role: "ayuda",
+    x: 22,
+    y: 120,
+    width: 76,
+    height: 16,
+    rotation: 0,
+    text: "Escaneá acá, en Google",
+    font: "source",
+    fontSize: 4.2,
+    fill: "#1c1915",
+    align: "left",
+  },
+];
+
+const nocturno: Frame[] = [
+  { type: "rect", role: "franja", x: 0, y: 0, width: 105, height: 5, rotation: 0, fill: "#ffb000", cornerRadius: 0 },
+  {
+    type: "text",
+    role: "rubro",
+    x: 10,
+    y: 14,
+    width: 85,
+    height: 10,
+    rotation: 0,
+    text: "Tu negocio",
+    font: "source",
+    fontSize: 4,
+    fill: "#f7f4ee",
+    align: "left",
+  },
+  {
+    type: "text",
+    role: "titulo",
+    x: 10,
+    y: 28,
+    width: 85,
+    height: 22,
+    rotation: 0,
+    text: "Tu experiencia cuenta",
+    font: "sora",
+    fontSize: 8,
+    fill: "#f7f4ee",
+    align: "left",
+  },
+  { type: "rect", role: "placa", x: 22, y: 58, width: 61, height: 61, rotation: 0, fill: "#ffffff", cornerRadius: 2 },
+  {
+    type: "qr",
+    role: "qr",
+    x: 26.5,
+    y: 62.5,
+    width: 52,
+    height: 52,
+    rotation: 0,
+    value: "",
+    foreground: "#121417",
+    background: QR_PAPER,
+  },
+  {
+    type: "text",
+    role: "ayuda",
+    x: 10,
+    y: 126,
+    width: 85,
+    height: 14,
+    rotation: 0,
+    text: "Escaneá acá, en Google",
+    font: "source",
+    fontSize: 4.2,
+    fill: "#f7f4ee",
+    align: "center",
+  },
+];
+
+const negocio: Frame[] = [
+  {
+    type: "text",
+    role: "rubro",
+    x: 10,
+    y: 10,
+    width: 85,
+    height: 16,
+    rotation: 0,
+    text: "Tu negocio",
+    font: "sora",
+    fontSize: 9,
+    fill: "#1c1915",
+    align: "left",
+  },
+  { type: "rect", role: "banda", x: 0, y: 32, width: 105, height: 28, rotation: 0, fill: "#1c1915", cornerRadius: 0 },
+  {
+    type: "text",
+    role: "titulo",
+    x: 8,
+    y: 36,
+    width: 89,
+    height: 12,
+    rotation: 0,
+    text: "Tu opinión nos importa",
+    font: "sora",
+    fontSize: 5.5,
+    fill: "#ffffff",
+    align: "center",
+  },
+  {
+    type: "text",
+    role: "ayuda",
+    x: 8,
+    y: 48,
+    width: 89,
+    height: 8,
+    rotation: 0,
+    text: "Escaneá acá, en Google",
+    font: "source",
+    fontSize: 3.8,
+    fill: "#ffffff",
+    align: "center",
+  },
+  {
+    type: "qr",
+    role: "qr",
+    x: 20.5,
+    y: 70,
+    width: 64,
+    height: 64,
+    rotation: 0,
+    value: "",
+    foreground: QR_INK,
+    background: QR_PAPER,
+  },
+];
 
 const corporativo: Frame[] = [
   { type: "rect", role: "banda", x: 0, y: 0, width: 105, height: 28, rotation: 0, fill: "#14352f", cornerRadius: 0 },
@@ -224,6 +512,10 @@ const creativo: Frame[] = [
 ];
 
 const templates: Record<TemplateId, { background: string; frames: Frame[] }> = {
+  clasico: { background: templatePalettes.clasico.background, frames: clasico },
+  vivo: { background: templatePalettes.vivo.background, frames: vivo },
+  nocturno: { background: templatePalettes.nocturno.background, frames: nocturno },
+  negocio: { background: templatePalettes.negocio.background, frames: negocio },
   corporativo: { background: templatePalettes.corporativo.background, frames: corporativo },
   creativo: { background: templatePalettes.creativo.background, frames: creativo },
 };
@@ -241,7 +533,7 @@ export function createBlankDocument(idFor: IdFactory = createId): DesignDocument
     version: STUDIO_VERSION,
     format: { id: "a6", widthMm: A6_WIDTH_MM, heightMm: A6_HEIGHT_MM },
     background: "#ffffff",
-    templateId: "corporativo",
+    templateId: "clasico",
     layouts: {},
     elements: [
       {

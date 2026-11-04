@@ -30,13 +30,13 @@ export type LoadedDesign = {
 export function loadSessionDesign(storage: StorageLike): LoadedDesign {
   const raw = storage.getItem(STUDIO_STORAGE_KEY);
   if (!raw) {
-    return { document: createDocument("corporativo"), notice: null, persist: false, recovered: false };
+    return { document: createDocument("clasico"), notice: null, persist: false, recovered: false };
   }
 
   const parsed = parseDesign(raw);
   if (!parsed) {
     return {
-      document: createDocument("corporativo"),
+      document: createDocument("clasico"),
       notice: "No pudimos leer el diseño guardado. Empezamos uno nuevo.",
       persist: true,
       recovered: false,

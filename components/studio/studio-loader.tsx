@@ -8,7 +8,7 @@ const StudioEditor = dynamic(
     ssr: false,
     loading: () => (
       <p className="px-4 py-16 text-center text-sm text-muted" role="status">
-        Cargando el estudio…
+        Cargando el editor…
       </p>
     ),
   },
