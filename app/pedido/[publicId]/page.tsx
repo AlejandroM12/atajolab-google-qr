@@ -8,6 +8,8 @@ import { OrderSummary } from "@/components/order-summary";
 import { DIGITAL_DOWNLOADS_ENABLED } from "@/lib/delivery";
 import { applyVerifiedPayment, findOrder, findOrderAccessHashes, findPaymentRecord } from "@/lib/orders";
 import { digitalDeliveryAllowed, orderAccessCookieName, readOrderAccess } from "@/lib/payments/access";
+import { STUDIO_COMMERCIAL_ARTWORK_VERSION } from "@/lib/studio/commercial-artwork";
+import { renderStudioOrderPreviewSvg } from "@/lib/studio/order-preview";
 import {
   createReconcileLimiter,
   credentialOwnerMatches,
@@ -102,11 +104,20 @@ async function OrderLoader({
     extraHashes: hashes.slice(1),
   });
 
+  const studioPreviewSvg =
+    order.artwork.version === STUDIO_COMMERCIAL_ARTWORK_VERSION
+      ? await renderStudioOrderPreviewSvg({
+          orderId: order.publicId,
+          artwork: order.artwork,
+        })
+      : null;
+
   return (
     <OrderSummary
       order={order}
       sandboxReady={paymentsReady}
       downloads={downloads}
+      studioPreviewSvg={studioPreviewSvg}
       view={paymentView({
         orderStatus: order.status,
         hint,

@@ -42,11 +42,14 @@ export function OrderSummary({
   view,
   sandboxReady,
   downloads,
+  studioPreviewSvg = null,
 }: {
   order: StoredOrder;
   view: PaymentView;
   sandboxReady: boolean;
   downloads: boolean;
+  /** Server-rendered SVG for Studio v8 frozen artwork (optional). */
+  studioPreviewSvg?: string | null;
 }) {
   if (order.artwork.version === STUDIO_COMMERCIAL_ARTWORK_VERSION) {
     return (
@@ -55,6 +58,7 @@ export function OrderSummary({
         view={view}
         sandboxReady={sandboxReady}
         downloads={downloads}
+        previewSvg={studioPreviewSvg}
       />
     );
   }
@@ -237,11 +241,13 @@ function StudioV8OrderSummary({
   view,
   sandboxReady,
   downloads,
+  previewSvg,
 }: {
   order: StoredOrder & { artwork: Extract<StoredOrder["artwork"], { version: typeof STUDIO_COMMERCIAL_ARTWORK_VERSION }> };
   view: PaymentView;
   sandboxReady: boolean;
   downloads: boolean;
+  previewSvg: string | null;
 }) {
   const artwork = order.artwork;
   const templateName = templateList.find((item) => item.id === artwork.templateId)?.name ?? "Studio";
@@ -345,11 +351,24 @@ function StudioV8OrderSummary({
           </ButtonLink>
         </div>
       </div>
-      <div className="rounded-2xl border border-border bg-surface px-5 py-6 text-sm leading-relaxed text-muted">
-        <p className="font-semibold text-ink">Studio A6</p>
-        <p className="mt-2">{artwork.title}</p>
-        <p className="mt-2 font-mono text-xs break-all">{artwork.href}</p>
-        <p className="mt-4 text-xs">Snapshot congelado · {frozen}</p>
+      <div className="justify-self-center lg:justify-self-end">
+        {previewSvg ? (
+          <div>
+            <ScenePreview svg={previewSvg} />
+            <p className="mt-3 text-center text-xs text-muted">Diseño congelado · {frozen}</p>
+          </div>
+        ) : (
+          <div
+            className="flex aspect-[105/148] w-full max-w-[20rem] flex-col justify-between rounded-sm border border-line bg-card px-5 py-6 text-center"
+            aria-label="Vista previa del diseño Studio"
+          >
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-accent">
+              {templateName} · A6
+            </p>
+            <p className="text-2xl font-semibold leading-snug text-foreground">{artwork.title}</p>
+            <p className="text-xs text-muted">Diseño congelado · {frozen}</p>
+          </div>
+        )}
       </div>
     </div>
   );
