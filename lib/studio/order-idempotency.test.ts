@@ -15,6 +15,23 @@ import { deliveryKeysMatch, hashDeliveryKey } from "@/lib/payments/access";
   assert.equal(isStudioOrderIdempotencyKey(key), true);
   assert.equal(isStudioOrderIdempotencyKey("short"), false);
   assert.equal(hashStudioOrderIdempotencyKey(key).length, 64);
+
+  // Simulate browser Web Crypto path (studio-editor is a client component).
+  const previous = globalThis.crypto;
+  const fake = {
+    getRandomValues(buffer: Uint8Array) {
+      for (let index = 0; index < buffer.length; index += 1) buffer[index] = (index * 17) % 256;
+      return buffer;
+    },
+  };
+  Object.defineProperty(globalThis, "crypto", { value: fake, configurable: true });
+  try {
+    const browserKey = createStudioOrderIdempotencyKey();
+    assert.equal(isStudioOrderIdempotencyKey(browserKey), true);
+    assert.notEqual(browserKey, key);
+  } finally {
+    Object.defineProperty(globalThis, "crypto", { value: previous, configurable: true });
+  }
 }
 
 {
