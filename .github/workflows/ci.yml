@@ -32,6 +32,8 @@ jobs:
       APP_URL: http://localhost:3000
       # CI-only placeholder, not a real secret.
       ORDER_ACCESS_SECRET: ci-order-access-secret-0123456789abcdef
+      # Integration tests use mocked Mercado Pago test-mode payments.
+      MERCADOPAGO_ENV: test
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
