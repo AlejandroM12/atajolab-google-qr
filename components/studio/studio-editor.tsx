@@ -1,10 +1,16 @@
 "use client";
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
+import { InspirationGallery } from "@/components/studio/inspiration-gallery";
 import { StudioCanvas } from "@/components/studio/studio-canvas";
 import { StudioProperties, StudioToolbar } from "@/components/studio/studio-panels";
 import { parseBuyerEmail } from "@/lib/buyer-email";
+import {
+  cloneInspirationDocument,
+  getInspiration,
+  type InspirationId,
+} from "@/lib/studio/inspiration";
 import {
   addImage,
   addRect,
@@ -31,7 +37,7 @@ import { prepareStudioOrderDocument } from "@/lib/studio/prepare-order";
 import { createStudioOrderIdempotencyKey } from "@/lib/studio/order-idempotency";
 import { formatArs, PIECE_CURRENCY, PIECE_PRICE_ARS } from "@/lib/pricing";
 import { qrContrastIssue } from "@/lib/studio/qr-rules";
-import { validateForExport } from "@/lib/studio/export/validate";
+import { validateForExport, type ExportValidation } from "@/lib/studio/export/validate";
 import { serializeDesign } from "@/lib/studio/serialize";
 import {
   applySuggestedColors,
@@ -56,23 +62,22 @@ import { elementsCoveringQr, validateDesign } from "@/lib/studio/validation";
 export function StudioEditor({
   exportEnabled = true,
   checkoutEnabled = false,
+  inspirationPreviews,
 }: {
   exportEnabled?: boolean;
   checkoutEnabled?: boolean;
+  inspirationPreviews: Record<InspirationId, string>;
 }) {
   const router = useRouter();
-  const searchParams = useSearchParams();
   const [session] = useState(loadInitial);
-  const requestedTemplate = parseTemplateParam(searchParams.get("plantilla"));
-  const [started, setStarted] = useState(session.recovered || Boolean(requestedTemplate));
-  const bootstrappedTemplate = useRef(false);
+  const [started, setStarted] = useState(session.started);
+  const [fromBlank, setFromBlank] = useState(false);
+  const [showInspiration, setShowInspiration] = useState(false);
   const [history, setHistory] = useState<HistoryState>(() => historyFrom(session.document));
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(session.notice);
-  const [saveLabel, setSaveLabel] = useState(
-    session.recovered ? "Recuperamos el diseño de esta sesión." : "El diseño se guarda en esta sesión.",
-  );
+  const [saveLabel, setSaveLabel] = useState(session.saveLabel);
   const [imageBusy, setImageBusy] = useState(false);
   const [exportBusy, setExportBusy] = useState(false);
   const [prepareBusy, setPrepareBusy] = useState(false);
@@ -108,15 +113,6 @@ export function StudioEditor({
       /* Draft cookie is best-effort on first paint; prepare flow retries. */
     });
   }, [checkoutEnabled]);
-
-  useEffect(() => {
-    if (!requestedTemplate || session.recovered || bootstrappedTemplate.current) return;
-    bootstrappedTemplate.current = true;
-    const document = createDocument(requestedTemplate);
-    setHistory(historyFrom(document));
-    setStarted(true);
-    if (typeof window !== "undefined") writeDesign(window.sessionStorage, document);
-  }, [requestedTemplate, session.recovered]);
 
   useEffect(() => {
     if (!prepareReady) return;
@@ -679,17 +675,44 @@ export function StudioEditor({
     },
   };
 
-  function startFrom(document: DesignDocumentV8) {
+  function startFrom(document: DesignDocumentV8, options?: { blank?: boolean; label?: string }) {
     setHistory(historyFrom(document));
     setSelectedId(null);
     setStarted(true);
+    setFromBlank(options?.blank === true);
+    setShowInspiration(false);
     setNotice(null);
     setError(null);
-    setSaveLabel("El diseño se guarda en esta sesión.");
+    setSaveLabel(options?.label ?? "El diseño se guarda en esta sesión.");
     if (typeof window !== "undefined") writeDesign(window.sessionStorage, document);
   }
 
+  function applyInspiration(id: InspirationId) {
+    const source = getInspiration(id);
+    if (!source) return;
+    if (started) {
+      const ok = window.confirm(
+        "Esto reemplaza el diseño actual del lienzo. ¿Querés continuar?",
+      );
+      if (!ok) return;
+    }
+    startFrom(cloneInspirationDocument(source.document), {
+      label: `Empezamos con «${source.name}». Podés cambiar todo.`,
+    });
+  }
+
   if (!started) {
+    if (showInspiration) {
+      return (
+        <div className="studio-shell mx-auto w-full max-w-4xl overflow-x-hidden px-4 py-10 sm:py-14">
+          <InspirationGallery
+            previews={inspirationPreviews}
+            onPick={applyInspiration}
+            onClose={() => setShowInspiration(false)}
+          />
+        </div>
+      );
+    }
     return (
       <div className="studio-shell mx-auto w-full max-w-3xl overflow-x-hidden px-4 py-10 sm:py-14">
         <header className="max-w-2xl">
@@ -700,6 +723,16 @@ export function StudioEditor({
             {checkoutEnabled ? ` y comprar por ${formatArs(PIECE_PRICE_ARS)} ${PIECE_CURRENCY}.` : "."}
           </p>
         </header>
+        <div className="mt-6">
+          <button
+            type="button"
+            className="text-sm font-semibold text-accent hover:text-accent-strong"
+            onClick={() => setShowInspiration(true)}
+          >
+            Inspiración
+          </button>
+          <p className="mt-1 text-sm text-muted">Mirá diseños listos y usalos como punto de partida.</p>
+        </div>
         <ul className="mt-8 grid gap-3 sm:grid-cols-2">
           {suggestedTemplates.map((template) => (
             <li key={template.id}>
@@ -717,7 +750,7 @@ export function StudioEditor({
             <button
               type="button"
               className="flex w-full flex-col items-start rounded-3xl border border-dashed border-line bg-card px-5 py-5 text-left hover:border-accent"
-              onClick={() => startFrom(createBlankDocument())}
+              onClick={() => startFrom(createBlankDocument(), { blank: true })}
             >
               <span className="text-lg font-semibold">Desde cero</span>
               <span className="mt-2 text-sm text-muted">
@@ -749,6 +782,20 @@ export function StudioEditor({
     );
   }
 
+  const tips = contextualTips(exportValidation, fromBlank);
+
+  if (showInspiration) {
+    return (
+      <div className="studio-shell mx-auto w-full max-w-4xl overflow-x-hidden px-4 py-6">
+        <InspirationGallery
+          previews={inspirationPreviews}
+          onPick={applyInspiration}
+          onClose={() => setShowInspiration(false)}
+        />
+      </div>
+    );
+  }
+
   return (
     <div className="studio-shell mx-auto w-full max-w-7xl overflow-x-hidden px-4 py-6">
       <header className="mb-4 flex flex-wrap items-end justify-between gap-3">
@@ -758,12 +805,26 @@ export function StudioEditor({
             Editá directo en el lienzo
             {checkoutEnabled ? ` · ${formatArs(PIECE_PRICE_ARS)} ${PIECE_CURRENCY}` : ""}
           </p>
+          <button
+            type="button"
+            className="mt-2 text-sm font-semibold text-accent hover:text-accent-strong"
+            onClick={() => setShowInspiration(true)}
+          >
+            Inspiración
+          </button>
         </div>
         <p className="text-xs text-muted" role="status">
           {saveLabel}
           {imageBusy ? " Preparando imagen…" : ""}
         </p>
       </header>
+      {tips.length > 0 ? (
+        <ul className="mb-4 space-y-1 text-sm text-muted" role="status">
+          {tips.map((tip) => (
+            <li key={tip}>{tip}</li>
+          ))}
+        </ul>
+      ) : null}
       {error ? (
         <div className="mb-4 flex items-start justify-between gap-3 rounded-2xl border border-danger/30 bg-danger-bg px-4 py-3 text-sm text-danger" role="alert">
           <p>{error}</p>
@@ -854,18 +915,88 @@ export function StudioEditor({
   );
 }
 
-function loadInitial() {
+function loadInitial(): {
+  document: DesignDocumentV8;
+  notice: string | null;
+  persist: boolean;
+  recovered: boolean;
+  started: boolean;
+  saveLabel: string;
+} {
   if (typeof window === "undefined") {
-    return { document: createDocument("clasico"), notice: null, persist: false, recovered: false };
+    return {
+      document: createDocument("clasico"),
+      notice: null,
+      persist: false,
+      recovered: false,
+      started: false,
+      saveLabel: "El diseño se guarda en esta sesión.",
+    };
   }
+
   const loaded = loadSessionDesign(window.sessionStorage);
   if (loaded.persist) writeDesign(window.sessionStorage, loaded.document);
-  return loaded;
+  if (loaded.recovered) {
+    return {
+      ...loaded,
+      started: true,
+      saveLabel: "Recuperamos el diseño de esta sesión.",
+    };
+  }
+
+  const params = new URLSearchParams(window.location.search);
+  const inspiration = getInspiration(params.get("inspiracion"));
+  if (inspiration) {
+    const document = cloneInspirationDocument(inspiration.document);
+    writeDesign(window.sessionStorage, document);
+    return {
+      document,
+      notice: null,
+      persist: false,
+      recovered: false,
+      started: true,
+      saveLabel: `Empezamos con «${inspiration.name}». Podés cambiar todo.`,
+    };
+  }
+
+  const templateId = params.get("plantilla");
+  const template = templateList.find((item) => item.id === templateId);
+  if (template) {
+    const document = createDocument(template.id);
+    writeDesign(window.sessionStorage, document);
+    return {
+      document,
+      notice: null,
+      persist: false,
+      recovered: false,
+      started: true,
+      saveLabel: "El diseño se guarda en esta sesión.",
+    };
+  }
+
+  return {
+    ...loaded,
+    started: false,
+    saveLabel: "El diseño se guarda en esta sesión.",
+  };
 }
 
-function parseTemplateParam(value: string | null): TemplateId | null {
-  if (!value) return null;
-  return templateList.some((template) => template.id === value) ? (value as TemplateId) : null;
+function contextualTips(exportValidation: ExportValidation, fromBlank: boolean): string[] {
+  const tips: string[] = [];
+  if (fromBlank) {
+    tips.push("¿No sabés cómo empezar? Explorá diseños listos para personalizar.");
+  }
+  const codes = new Set(exportValidation.issues.map((issue) => issue.code));
+  if (codes.has("qr-empty") || codes.has("qr-url")) {
+    tips.push("El QR necesita un enlace http o https.");
+  }
+  if (codes.has("qr-covered")) {
+    tips.push("Evitá tapar el QR con otros elementos.");
+  }
+  if (codes.has("qr-contrast")) {
+    tips.push("Usá colores con buen contraste en el código QR.");
+  }
+  return tips;
 }
 
 function isField(target: EventTarget | null): boolean {

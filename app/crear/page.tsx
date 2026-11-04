@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import { connection } from "next/server";
 import { Suspense } from "react";
 import { StudioLoader } from "@/components/studio/studio-loader";
+import { inspirationDesigns, type InspirationId } from "@/lib/studio/inspiration";
+import { renderInspirationPreviewSvg } from "@/lib/studio/inspiration-preview";
 import { studioCheckoutAllowed } from "@/lib/studio/checkout-access";
 import { studioExportAllowed } from "@/lib/studio/export/access";
 
@@ -29,10 +31,18 @@ export default function CreateQrPage() {
 
 async function StudioGate() {
   await connection();
+  const inspirationPreviews = Object.fromEntries(
+    inspirationDesigns.map((item) => [
+      item.id,
+      renderInspirationPreviewSvg(item.document).replace(/^\s*<\?xml[^>]*>\s*/, ""),
+    ]),
+  ) as Record<InspirationId, string>;
+
   return (
     <StudioLoader
       exportEnabled={studioExportAllowed()}
       checkoutEnabled={studioCheckoutAllowed()}
+      inspirationPreviews={inspirationPreviews}
     />
   );
 }

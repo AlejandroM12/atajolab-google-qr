@@ -1,6 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
+import type { InspirationId } from "@/lib/studio/inspiration";
 
 const StudioEditor = dynamic(
   () => import("@/components/studio/studio-editor").then((mod) => mod.StudioEditor),
@@ -17,9 +18,17 @@ const StudioEditor = dynamic(
 export function StudioLoader({
   exportEnabled = true,
   checkoutEnabled = false,
+  inspirationPreviews,
 }: {
   exportEnabled?: boolean;
   checkoutEnabled?: boolean;
+  inspirationPreviews: Record<InspirationId, string>;
 }) {
-  return <StudioEditor exportEnabled={exportEnabled} checkoutEnabled={checkoutEnabled} />;
+  return (
+    <StudioEditor
+      exportEnabled={exportEnabled}
+      checkoutEnabled={checkoutEnabled}
+      inspirationPreviews={inspirationPreviews}
+    />
+  );
 }
