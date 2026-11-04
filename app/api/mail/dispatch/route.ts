@@ -2,6 +2,7 @@ import { isDatabaseUnavailable } from "@/lib/db-error";
 import {
   describeMailDispatchError,
   mailDispatchAuthorized,
+  mailDispatchFailureReason,
   runMailDispatchJob,
 } from "@/lib/purchase-notify";
 
@@ -48,13 +49,14 @@ export async function POST(request: Request) {
         name: described.name,
         kind: described.kind,
         prismaCode: described.prismaCode ?? null,
+        table: described.table ?? null,
         detail: described.detail ?? null,
       }),
     );
     return Response.json(
       {
         error: "dispatch-failed",
-        reason: described.prismaCode ?? described.kind,
+        reason: mailDispatchFailureReason(error),
       },
       { status: 500, headers: noStore() },
     );

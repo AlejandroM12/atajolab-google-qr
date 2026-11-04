@@ -230,6 +230,7 @@ export function describeMailDispatchError(error: unknown): {
   name: string;
   kind: "database-unavailable" | "prisma" | "transaction" | "pooler" | "unknown";
   prismaCode?: string;
+  table?: string;
   detail?: string;
 } {
   if (isDatabaseUnavailable(error)) {
@@ -251,6 +252,8 @@ export function describeMailDispatchError(error: unknown): {
     /^P\d{4}$/.test((error as { code: string }).code)
       ? (error as { code: string }).code
       : undefined;
+
+  const prismaTable = readPrismaMissingTable(error);
 
   const rawMessage = error instanceof Error ? error.message : "";
   const detail = rawMessage ? sanitizeDispatchLogDetail(rawMessage) : undefined;
@@ -275,10 +278,26 @@ export function describeMailDispatchError(error: unknown): {
   }
 
   if (prismaCode) {
-    return { name, kind: "prisma", prismaCode, detail };
+    return {
+      name,
+      kind: "prisma",
+      prismaCode,
+      detail,
+      ...(prismaTable ? { table: prismaTable } : {}),
+    };
   }
 
   return { name, kind: "unknown", detail };
+}
+
+function readPrismaMissingTable(error: unknown): string | undefined {
+  if (typeof error !== "object" || error === null || !("meta" in error)) return undefined;
+  const meta = (error as { meta?: unknown }).meta;
+  if (typeof meta !== "object" || meta === null || !("table" in meta)) return undefined;
+  const table = (meta as { table?: unknown }).table;
+  if (typeof table !== "string") return undefined;
+  const cleaned = table.replace(/[^A-Za-z0-9_."]/g, "").slice(0, 80);
+  return cleaned || undefined;
 }
 
 function sanitizeDispatchLogDetail(message: string): string {
@@ -297,9 +316,18 @@ function logMailDispatchFailure(error: unknown): void {
       name: described.name,
       kind: described.kind,
       prismaCode: described.prismaCode ?? null,
+      table: described.table ?? null,
       detail: described.detail ?? null,
     }),
   );
+}
+
+export function mailDispatchFailureReason(error: unknown): string {
+  const described = describeMailDispatchError(error);
+  if (described.prismaCode) {
+    return described.table ? `${described.prismaCode}:${described.table}` : described.prismaCode;
+  }
+  return described.kind;
 }
 
 /**
@@ -327,9 +355,11 @@ export async function runMailDispatchJob(
   } catch (error) {
     if (isDatabaseUnavailable(error)) throw error;
     logMailDispatchFailure(error);
-    const described = describeMailDispatchError(error);
-    const reason = described.prismaCode ?? described.kind;
-    return { ok: false, error: "dispatch-failed", reason };
+    return {
+      ok: false,
+      error: "dispatch-failed",
+      reason: mailDispatchFailureReason(error),
+    };
   }
 }
 

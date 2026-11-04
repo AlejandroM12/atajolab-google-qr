@@ -16,6 +16,7 @@ import {
   describeMailDispatchError,
   dispatchPurchaseAccessMail,
   mailDispatchAuthorized,
+  mailDispatchFailureReason,
   mailNotifyBackoffMs,
   openAccessToken,
   PURCHASE_ACCESS_KIND,
@@ -284,11 +285,14 @@ function memoryRecovery(orders: RecoveryCandidate[]) {
   const prismaErr = Object.assign(new Error("Invalid `prisma.mailNotification.findMany()`"), {
     name: "PrismaClientKnownRequestError",
     code: "P2021",
+    meta: { table: "public.MailNotification" },
   });
   const described = describeMailDispatchError(prismaErr);
   assert.equal(described.kind, "prisma");
   assert.equal(described.prismaCode, "P2021");
+  assert.equal(described.table, "public.MailNotification");
   assert.equal(described.detail?.includes("mailNotification"), true);
+  assert.equal(mailDispatchFailureReason(prismaErr), "P2021:public.MailNotification");
 
   const txErr = new Error("Transaction API error: Transaction not found.");
   assert.equal(describeMailDispatchError(txErr).kind, "transaction");
@@ -327,6 +331,7 @@ function memoryRecovery(orders: RecoveryCandidate[]) {
       throw Object.assign(new Error("table missing"), {
         code: "P2021",
         name: "PrismaClientKnownRequestError",
+        meta: { table: "public.MailNotification" },
       });
     },
   };
@@ -340,7 +345,7 @@ function memoryRecovery(orders: RecoveryCandidate[]) {
   assert.equal("ok" in failed && failed.ok === false, true);
   if ("ok" in failed && failed.ok === false) {
     assert.equal(failed.error, "dispatch-failed");
-    assert.equal(failed.reason, "P2021");
+    assert.equal(failed.reason, "P2021:public.MailNotification");
   }
 }
 
