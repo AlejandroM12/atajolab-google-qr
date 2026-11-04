@@ -18,10 +18,13 @@ import {
 } from "@/lib/payments/checkout-policy";
 import { reconcilePayment } from "@/lib/payments/checkout-service";
 import { paymentRuntime } from "@/lib/payments/mercadopago";
+import { logError, logWarn } from "@/lib/log";
 
 export const metadata: Metadata = {
   title: "Tu compra",
   description: "Estado de tu compra y descarga de los archivos para imprimir.",
+  // Private order page: never indexed, never followed.
+  robots: { index: false, follow: false, nocache: true },
 };
 
 type SearchParams = Record<string, string | string[] | undefined>;
@@ -86,12 +89,12 @@ async function OrderLoader({
         store: { find: findPaymentRecord, apply: applyVerifiedPayment },
       });
       if (!result.ok) {
-        console.error("payment reconcile failed", result.error);
+        logWarn("payment.page-reconcile-failed", { publicId, error: result.error });
       } else {
         order = (await findOrder(publicId)) ?? order;
       }
     } catch (error) {
-      console.error("payment reconcile failed", error instanceof Error ? error.name : "unknown");
+      logError("payment.page-reconcile-threw", error, { publicId });
     }
   }
 

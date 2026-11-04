@@ -8,6 +8,7 @@ import {
   studioSecureCookies,
 } from "@/lib/studio/draft-session";
 import { limitStudioDraftSession } from "@/lib/studio/rate-limits";
+import { logError } from "@/lib/log";
 
 /**
  * Ensures a Studio draft session cookie exists.
@@ -42,7 +43,7 @@ export async function POST(request: Request) {
     );
   } catch (error) {
     if (isDatabaseUnavailable(error)) return jsonError(503, "database-unavailable");
-    console.error("studio draft session failed", error instanceof Error ? error.name : "unknown");
+    logError("studio.draft-session-failed", error);
     return jsonError(500, "draft-failed");
   }
 }

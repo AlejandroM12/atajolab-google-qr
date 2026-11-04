@@ -2,15 +2,15 @@ import type { Metadata } from "next";
 import { connection } from "next/server";
 import { Suspense } from "react";
 import { StudioLoader } from "@/components/studio/studio-loader";
-import { inspirationDesigns, type InspirationId } from "@/lib/studio/inspiration";
-import { renderInspirationPreviewDataUrl } from "@/lib/studio/inspiration-preview";
-import { studioCheckoutAllowed } from "@/lib/studio/checkout-access";
+import { inspirationPreviewUrls } from "@/lib/studio/inspiration-preview-url";
+import { studioSalesOpen } from "@/lib/studio/checkout-access";
 import { studioExportAllowed } from "@/lib/studio/export/access";
 
 export const metadata: Metadata = {
   title: "Crear mi cartel QR",
   description:
     "Diseñá tu cartel A6 con código QR, personalizalo a tu gusto y descargalo listo para imprimir.",
+  alternates: { canonical: "/crear" },
 };
 
 export default function CreateQrPage() {
@@ -30,17 +30,14 @@ export default function CreateQrPage() {
 }
 
 async function StudioGate() {
+  // Flags are read per request (env can change without a rebuild).
   await connection();
-  const inspirationPreviews = Object.fromEntries(
-    await Promise.all(
-      inspirationDesigns.map(async (item) => [item.id, await renderInspirationPreviewDataUrl(item.document)] as const),
-    ),
-  ) as Record<InspirationId, string>;
+  const inspirationPreviews = inspirationPreviewUrls();
 
   return (
     <StudioLoader
       exportEnabled={studioExportAllowed()}
-      checkoutEnabled={studioCheckoutAllowed()}
+      checkoutEnabled={studioSalesOpen()}
       inspirationPreviews={inspirationPreviews}
     />
   );

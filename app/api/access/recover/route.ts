@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { isDatabaseUnavailable } from "@/lib/db-error";
 import { createMailSender } from "@/lib/mail";
 import {
@@ -8,28 +9,42 @@ import {
 } from "@/lib/orders";
 import { appOrigin } from "@/lib/payments/checkout-policy";
 import {
-  createRecoveryLimiter,
   parseRecoveryBody,
   recoveryAcknowledgement,
   recoveryClientKeyFromRequest,
+  recoveryLimits,
   requestRecovery,
 } from "@/lib/recovery";
+import { readJsonBody } from "@/lib/http/body";
+import { logError } from "@/lib/log";
+import { ROUTE_LIMITS, consumeBuckets, ipBucket } from "@/lib/rate-limit/policies";
+import { studioRequestTrusted } from "@/lib/studio/draft-session";
+import { sharedRateLimiter } from "@/lib/studio/rate-limits";
 
-const limiter = createRecoveryLimiter();
+const RECOVERY_WINDOW_MS = ROUTE_LIMITS.recoveryIp.windowMs;
 
 export async function POST(request: Request) {
-  const body = await readBody(request);
+  if (!studioRequestTrusted(request)) return recoveryError(403, "origin-rejected");
+  const body = await readJsonBody(request, 2000);
   if (body === undefined) return recoveryError(400, "invalid-body");
   const parsed = parseRecoveryBody(body);
   if (!parsed.ok) return recoveryError(400, parsed.error);
 
   const origin = appOrigin(process.env.APP_URL);
   try {
+    // Shared Postgres buckets survive restarts and sleeps. The email is hashed
+    // so the bucket table never holds an address.
+    const emailKey = createHash("sha256").update(parsed.email).digest("hex").slice(0, 32);
+    const limit = await consumeBuckets(sharedRateLimiter(), [
+      { key: "recovery:global", limit: recoveryLimits.global * 2, windowMs: RECOVERY_WINDOW_MS },
+      ipBucket("recovery", recoveryClientKeyFromRequest(request), ROUTE_LIMITS.recoveryIp),
+      { key: `recovery:email:${emailKey}`, ...ROUTE_LIMITS.recoveryEmail },
+    ]);
     await requestRecovery({
       email: parsed.email,
       now: new Date(),
       origin: origin?.href ?? "",
-      limited: !limiter.allow(recoveryClientKeyFromRequest(request), parsed.email),
+      limited: !limit.ok,
       store: {
         findOrders: findRecoveryCandidates,
         countActiveLinks: countActiveAccessLinks,
@@ -40,26 +55,9 @@ export async function POST(request: Request) {
     });
     return Response.json(recoveryAcknowledgement(), { headers: { "cache-control": "no-store" } });
   } catch (error) {
-    console.error("access recovery failed", error instanceof Error ? error.name : "unknown");
+    logError("access.recovery-failed", error);
     if (isDatabaseUnavailable(error)) return recoveryError(503, "database-unavailable");
     return recoveryError(500, "recovery-failed");
-  }
-}
-
-async function readBody(request: Request): Promise<unknown> {
-  const contentType = request.headers.get("content-type") ?? "";
-  if (!contentType.toLowerCase().startsWith("application/json")) return undefined;
-  let raw = "";
-  try {
-    raw = await request.text();
-  } catch {
-    return undefined;
-  }
-  if (raw.length > 2000) return undefined;
-  try {
-    return JSON.parse(raw);
-  } catch {
-    return undefined;
   }
 }
 

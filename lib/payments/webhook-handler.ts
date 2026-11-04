@@ -1,5 +1,7 @@
 import { isDatabaseUnavailable } from "@/lib/db-error";
+import { logError } from "@/lib/log";
 import type { PaymentRecord } from "@/lib/orders";
+import { reportIgnoredPayment } from "@/lib/payments/ignored-payment";
 import { isPublicId } from "@/lib/public-id";
 import { credentialShape, paymentEnvironmentMode } from "@/lib/payments/checkout-policy";
 import { decidePayment, type PaymentEnvironment, type VerifiedPayment } from "@/lib/payments/decision";
@@ -36,7 +38,7 @@ export async function processPaymentNotification(input: {
   try {
     payment = await input.gateway.getPayment(input.dataId);
   } catch (error) {
-    console.error("payment lookup failed", error instanceof Error ? error.name : "unknown");
+    logError("payment.webhook.lookup-failed", error, { paymentId: input.dataId });
     return 500;
   }
   if (!payment || !isPublicId(payment.externalReference)) return 200;
@@ -50,12 +52,15 @@ export async function processPaymentNotification(input: {
     input.now ?? new Date(),
     input.environment ?? paymentEnvironmentMode(),
   );
-  if (decision.action === "ignore") return 200;
+  if (decision.action === "ignore") {
+    reportIgnoredPayment("webhook", order.publicId, payment, decision);
+    return 200;
+  }
 
   try {
     await input.apply(order.publicId, payment, input.now ?? new Date());
   } catch (error) {
-    console.error("payment update failed", error instanceof Error ? error.name : "unknown");
+    logError("payment.webhook.update-failed", error, { publicId: order.publicId, paymentId: payment.id });
     if (uniqueConflict(error)) return 200;
     if (isDatabaseUnavailable(error)) return 500;
     return 500;

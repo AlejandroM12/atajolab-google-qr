@@ -1,9 +1,12 @@
 import assert from "node:assert/strict";
 import {
   rateLimitClientKeyFromRequest,
+  readProxyHops,
   readRateLimitTrustProxy,
   RATE_LIMIT_UNTRUSTED_KEY,
+  trustedForwardedAddress,
 } from "./client-ip.ts";
+import { ipScopedLimit, UNTRUSTED_IP_MULTIPLIER } from "./rate-limit/policies.ts";
 import { recoveryClientKey, recoveryClientKeyFromRequest } from "./recovery.ts";
 import { studioClientKeyFromRequest } from "./studio/draft-session.ts";
 
@@ -119,6 +122,63 @@ function request(headers: Record<string, string>): Request {
   });
   assert.equal(studioClientKeyFromRequest(req, env), recoveryClientKeyFromRequest(req, env));
   assert.notEqual(studioClientKeyFromRequest(req, env), RATE_LIMIT_UNTRUSTED_KEY);
+}
+
+{
+  // xff mode (Render load balancer / Caddy): the proxy appends the real address.
+  assert.equal(readRateLimitTrustProxy({ RATE_LIMIT_TRUST_PROXY: "xff" }), "xff");
+  assert.equal(readRateLimitTrustProxy({ RATE_LIMIT_TRUST_PROXY: "render" }), "xff");
+  const env = { RATE_LIMIT_TRUST_PROXY: "xff" };
+
+  const a = rateLimitClientKeyFromRequest(request({ "x-forwarded-for": "203.0.113.10" }), env);
+  const b = rateLimitClientKeyFromRequest(request({ "x-forwarded-for": "203.0.113.11" }), env);
+  assert.notEqual(a, RATE_LIMIT_UNTRUSTED_KEY);
+  assert.notEqual(a, b);
+
+  // A spoofed leftmost entry cannot mint a new bucket: the rightmost one wins.
+  const spoofed = rateLimitClientKeyFromRequest(
+    request({ "x-forwarded-for": "198.51.100.77, 203.0.113.10" }),
+    env,
+  );
+  assert.equal(spoofed, a);
+  const spoofedAgain = rateLimitClientKeyFromRequest(
+    request({ "x-forwarded-for": "192.0.2.1, 198.51.100.1, 203.0.113.10" }),
+    env,
+  );
+  assert.equal(spoofedAgain, a);
+
+  // Ports and brackets are normalized.
+  assert.equal(rateLimitClientKeyFromRequest(request({ "x-forwarded-for": "203.0.113.10:5555" }), env), a);
+  assert.notEqual(
+    rateLimitClientKeyFromRequest(request({ "x-forwarded-for": "[2001:db8::1]:443" }), env),
+    RATE_LIMIT_UNTRUSTED_KEY,
+  );
+
+  // Missing or garbage header → shared key.
+  assert.equal(rateLimitClientKeyFromRequest(request({}), env), RATE_LIMIT_UNTRUSTED_KEY);
+  assert.equal(
+    rateLimitClientKeyFromRequest(request({ "x-forwarded-for": "not-an-ip" }), env),
+    RATE_LIMIT_UNTRUSTED_KEY,
+  );
+
+  // Two trusted hops (e.g. CDN + load balancer): second entry from the right.
+  const twoHops = { RATE_LIMIT_TRUST_PROXY: "xff", RATE_LIMIT_PROXY_HOPS: "2" };
+  assert.equal(
+    rateLimitClientKeyFromRequest(request({ "x-forwarded-for": "198.51.100.77, 203.0.113.10, 10.0.0.1" }), twoHops),
+    a,
+  );
+  assert.equal(
+    rateLimitClientKeyFromRequest(request({ "x-forwarded-for": "203.0.113.10" }), twoHops),
+    RATE_LIMIT_UNTRUSTED_KEY,
+  );
+  assert.equal(trustedForwardedAddress("1.1.1.1, 2.2.2.2", 1), "2.2.2.2");
+  assert.equal(readProxyHops({ RATE_LIMIT_PROXY_HOPS: "0" }), 1);
+  assert.equal(readProxyHops({ RATE_LIMIT_PROXY_HOPS: "99" }), 5);
+}
+
+{
+  assert.equal(ipScopedLimit(10, RATE_LIMIT_UNTRUSTED_KEY), 10 * UNTRUSTED_IP_MULTIPLIER);
+  assert.equal(ipScopedLimit(10, "abc123"), 10);
 }
 
 console.log("client-ip checks passed");

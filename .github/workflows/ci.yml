@@ -5,12 +5,33 @@ on:
   push:
     branches: [main, develop]
 
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   check:
     runs-on: ubuntu-latest
+    timeout-minutes: 25
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: ci
+          POSTGRES_PASSWORD: ci
+          POSTGRES_DB: ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U ci -d ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
     env:
       DATABASE_URL: postgresql://ci:ci@127.0.0.1:5432/ci
       APP_URL: http://localhost:3000
+      # CI-only placeholder, not a real secret.
+      ORDER_ACCESS_SECRET: ci-order-access-secret-0123456789abcdef
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -23,11 +44,34 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm exec prisma generate
       - run: pnpm lint
-      - run: pnpm test:links
-      - run: pnpm test:studio
-      - run: pnpm test:orders
-      - run: pnpm test:payments
-      - run: pnpm test:files
-      - run: pnpm test:access
+
+      - name: Unit tests
+        run: pnpm test
+
+      - name: Apply migrations to the CI database
+        run: pnpm exec prisma migrate deploy
+      - name: Schema matches migrations (no drift)
+        run: >-
+          pnpm exec prisma migrate diff
+          --from-url "$DATABASE_URL"
+          --to-schema-datamodel prisma/schema.prisma
+          --exit-code
+
+      - name: Postgres integration tests
+        env:
+          # Mocked Mercado Pago test-mode payments; unit tests run without it.
+          MERCADOPAGO_ENV: test
+        run: |
+          set -e
+          for script in scripts/*-pg.integration.mjs; do
+            echo "::group::$script"
+            node --experimental-strip-types --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --import ./scripts/register-test.mjs "$script"
+            echo "::endgroup::"
+          done
+
       - run: pnpm build
       - run: pnpm typecheck
+
+      - name: Dependency audit (report only)
+        run: pnpm audit --prod --audit-level high
+        continue-on-error: true

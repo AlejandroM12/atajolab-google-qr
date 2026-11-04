@@ -3,6 +3,7 @@ import {
   runStudioAssetCleanup,
   studioCleanupAuthorized,
 } from "@/lib/studio/assets/cleanup-job";
+import { logError } from "@/lib/log";
 
 /**
  * Deletes expired TEMPORARY Studio assets (+ stale rate-limit buckets).
@@ -37,7 +38,7 @@ export async function POST(request: Request) {
     if (isDatabaseUnavailable(error)) {
       return Response.json({ error: "database-unavailable" }, { status: 503, headers: noStore() });
     }
-    console.error("studio cleanup failed", error instanceof Error ? error.name : "unknown");
+    logError("studio.cleanup-failed", error);
     return Response.json({ error: "cleanup-failed" }, { status: 500, headers: noStore() });
   }
 }

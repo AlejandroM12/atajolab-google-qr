@@ -13,6 +13,8 @@ import {
   studioRequestTrusted,
 } from "@/lib/studio/draft-session";
 import { limitStudioUpload } from "@/lib/studio/rate-limits";
+import { BodyTooLargeError, readBodyBytes } from "@/lib/http/body";
+import { logError } from "@/lib/log";
 
 /**
  * Private Studio image ingest. Requires the HttpOnly draft cookie.
@@ -63,7 +65,7 @@ export async function POST(request: Request) {
     );
   } catch (error) {
     if (isDatabaseUnavailable(error)) return jsonError(503, "database-unavailable");
-    console.error("studio asset upload failed", error instanceof Error ? error.name : "unknown");
+    logError("studio.asset-upload-failed", error);
     return jsonError(500, "upload-failed");
   }
 }
@@ -71,16 +73,25 @@ export async function POST(request: Request) {
 async function readUploadBytes(
   request: Request,
 ): Promise<{ ok: true; value: Buffer } | { ok: false; status: number; error: string }> {
-  const contentType = (request.headers.get("content-type") ?? "").toLowerCase();
-  const contentLength = Number(request.headers.get("content-length") ?? "0");
-  if (Number.isFinite(contentLength) && contentLength > STUDIO_ASSET_MAX_UPLOAD_BYTES) {
-    return { ok: false, status: 413, error: "too-large" };
+  const rawContentType = request.headers.get("content-type") ?? "";
+  const contentType = rawContentType.toLowerCase();
+  const multipart = contentType.startsWith("multipart/form-data");
+  const binary = contentType.startsWith("image/") || contentType === "application/octet-stream";
+  if (!multipart && !binary) return { ok: false, status: 400, error: "invalid-body" };
+
+  // Stream with a hard cap: chunked bodies without Content-Length cannot exceed it.
+  let raw: Uint8Array;
+  try {
+    raw = await readBodyBytes(request, STUDIO_ASSET_MAX_UPLOAD_BYTES);
+  } catch (error) {
+    if (error instanceof BodyTooLargeError) return { ok: false, status: 413, error: "too-large" };
+    return { ok: false, status: 400, error: "invalid-body" };
   }
 
-  if (contentType.startsWith("multipart/form-data")) {
+  if (multipart) {
     let form: FormData;
     try {
-      form = await request.formData();
+      form = await new Response(raw as BodyInit, { headers: { "content-type": rawContentType } }).formData();
     } catch {
       return { ok: false, status: 400, error: "invalid-body" };
     }
@@ -94,19 +105,12 @@ async function readUploadBytes(
     return { ok: true, value: buffer };
   }
 
-  if (
-    contentType.startsWith("image/") ||
-    contentType === "application/octet-stream"
-  ) {
-    const buffer = Buffer.from(await request.arrayBuffer());
-    if (buffer.length === 0) return { ok: false, status: 400, error: "empty" };
-    if (buffer.length > STUDIO_ASSET_MAX_SOURCE_BYTES) {
-      return { ok: false, status: 413, error: "too-large" };
-    }
-    return { ok: true, value: buffer };
+  const buffer = Buffer.from(raw);
+  if (buffer.length === 0) return { ok: false, status: 400, error: "empty" };
+  if (buffer.length > STUDIO_ASSET_MAX_SOURCE_BYTES) {
+    return { ok: false, status: 413, error: "too-large" };
   }
-
-  return { ok: false, status: 400, error: "invalid-body" };
+  return { ok: true, value: buffer };
 }
 
 function mapPutStatus(error: string): number {

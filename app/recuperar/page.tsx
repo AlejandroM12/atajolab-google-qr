@@ -8,6 +8,8 @@ import { createMailSender } from "@/lib/mail";
 export const metadata: Metadata = {
   title: "Recuperar mis descargas",
   description: "Pedí un enlace para volver a descargar los archivos de una compra confirmada.",
+  // Utility page with account-recovery states: keep it out of search results.
+  robots: { index: false, follow: true },
 };
 
 type SearchParams = Record<string, string | string[] | undefined>;

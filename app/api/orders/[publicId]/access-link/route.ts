@@ -1,17 +1,21 @@
 import { accessLinkUrl } from "@/lib/access-link";
 import { isDatabaseUnavailable } from "@/lib/db-error";
 import { DIGITAL_DOWNLOADS_ENABLED } from "@/lib/delivery";
+import { readJsonBody } from "@/lib/http/body";
+import { logError } from "@/lib/log";
 import { createDownloadAccessLink, findDownloadOrder } from "@/lib/orders";
 import { digitalDeliveryAllowed, readOrderAccess } from "@/lib/payments/access";
 import { appOrigin } from "@/lib/payments/checkout-policy";
 import { parseEmptyBody } from "@/lib/recovery";
+import { studioRequestTrusted } from "@/lib/studio/draft-session";
 
 export async function POST(
   request: Request,
   context: { params: Promise<{ publicId: string }> },
 ) {
   const { publicId } = await context.params;
-  const body = await readBody(request);
+  if (!studioRequestTrusted(request)) return accessError(403, "origin-rejected");
+  const body = await readJsonBody(request, 2000);
   if (body === undefined) return accessError(400, "invalid-body");
   const bodyError = parseEmptyBody(body);
   if (bodyError) return accessError(400, bodyError);
@@ -42,26 +46,9 @@ export async function POST(
       { headers: { "cache-control": "no-store" } },
     );
   } catch (error) {
-    console.error("access link failed", error instanceof Error ? error.name : "unknown");
+    logError("access.link-failed", error, { publicId });
     if (isDatabaseUnavailable(error)) return accessError(503, "database-unavailable");
     return accessError(500, "access-unavailable");
-  }
-}
-
-async function readBody(request: Request): Promise<unknown> {
-  const contentType = request.headers.get("content-type") ?? "";
-  if (!contentType.toLowerCase().startsWith("application/json")) return undefined;
-  let raw = "";
-  try {
-    raw = await request.text();
-  } catch {
-    return undefined;
-  }
-  if (raw.length > 2000) return undefined;
-  try {
-    return JSON.parse(raw);
-  } catch {
-    return undefined;
   }
 }
 

@@ -6,7 +6,12 @@ import { readAppOrigin, startCheckout } from "@/lib/payments/checkout-service";
 import { paymentAccessToken, paymentRuntime } from "@/lib/payments/mercadopago";
 import { compositionChecked, pieceComposes } from "@/lib/print/layout";
 import { STUDIO_COMMERCIAL_ARTWORK_VERSION } from "@/lib/studio/commercial-artwork";
-import { studioCheckoutAllowed } from "@/lib/studio/checkout-access";
+import { studioSalesOpen } from "@/lib/studio/checkout-access";
+import { readJsonBody } from "@/lib/http/body";
+import { logWarn } from "@/lib/log";
+import { ROUTE_LIMITS, consumeBuckets, ipBucket, rateLimitedResponse } from "@/lib/rate-limit/policies";
+import { studioClientKeyFromRequest, studioRequestTrusted } from "@/lib/studio/draft-session";
+import { sharedRateLimiter } from "@/lib/studio/rate-limits";
 
 const limiter = createPreferenceLimiter();
 
@@ -15,11 +20,17 @@ export async function POST(
   context: { params: Promise<{ publicId: string }> },
 ) {
   const { publicId } = await context.params;
-  const body = await readBody(request);
+  if (!studioRequestTrusted(request)) return paymentError(403, "origin-rejected");
+  const body = await readJsonBody(request, 2000);
   if (body === undefined) return paymentError(400, "invalid-body");
 
+  const limited = await consumeBuckets(sharedRateLimiter(), [
+    ipBucket("checkout", studioClientKeyFromRequest(request), ROUTE_LIMITS.checkoutIp),
+  ]);
+  if (!limited.ok) return rateLimitedResponse(limited);
+
   if (credentialShape(paymentAccessToken()) === "mismatch") {
-    console.error("checkout refused credentials");
+    logWarn("payment.checkout.credential-mismatch");
   }
 
   try {
@@ -27,7 +38,7 @@ export async function POST(
     // Studio v8 uses the same preference flow as v1–v7 when STUDIO_CHECKOUT_ENABLED is on.
     // When off, refuse new checkout links; already-PAID delivery ignores this gate.
     if (stored?.artwork.version === STUDIO_COMMERCIAL_ARTWORK_VERSION) {
-      if (!studioCheckoutAllowed()) return paymentError(409, "checkout-unavailable");
+      if (!studioSalesOpen()) return paymentError(409, "checkout-unavailable");
     } else if (
       stored?.artwork &&
       compositionChecked(stored.artwork) &&
@@ -59,25 +70,6 @@ export async function POST(
     { initPoint: result.initPoint },
     { headers: { "cache-control": "no-store" } },
   );
-}
-
-async function readBody(request: Request): Promise<unknown> {
-  const contentType = request.headers.get("content-type") ?? "";
-  if (!contentType.toLowerCase().startsWith("application/json")) return undefined;
-
-  let raw = "";
-  try {
-    raw = await request.text();
-  } catch {
-    return undefined;
-  }
-  if (raw.length > 2000) return undefined;
-
-  try {
-    return JSON.parse(raw);
-  } catch {
-    return undefined;
-  }
 }
 
 function paymentError(status: number, error: string) {

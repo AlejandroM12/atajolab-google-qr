@@ -5,7 +5,8 @@ import { useState } from "react";
 const errors: Record<string, string> = {
   "access-unavailable": "Esta sesión no puede generar un enlace para este pedido.",
   "link-limit": "Ya hay enlaces vigentes. Esperá a que venzan o usá uno de ellos.",
-  "database-unavailable": "La base de datos no está disponible.",
+  "database-unavailable": "Tuvimos un problema momentáneo. Intentá de nuevo en unos minutos.",
+  "origin-rejected": "No se pudo generar el enlace. Actualizá la página e intentá de nuevo.",
   "invalid-body": "No se pudo generar el enlace.",
   "not-found": "No encontramos el pedido.",
 };

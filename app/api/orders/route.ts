@@ -10,8 +10,12 @@ import {
   studioRequestTrusted,
 } from "@/lib/studio/draft-session";
 import { hashStudioDraftKey } from "@/lib/studio/assets/draft-key";
-import { studioCheckoutAllowed } from "@/lib/studio/checkout-access";
-import { limitStudioOrderCreate } from "@/lib/studio/rate-limits";
+import { studioSalesOpen } from "@/lib/studio/checkout-access";
+import { legal } from "@/lib/legal";
+import { limitStudioOrderCreate, sharedRateLimiter } from "@/lib/studio/rate-limits";
+import { readBodyText } from "@/lib/http/body";
+import { logError, logInfo } from "@/lib/log";
+import { ROUTE_LIMITS, consumeBuckets, ipBucket } from "@/lib/rate-limit/policies";
 
 const MAX_BODY_CHARS = 320_000;
 /** Dehydrated Studio v8 documents stay well under this; blocks accidental embedded images. */
@@ -25,7 +29,7 @@ export async function POST(request: Request) {
 
   let raw = "";
   try {
-    raw = await request.text();
+    raw = await readBodyText(request, MAX_STUDIO_V8_BODY_CHARS);
   } catch {
     return orderError(400, "invalid-body");
   }
@@ -47,12 +51,30 @@ export async function POST(request: Request) {
     return orderError(400, "invalid-body");
   }
 
-  if (studioV8 && !studioCheckoutAllowed()) {
+  if (studioV8 && !studioSalesOpen()) {
     return orderError(403, "studio-checkout-disabled");
   }
 
-  if (studioV8 && !studioRequestTrusted(request)) {
+  // Terms acceptance is checked here (the strict v8 parser keeps its field list)
+  // and recorded in the logs with the version of the legal texts.
+  if (studioV8) {
+    const record = body as Record<string, unknown>;
+    if (record.acceptedTerms !== true) return orderError(400, "terms-required");
+    delete record.acceptedTerms;
+  }
+
+  // Cookie-setting endpoint: same-origin browser posts only, for every artwork version.
+  if (!studioRequestTrusted(request)) {
     return orderError(403, "origin-rejected");
+  }
+
+  if (!studioV8) {
+    const limited = await consumeBuckets(sharedRateLimiter(), [
+      ipBucket("orders:legacy", studioClientKeyFromRequest(request), ROUTE_LIMITS.legacyOrderIp),
+    ]);
+    if (!limited.ok) {
+      return orderError(429, "rate-limited", { "retry-after": String(limited.retryAfterSec) });
+    }
   }
 
   const studioDraftKey = studioV8 ? readStudioDraftKey(request.headers.get("cookie")) : null;
@@ -74,6 +96,9 @@ export async function POST(request: Request) {
 
   try {
     const created = await savePendingOrder(parsed.draft);
+    if (studioV8) {
+      logInfo("order.terms-accepted", { publicId: created.publicId, termsVersion: legal.lastUpdated });
+    }
     const headers = new Headers({ "cache-control": "no-store" });
     headers.set(
       "set-cookie",
@@ -102,7 +127,7 @@ export async function POST(request: Request) {
     if (error instanceof Error && (error.message === "order-idempotency" || error.message === "order-access-secret")) {
       return orderError(503, "order-failed");
     }
-    console.error("order create failed", error instanceof Error ? error.name : "unknown");
+    logError("order.create-failed", error, { version: studioV8 ? 8 : "legacy" });
     if (isDatabaseUnavailable(error)) return orderError(503, "database-unavailable");
     return orderError(500, "order-failed");
   }

@@ -60,7 +60,7 @@ export function buildStudioCommercialArtwork(
   if (documentHasDataUrls(printable)) return { ok: false, error: "studio-embedded-image" };
   if (hasNonAssetImage(printable)) return { ok: false, error: "studio-remote-image" };
 
-  const exportCheck = validateForExport(printable);
+  const exportCheck = validateForExport(printable, { requireGoogleLink: true });
   if (!exportCheck.ready) return { ok: false, error: "studio-not-ready" };
 
   const qr = printable.elements.find((element): element is QrElement => element.type === "qr");

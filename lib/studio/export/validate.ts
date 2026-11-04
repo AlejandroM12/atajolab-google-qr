@@ -1,4 +1,6 @@
+import { isGoogleBusinessShareLink, validateGoogleLink } from "@/lib/google-link";
 import { isStudioAssetRef } from "@/lib/studio/assets/refs";
+import { qrDensity } from "@/lib/studio/qr-density";
 import { imageSrcIssue } from "@/lib/studio/images";
 import { axisAlignedBounds } from "@/lib/studio/geometry";
 import { STUDIO_PRINT_DPI } from "@/lib/studio/export/units";
@@ -19,6 +21,8 @@ export type ExportIssue = {
     | "missing-qr"
     | "qr-empty"
     | "qr-url"
+    | "qr-not-google"
+    | "qr-density"
     | "qr-size"
     | "out-of-bounds"
     | "image-src"
@@ -40,7 +44,26 @@ const BOUNDS_SLACK_MM = 0.5;
 /** Warn when an image would print below ~150 dpi at its placed size. */
 const MIN_IMAGE_DPI = 150;
 
-export function validateForExport(document: DesignDocumentV8): ExportValidation {
+export type ExportValidationOptions = {
+  /**
+   * Commercial orders and the editor require a Google Maps / Google review link.
+   * Stored paid snapshots are rendered without it so earlier orders keep downloading.
+   */
+  requireGoogleLink?: boolean;
+};
+
+export function isGoogleQrLink(value: string): boolean {
+  return (
+    validateGoogleLink(value, "resena").ok ||
+    validateGoogleLink(value, "ubicacion").ok ||
+    isGoogleBusinessShareLink(value)
+  );
+}
+
+export function validateForExport(
+  document: DesignDocumentV8,
+  options: ExportValidationOptions = {},
+): ExportValidation {
   const design = validateDesign(document);
   const issues: ExportIssue[] = design.warnings.map((warning) => ({
     code: warning.code,
@@ -73,6 +96,33 @@ export function validateForExport(document: DesignDocumentV8): ExportValidation 
         elementId: qr.id,
         blocking: true,
       });
+    } else if (options.requireGoogleLink && !isGoogleQrLink(value)) {
+      issues.push({
+        code: "qr-not-google",
+        message:
+          "El QR tiene que llevar el enlace de tu ficha en Google Maps o el enlace para dejar una reseña en Google.",
+        elementId: qr.id,
+        blocking: true,
+      });
+    }
+    if (value && isHttpUrl(value)) {
+      const density = qrDensity(value, Math.min(qr.width, qr.height));
+      if (density === "too-dense") {
+        issues.push({
+          code: "qr-density",
+          message: "El enlace es muy largo para este tamaño de QR. Agrandá el QR o usá el enlace corto de Google Maps.",
+          elementId: qr.id,
+          // Never block re-rendering a stored paid snapshot.
+          blocking: options.requireGoogleLink === true,
+        });
+      } else if (density === "tight") {
+        issues.push({
+          code: "qr-density",
+          message: "El QR queda muy denso. Agrandalo un poco para que se escanee más fácil.",
+          elementId: qr.id,
+          blocking: false,
+        });
+      }
     }
     if (Math.min(qr.width, qr.height) + 0.05 < QR_MIN_MM) {
       issues.push({
