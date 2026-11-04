@@ -232,6 +232,51 @@ export function createDocument(templateId: TemplateId, idFor: IdFactory = create
   return applyTemplate(emptyDocument(templateId), templateId, { idFor, applyPalette: true });
 }
 
+/** Minimal A6 board: title + QR. Not a locked layout — everything stays editable. */
+export function createBlankDocument(idFor: IdFactory = createId): DesignDocumentV8 {
+  const qrSize = 48;
+  const qrX = (A6_WIDTH_MM - qrSize) / 2;
+  const qrY = 52;
+  return {
+    version: STUDIO_VERSION,
+    format: { id: "a6", widthMm: A6_WIDTH_MM, heightMm: A6_HEIGHT_MM },
+    background: "#ffffff",
+    templateId: "corporativo",
+    layouts: {},
+    elements: [
+      {
+        id: idFor("text"),
+        type: "text",
+        role: "titulo",
+        x: 10,
+        y: 18,
+        width: 85,
+        height: 22,
+        rotation: 0,
+        text: "Tu mensaje",
+        font: "sora",
+        fontSize: 9,
+        fill: "#14221f",
+        align: "center",
+      },
+      clampQrGeometry({
+        id: idFor("qr"),
+        type: "qr",
+        role: "qr",
+        x: qrX,
+        y: qrY,
+        width: qrSize,
+        height: qrSize,
+        rotation: 0,
+        value: "",
+        foreground: QR_INK,
+        background: QR_PAPER,
+      }),
+    ],
+    parked: [],
+  };
+}
+
 export type ApplyTemplateOptions = {
   idFor?: IdFactory;
   /** When true, also paints the suggested background and role colors. */

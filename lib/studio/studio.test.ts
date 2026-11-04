@@ -19,7 +19,7 @@ import { commitStudioNumber, parseStudioNumber } from "@/lib/studio/number-input
 import { loadSessionDesign, STUDIO_STORAGE_KEY, writeDesign, type StorageLike } from "@/lib/studio/persistence";
 import { qrContrastIssue } from "@/lib/studio/qr-rules";
 import { parseDesign, serializeDesign } from "@/lib/studio/serialize";
-import { applySuggestedColors, applyTemplate, createDocument } from "@/lib/studio/templates";
+import { applySuggestedColors, applyTemplate, createBlankDocument, createDocument } from "@/lib/studio/templates";
 import type { DesignDocumentV8, QrElement, TextElement } from "@/lib/studio/types";
 import { elementsCoveringQr, validateDesign } from "@/lib/studio/validation";
 
@@ -79,6 +79,12 @@ assert.equal(qr.width, 32);
 assert.equal(qr.height, 32);
 assert.equal(document.elements.filter((element) => element.type === "qr").length, 1);
 assert.equal(document.elements.at(-1)?.type, "qr");
+
+const blank = createBlankDocument(ids());
+assert.equal(blank.background, "#ffffff");
+assert.equal(blank.elements.length, 2);
+assert.equal(blank.elements.filter((element) => element.type === "qr").length, 1);
+assert.equal(blank.elements.at(-1)?.type, "qr");
 
 const moved = updateElement(document, title.id, { x: 12.5, y: 40, width: 70, height: 18 });
 const movedTitle = textOf(moved, "titulo");

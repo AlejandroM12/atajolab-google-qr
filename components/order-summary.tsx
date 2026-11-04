@@ -346,7 +346,7 @@ function StudioV8OrderSummary({
         {canPay ? <OrderPaymentActions publicId={order.publicId} mode="pay" /> : null}
         {canVerify ? <OrderPaymentActions publicId={order.publicId} mode="verify" /> : null}
         <div className="mt-8">
-          <ButtonLink href="/studio" variant="secondary">
+          <ButtonLink href="/crear" variant="secondary">
             Volver al editor
           </ButtonLink>
         </div>

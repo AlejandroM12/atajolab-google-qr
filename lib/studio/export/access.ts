@@ -1,6 +1,6 @@
 /**
  * Internal Studio export is opt-in in production.
- * Local/dev stays open so /studio preview works without extra config.
+ * Local/dev stays open so /crear export preview works without extra config.
  * Before a public launch: set STUDIO_EXPORT_ENABLED=false (or omit it in
  * production) and gate behind auth or a private preview flag.
  */

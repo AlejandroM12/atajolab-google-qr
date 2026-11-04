@@ -83,30 +83,30 @@ export function StudioToolbar({
   );
 
   const templates = (
-    <>
-      {templateList.map((template) => (
-        <button
-          key={template.id}
-          type="button"
-          aria-pressed={templateId === template.id}
-          className={`${toolButton} h-auto min-w-0 flex-col items-start px-3 py-2 text-left ${templateId === template.id ? "border-accent bg-ok-bg" : ""}`}
-          onClick={() => onTemplate(template.id)}
-        >
-          <span>{template.name}</span>
-          <span className="text-xs font-normal text-muted">{template.description}</span>
-        </button>
-      ))}
-      <button type="button" className={`${toolButton} h-auto min-w-0 px-3 py-2 text-left text-sm`} onClick={onApplyPalette}>
-        Aplicar colores sugeridos
+    <label className="block text-sm">
+      <span className="sr-only">Plantilla de ejemplo</span>
+      <select
+        className={fieldClass}
+        value={templateId}
+        onChange={(event) => onTemplate(event.target.value as TemplateId)}
+      >
+        {templateList.map((template) => (
+          <option key={template.id} value={template.id}>
+            {template.name}
+          </option>
+        ))}
+      </select>
+      <button type="button" className={`${toolButton} mt-2 w-full`} onClick={onApplyPalette}>
+        Colores sugeridos
       </button>
-    </>
+    </label>
   );
 
   if (layout === "column") {
     return (
       <div className="flex flex-col gap-2">
         <div className="grid grid-cols-2 gap-2">{tools}</div>
-        <div className="flex flex-col gap-2">{templates}</div>
+        {templates}
       </div>
     );
   }
@@ -116,7 +116,7 @@ export function StudioToolbar({
       <div className="flex w-full min-w-0 gap-2 overflow-x-auto pb-1 [-webkit-overflow-scrolling:touch]">
         <div className="flex min-w-max gap-2">{tools}</div>
       </div>
-      <div className="grid w-full min-w-0 grid-cols-1 gap-2 sm:grid-cols-2">{templates}</div>
+      {templates}
     </div>
   );
 }
@@ -131,7 +131,6 @@ export function StudioProperties({
   checkoutEnabled,
   prepareBusy,
   prepareProgress,
-  prepareReady,
   orderBusy,
   buyerEmail,
   onBuyerEmailChange,
@@ -148,7 +147,6 @@ export function StudioProperties({
   onReplaceImage,
   onBringQrForward,
   onExport,
-  onPrepareOrder,
   onCreateOrder,
 }: {
   document: DesignDocumentV8;
@@ -160,7 +158,6 @@ export function StudioProperties({
   checkoutEnabled: boolean;
   prepareBusy: boolean;
   prepareProgress: string | null;
-  prepareReady: boolean;
   orderBusy: boolean;
   buyerEmail: string;
   onBuyerEmailChange: (value: string) => void;
@@ -177,31 +174,74 @@ export function StudioProperties({
   onReplaceImage: (id: string) => void;
   onBringQrForward: () => void;
   onExport: (format: "png" | "svg" | "pdf") => void;
-  onPrepareOrder: () => void;
   onCreateOrder: () => void;
 }) {
   const index = selected ? document.elements.findIndex((element) => element.id === selected.id) : -1;
-  const statusIssues = exportValidation.issues;
+  const blockingIssues = exportValidation.issues.filter((issue) => issue.blocking);
+  const busy = prepareBusy || orderBusy;
   return (
     <div className="flex min-w-0 flex-col gap-4">
-      <section className="rounded-3xl border border-line bg-card p-4">
-        <h2 className="text-sm font-semibold">Estado del diseño</h2>
-        <p className={`mt-2 text-sm ${exportValidation.ready ? "text-muted" : "text-warning"}`} role="status">
-          {exportValidation.ready
-            ? "Listo para una descarga de prueba (PNG, SVG o PDF)."
-            : "Todavía no está listo para exportar. Revisá las advertencias."}
-        </p>
-        {statusIssues.length > 0 ? (
+      {checkoutEnabled ? (
+        <section className="rounded-3xl border border-accent/30 bg-ok-bg p-4">
+          <h2 className="text-sm font-semibold">Comprar · {formatPriceHint()}</h2>
+          <label className="mt-3 block text-sm">
+            <span className="font-semibold">Tu correo</span>
+            <input
+              type="email"
+              inputMode="email"
+              autoComplete="email"
+              spellCheck={false}
+              autoCapitalize="none"
+              maxLength={254}
+              value={buyerEmail}
+              onChange={(event) => onBuyerEmailChange(event.target.value)}
+              disabled={busy}
+              required
+              className="mt-2 h-11 w-full rounded-xl border border-line bg-background px-3 text-sm"
+            />
+          </label>
+          <button
+            type="button"
+            className={`${toolButton} mt-3 w-full bg-accent text-white hover:bg-accent-strong disabled:opacity-50`}
+            disabled={!exportValidation.ready || busy || !buyerEmail.trim()}
+            onClick={onCreateOrder}
+          >
+            {prepareBusy
+              ? prepareProgress ?? "Preparando…"
+              : orderBusy
+                ? "Creando el pedido…"
+                : "Comprar este diseño"}
+          </button>
+          {!exportValidation.ready && blockingIssues.length > 0 ? (
+            <ul className="mt-3 flex flex-col gap-2">
+              {blockingIssues.map((warning) => (
+                <li key={`${warning.code}-${warning.elementId}-${warning.message}`}>
+                  <button
+                    type="button"
+                    className="w-full rounded-xl border border-warning/30 bg-warning-bg px-3 py-2 text-left text-sm text-warning"
+                    onClick={() => warning.elementId && onSelect(warning.elementId)}
+                  >
+                    {warning.message}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          ) : null}
+          {validation.coveredBy.length > 0 ? (
+            <button type="button" className={`${toolButton} mt-3 w-full`} onClick={onBringQrForward}>
+              Traer QR al frente
+            </button>
+          ) : null}
+        </section>
+      ) : blockingIssues.length > 0 ? (
+        <section className="rounded-3xl border border-warning/30 bg-warning-bg p-4">
+          <h2 className="text-sm font-semibold text-warning">Para continuar</h2>
           <ul className="mt-3 flex flex-col gap-2">
-            {statusIssues.map((warning) => (
+            {blockingIssues.map((warning) => (
               <li key={`${warning.code}-${warning.elementId}-${warning.message}`}>
                 <button
                   type="button"
-                  className={`w-full rounded-xl border px-3 py-2 text-left text-sm ${
-                    warning.blocking
-                      ? "border-warning/30 bg-warning-bg text-warning"
-                      : "border-line bg-background text-muted"
-                  }`}
+                  className="w-full rounded-xl border border-warning/30 bg-card px-3 py-2 text-left text-sm text-warning"
                   onClick={() => warning.elementId && onSelect(warning.elementId)}
                 >
                   {warning.message}
@@ -209,65 +249,10 @@ export function StudioProperties({
               </li>
             ))}
           </ul>
-        ) : null}
-        {validation.coveredBy.length > 0 ? (
-          <button type="button" className={`${toolButton} mt-3 w-full`} onClick={onBringQrForward}>
-            Traer QR al frente
-          </button>
-        ) : null}
-      </section>
-
-      {checkoutEnabled ? (
-        <section className="rounded-3xl border border-line bg-card p-4">
-          <h2 className="text-sm font-semibold">Comprar este diseño</h2>
-          <p className="mt-2 text-sm text-muted">
-            Prepará las imágenes en privado, creá el pedido con una copia congelada del diseño y
-            continuá al pago de {formatPriceHint()}. Cambios posteriores en el editor no modifican el
-            pedido ya creado.
-          </p>
-          <button
-            type="button"
-            className={`${toolButton} mt-3 w-full`}
-            disabled={!exportValidation.ready || prepareBusy || orderBusy}
-            onClick={onPrepareOrder}
-          >
-            {prepareBusy ? "Subiendo imágenes…" : prepareReady ? "Volver a preparar imágenes" : "Preparar imágenes"}
-          </button>
-          {prepareProgress ? (
-            <p className="mt-2 text-xs text-muted" role="status">
-              {prepareProgress}
-            </p>
-          ) : null}
-          {prepareReady && !prepareBusy ? (
-            <div className="mt-3 space-y-3">
-              <p className="text-sm text-accent" role="status">
-                Imágenes listas. El pedido guardará una copia congelada de este diseño.
-              </p>
-              <label className="block text-sm">
-                <span className="font-semibold">Correo para recuperar archivos</span>
-                <input
-                  type="email"
-                  inputMode="email"
-                  autoComplete="email"
-                  spellCheck={false}
-                  autoCapitalize="none"
-                  maxLength={254}
-                  value={buyerEmail}
-                  onChange={(event) => onBuyerEmailChange(event.target.value)}
-                  disabled={orderBusy}
-                  required
-                  className="mt-2 h-11 w-full rounded-xl border border-line bg-background px-3 text-sm"
-                />
-              </label>
-              <button
-                type="button"
-                className={`${toolButton} w-full bg-accent text-white hover:bg-accent-strong disabled:opacity-50`}
-                disabled={!exportValidation.ready || prepareBusy || orderBusy || !buyerEmail.trim()}
-                onClick={onCreateOrder}
-              >
-                {orderBusy ? "Creando el pedido…" : "Continuar al pedido"}
-              </button>
-            </div>
+          {validation.coveredBy.length > 0 ? (
+            <button type="button" className={`${toolButton} mt-3 w-full`} onClick={onBringQrForward}>
+              Traer QR al frente
+            </button>
           ) : null}
         </section>
       ) : null}
@@ -275,9 +260,6 @@ export function StudioProperties({
       {exportEnabled ? (
         <section className="rounded-3xl border border-line bg-card p-4">
           <h2 className="text-sm font-semibold">Descarga de prueba</h2>
-          <p className="mt-2 text-sm text-muted">
-            Solo para probar el motor de Studio. No crea un pedido ni reemplaza las descargas comerciales.
-          </p>
           <div className="mt-3 grid grid-cols-3 gap-2">
             {(["png", "svg", "pdf"] as const).map((format) => (
               <button
@@ -291,16 +273,11 @@ export function StudioProperties({
               </button>
             ))}
           </div>
-          {exportBusy ? (
-            <p className="mt-2 text-xs text-muted" role="status">
-              Generando archivo…
-            </p>
-          ) : null}
         </section>
       ) : null}
 
       <section className="rounded-3xl border border-line bg-card p-4">
-        <h2 className="text-sm font-semibold">Propiedades</h2>
+        <h2 className="text-sm font-semibold">{selected ? "Seleccionado" : "Propiedades"}</h2>
         {selected ? (
           <ElementFields
             element={selected}
@@ -315,32 +292,13 @@ export function StudioProperties({
             onReplaceImage={onReplaceImage}
           />
         ) : (
-          <p className="mt-3 text-sm text-muted">Tocá un elemento del cartel para cambiar su texto, color o tamaño.</p>
+          <p className="mt-3 text-sm text-muted">Tocá un elemento del cartel para editarlo.</p>
         )}
-      </section>
-
-      <section className="rounded-3xl border border-line bg-card p-4">
-        <h2 className="text-sm font-semibold">Capas</h2>
-        <ul className="mt-3 flex flex-col gap-1">
-          {[...document.elements].reverse().map((element) => (
-            <li key={element.id}>
-              <button
-                type="button"
-                aria-pressed={element.id === selected?.id}
-                className={`w-full rounded-xl px-3 py-2 text-left text-sm ${element.id === selected?.id ? "bg-ok-bg font-semibold" : "hover:bg-background"}`}
-                onClick={() => onSelect(element.id)}
-              >
-                {elementLabel(element)}
-              </button>
-            </li>
-          ))}
-        </ul>
       </section>
 
       {document.parked.length > 0 ? (
         <section className="rounded-3xl border border-warning/30 bg-warning-bg p-4">
-          <h2 className="text-sm font-semibold text-warning">Fuera de la composición</h2>
-          <p className="mt-1 text-sm text-warning">Estos elementos no entran en la plantilla actual. No se borraron.</p>
+          <h2 className="text-sm font-semibold text-warning">Fuera del lienzo</h2>
           <ul className="mt-3 flex flex-col gap-2">
             {document.parked.map((element) => (
               <li key={element.id} className="flex min-w-0 flex-wrap items-center gap-2">

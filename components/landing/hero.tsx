@@ -20,8 +20,8 @@ export function Hero() {
             Hacé que dejar una reseña sea más fácil
           </h1>
           <p className="mt-5 max-w-xl text-lg leading-relaxed text-muted">
-            Creá un cartel o sticker con un código QR que lleva a tus clientes a dejar una reseña en Google.
-            Personalizalo y descargalo listo para imprimir.
+            Diseñá un cartel A6 con código QR hacia Google. Editá el lienzo a tu gusto y descargalo listo
+            para imprimir.
           </p>
           <div className="mt-8 flex flex-col gap-3 sm:flex-row">
             <ButtonLink href="/crear">Crear mi cartel QR</ButtonLink>

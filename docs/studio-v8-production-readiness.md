@@ -44,14 +44,14 @@ Render Web Service (Next.js 16 / Node 22, plan Free documentado)
 
 | Área | Rutas / piezas | Flag |
 | --- | --- | --- |
-| Editor | `/studio`, draft cookie HttpOnly | siempre (UI) |
+| Editor | `/crear` (redirect desde `/studio`), draft cookie HttpOnly | siempre (UI) |
 | Export preview | `/api/studio/export/[format]` | `STUDIO_EXPORT_ENABLED` (prod off por defecto) |
 | Upload privado | `POST /api/studio/assets`, `POST /api/studio/draft` | sesión draft + Origin/Referer |
 | Pedido + checkout | `POST /api/orders` (v8), checkout existente | **`STUDIO_CHECKOUT_ENABLED` off por defecto** |
 | Descargas PAID | `/api/orders/[id]/files/[format]` | cookie delivery / access credential |
 | Email compra | outbox `MailNotification` + `/api/mail/dispatch` | Resend + secrets |
 | Cleanup assets | `/api/studio/assets/cleanup` | `STUDIO_CLEANUP_SECRET` |
-| v7 clásico | `/crear`, pedidos artwork v1–v7 | independiente del flag Studio |
+| Pedidos legacy artwork | lectura/descarga de pedidos v1–v7 ya creados | sin UI de creación |
 
 ### Persistencia relevante
 
@@ -298,7 +298,7 @@ Opciones sin Redis:
 
 Ejecutar contra `https://qr.atajolab.dev` tras deploy+migrate, **con checkout off**:
 
-1. `GET /` y `/studio` → 200; editor carga.
+1. `GET /` y `/crear` → 200; editor carga. `GET /studio` → redirect a `/crear`.
 2. `POST /api/orders` body v8 → **403/flag off** (no crea pedido Studio).
 3. Pedido v7 existente PAID (si hay) → descarga PNG con cookie sigue OK.
 4. `POST /api/mail/dispatch` sin Bearer → 401; con Bearer → 200 JSON.
@@ -354,7 +354,7 @@ Integraciones **locales** (Postgres local + mocks), ya usadas en desarrollo:
 2. **Enable:** `STUDIO_CHECKOUT_ENABLED=true` en Render; reinicio/redeploy si hace falta leer env.
 3. **Actores:** un operador; email de prueba controlado; tarjeta/cuenta MP de producción o flujo acordado por finanzas.
 4. **Pasos:**
-   1. Abrir `/studio`, diseñar A6 mínimo (QR válido + título).
+   1. Abrir `/crear`, diseñar A6 mínimo (QR válido + título).
    2. Preparar pedido → PENDING; anotar `publicId`.
    3. Pagar por Checkout Pro.
    4. Confirmar `Order.status=PAID` (webhook o reconcile en `/pedido/...`).
