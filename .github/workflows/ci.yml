@@ -34,7 +34,7 @@ jobs:
       ORDER_ACCESS_SECRET: ci-order-access-secret-0123456789abcdef
     steps:
       - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v5
         with:
           version: 11.1.3
       - uses: actions/setup-node@v4
