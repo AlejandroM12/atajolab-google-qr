@@ -6,6 +6,7 @@ import { InspirationGallery } from "@/components/studio/inspiration-gallery";
 import { StudioCanvas } from "@/components/studio/studio-canvas";
 import { StudioProperties, StudioToolbar } from "@/components/studio/studio-panels";
 import { parseBuyerEmail } from "@/lib/buyer-email";
+import { resolveStudioBootstrap } from "@/lib/studio/bootstrap";
 import {
   cloneInspirationDocument,
   getInspiration,
@@ -32,7 +33,7 @@ import {
 import { commitDraft, flushDraft, historyFrom, redo, replacePresent, undo, type HistoryState } from "@/lib/studio/history";
 import { createId } from "@/lib/studio/ids";
 import { prepareStudioImage } from "@/lib/studio/images.browser";
-import { loadSessionDesign, writeDesign } from "@/lib/studio/persistence";
+import { writeDesign } from "@/lib/studio/persistence";
 import { prepareStudioOrderDocument } from "@/lib/studio/prepare-order";
 import { createStudioOrderIdempotencyKey } from "@/lib/studio/order-idempotency";
 import { formatArs, PIECE_CURRENCY, PIECE_PRICE_ARS } from "@/lib/pricing";
@@ -676,7 +677,9 @@ export function StudioEditor({
   };
 
   function startFrom(document: DesignDocumentV8, options?: { blank?: boolean; label?: string }) {
-    setHistory(historyFrom(document));
+    const nextHistory = historyFrom(document);
+    historyRef.current = nextHistory;
+    setHistory(nextHistory);
     setSelectedId(null);
     setStarted(true);
     setFromBlank(options?.blank === true);
@@ -696,9 +699,11 @@ export function StudioEditor({
       );
       if (!ok) return;
     }
-    startFrom(cloneInspirationDocument(source.document), {
+    const document = cloneInspirationDocument(source.document);
+    startFrom(document, {
       label: `Empezamos con «${source.name}». Podés cambiar todo.`,
     });
+    router.replace(`/crear?inspiracion=${id}`);
   }
 
   if (!started) {
@@ -934,50 +939,17 @@ function loadInitial(): {
     };
   }
 
-  const loaded = loadSessionDesign(window.sessionStorage);
-  if (loaded.persist) writeDesign(window.sessionStorage, loaded.document);
-  if (loaded.recovered) {
-    return {
-      ...loaded,
-      started: true,
-      saveLabel: "Recuperamos el diseño de esta sesión.",
-    };
-  }
-
-  const params = new URLSearchParams(window.location.search);
-  const inspiration = getInspiration(params.get("inspiracion"));
-  if (inspiration) {
-    const document = cloneInspirationDocument(inspiration.document);
-    writeDesign(window.sessionStorage, document);
-    return {
-      document,
-      notice: null,
-      persist: false,
-      recovered: false,
-      started: true,
-      saveLabel: `Empezamos con «${inspiration.name}». Podés cambiar todo.`,
-    };
-  }
-
-  const templateId = params.get("plantilla");
-  const template = templateList.find((item) => item.id === templateId);
-  if (template) {
-    const document = createDocument(template.id);
-    writeDesign(window.sessionStorage, document);
-    return {
-      document,
-      notice: null,
-      persist: false,
-      recovered: false,
-      started: true,
-      saveLabel: "El diseño se guarda en esta sesión.",
-    };
-  }
-
+  const boot = resolveStudioBootstrap({
+    search: window.location.search,
+    storage: window.sessionStorage,
+  });
   return {
-    ...loaded,
-    started: false,
-    saveLabel: "El diseño se guarda en esta sesión.",
+    document: boot.document,
+    notice: boot.notice,
+    persist: boot.persist,
+    recovered: boot.recovered,
+    started: boot.started,
+    saveLabel: boot.saveLabel,
   };
 }
 

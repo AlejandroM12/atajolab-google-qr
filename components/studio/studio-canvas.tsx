@@ -194,7 +194,7 @@ function TextNode({
       fontFamily={fonts[element.font]}
       fill={element.fill}
       align={element.align}
-      lineHeight={1.15}
+      lineHeight={1.25}
       wrap="word"
       draggable
       dragBoundFunc={(pos) => dragLimit(element, pos, px, stageWidth, stageHeight)}
