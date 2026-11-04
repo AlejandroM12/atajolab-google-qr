@@ -33,7 +33,7 @@ jobs:
       # CI-only placeholder, not a real secret.
       ORDER_ACCESS_SECRET: ci-order-access-secret-0123456789abcdef
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v4
         with:
           version: 11.1.3
