@@ -13,11 +13,14 @@ import {
   studioCommercialFilename,
 } from "./print/download.ts";
 import {
+  describeMailDispatchError,
   dispatchPurchaseAccessMail,
   mailDispatchAuthorized,
+  mailDispatchFailureReason,
   mailNotifyBackoffMs,
   openAccessToken,
   PURCHASE_ACCESS_KIND,
+  runMailDispatchJob,
   sealAccessToken,
   type MailNotificationRow,
   type PurchaseNotifyOrder,
@@ -278,6 +281,72 @@ function memoryRecovery(orders: RecoveryCandidate[]) {
     mailDispatchAuthorized(`Bearer ${"s".repeat(16)}`, { MAIL_DISPATCH_SECRET: "s".repeat(16) }),
     true,
   );
+
+  const prismaErr = Object.assign(new Error("Invalid `prisma.mailNotification.findMany()`"), {
+    name: "PrismaClientKnownRequestError",
+    code: "P2021",
+    meta: { table: "public.MailNotification" },
+  });
+  const described = describeMailDispatchError(prismaErr);
+  assert.equal(described.kind, "prisma");
+  assert.equal(described.prismaCode, "P2021");
+  assert.equal(described.table, "public.MailNotification");
+  assert.equal(described.detail?.includes("mailNotification"), true);
+  assert.equal(mailDispatchFailureReason(prismaErr), "P2021:public.MailNotification");
+
+  const txErr = new Error("Transaction API error: Transaction not found.");
+  assert.equal(describeMailDispatchError(txErr).kind, "transaction");
+
+  const poolErr = new Error('ERROR: prepared statement "s1" already exists');
+  assert.equal(describeMailDispatchError(poolErr).kind, "pooler");
+
+  const leaked = describeMailDispatchError(
+    new Error("fail postgresql://user:secret@host/db Bearer abc.def email me@example.com"),
+  );
+  assert.equal(leaked.detail?.includes("secret"), false);
+  assert.equal(leaked.detail?.includes("me@example.com"), false);
+  assert.equal(leaked.detail?.includes("Bearer ***"), true);
+}
+
+{
+  const paid = memoryNotify(
+    { status: "PAID", buyerEmail: buyer, artwork: v8Artwork("Lock-free dispatch") },
+    [pendingRow()],
+  );
+  const outbox = sender("sent");
+  const result = await runMailDispatchJob({
+    now,
+    originHref: origin,
+    sender: outbox,
+    store: paid.store,
+    secret,
+    orderId: publicId,
+  });
+  assert.equal("ok" in result && result.ok === false, false);
+  assert.equal("sent" in result && result.sent === 1, true);
+
+  const failingStore: PurchaseNotifyStore = {
+    ...paid.store,
+    async reclaimStale() {
+      throw Object.assign(new Error("table missing"), {
+        code: "P2021",
+        name: "PrismaClientKnownRequestError",
+        meta: { table: "public.MailNotification" },
+      });
+    },
+  };
+  const failed = await runMailDispatchJob({
+    now,
+    originHref: origin,
+    sender: outbox,
+    store: failingStore,
+    secret,
+  });
+  assert.equal("ok" in failed && failed.ok === false, true);
+  if ("ok" in failed && failed.ok === false) {
+    assert.equal(failed.error, "dispatch-failed");
+    assert.equal(failed.reason, "P2021:public.MailNotification");
+  }
 }
 
 {

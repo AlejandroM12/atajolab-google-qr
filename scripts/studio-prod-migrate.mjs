@@ -42,10 +42,13 @@ function classifyDatabaseUrl(raw) {
   if (!/\.neon\.tech$/i.test(host)) {
     return { ok: false, reason: "refuses-non-neon-host" };
   }
+  if (/-pooler\./i.test(host)) {
+    return { ok: false, reason: "refuses-neon-pooler-use-direct-host" };
+  }
   if (!/sslmode=require/i.test(url.search)) {
     return { ok: false, reason: "requires-sslmode-require" };
   }
-  return { ok: true, hostClass: "neon", db: url.pathname.replace(/^\//, "") || null };
+  return { ok: true, hostClass: "neon-direct", db: url.pathname.replace(/^\//, "") || null };
 }
 
 function runPrisma(args) {
