@@ -18,7 +18,9 @@ import type { ExportValidation } from "@/lib/studio/export/validate";
 import type { DesignValidation } from "@/lib/studio/validation";
 
 const toolButton =
-  "inline-flex h-10 items-center justify-center rounded-xl border border-line bg-card px-3 text-sm font-semibold hover:border-accent disabled:cursor-not-allowed disabled:opacity-50";
+  "inline-flex h-10 items-center justify-center rounded-xl border border-line bg-card px-3 text-sm font-semibold text-foreground hover:border-accent disabled:cursor-not-allowed disabled:opacity-50";
+const primaryButton =
+  "inline-flex h-11 w-full items-center justify-center rounded-xl border border-transparent bg-accent px-3 text-sm font-semibold text-white hover:bg-accent-strong disabled:cursor-not-allowed disabled:opacity-50";
 const fieldClass = "mt-1 h-10 w-full rounded-xl border border-line bg-background px-3 text-sm";
 
 export function StudioToolbar({
@@ -202,7 +204,7 @@ export function StudioProperties({
           </label>
           <button
             type="button"
-            className={`${toolButton} mt-3 w-full bg-accent text-white hover:bg-accent-strong disabled:opacity-50`}
+            className={`${primaryButton} mt-3`}
             disabled={!exportValidation.ready || busy || !buyerEmail.trim()}
             onClick={onCreateOrder}
           >
