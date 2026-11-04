@@ -4,7 +4,25 @@ const KEY_PATTERN = /^[A-Za-z0-9_-]{43}$/;
 
 /** Opaque client idempotency key for one logical Studio purchase attempt. */
 export function createStudioOrderIdempotencyKey(): string {
+  // Browser-safe: studio-editor is a client component and cannot rely on node:crypto alone.
+  if (typeof globalThis.crypto?.getRandomValues === "function") {
+    const bytes = new Uint8Array(32);
+    globalThis.crypto.getRandomValues(bytes);
+    return bytesToBase64Url(bytes);
+  }
   return randomBytes(32).toString("base64url");
+}
+
+function bytesToBase64Url(bytes: Uint8Array): string {
+  let binary = "";
+  for (let index = 0; index < bytes.length; index += 1) {
+    binary += String.fromCharCode(bytes[index]!);
+  }
+  const base64 =
+    typeof globalThis.btoa === "function"
+      ? globalThis.btoa(binary)
+      : Buffer.from(bytes).toString("base64");
+  return base64.replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
 }
 
 export function isStudioOrderIdempotencyKey(value: string): boolean {
