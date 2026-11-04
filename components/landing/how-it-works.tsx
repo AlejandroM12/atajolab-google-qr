@@ -3,16 +3,16 @@ import { SectionHeading } from "@/components/section-heading";
 
 const steps = [
   {
-    title: "Elegí",
-    detail: "Seleccioná si querés recibir reseñas en Google o compartir la ubicación de tu negocio.",
+    title: "Creá",
+    detail: "Elegí una plantilla de ejemplo o empezá desde cero en el lienzo.",
   },
   {
     title: "Personalizá",
-    detail: "Elegí el diseño, el tamaño y el mensaje. También podés agregar el nombre y logo de tu negocio.",
+    detail: "Editá textos, colores, tipografías e imágenes directamente sobre el cartel.",
   },
   {
-    title: "Descargá",
-    detail: "Completá tu compra y descargá los archivos listos para imprimir.",
+    title: "Pagá y descargá",
+    detail: "Confirmá el pago y bajá PNG, SVG y PDF listos para imprimir.",
   },
 ];
 

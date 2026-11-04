@@ -5,7 +5,7 @@ import { ButtonLink } from "@/components/button-link";
 
 export function CreateQrNav() {
   const pathname = usePathname();
-  const creating = pathname === "/crear";
+  const creating = pathname === "/crear" || pathname === "/studio";
 
   if (creating) {
     return (

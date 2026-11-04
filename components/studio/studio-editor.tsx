@@ -33,7 +33,13 @@ import { formatArs, PIECE_CURRENCY, PIECE_PRICE_ARS } from "@/lib/pricing";
 import { qrContrastIssue } from "@/lib/studio/qr-rules";
 import { validateForExport } from "@/lib/studio/export/validate";
 import { serializeDesign } from "@/lib/studio/serialize";
-import { applySuggestedColors, applyTemplate, createDocument } from "@/lib/studio/templates";
+import {
+  applySuggestedColors,
+  applyTemplate,
+  createBlankDocument,
+  createDocument,
+  templateList,
+} from "@/lib/studio/templates";
 import {
   MAX_ELEMENTS,
   QR_MIN_MM,
@@ -55,6 +61,7 @@ export function StudioEditor({
 }) {
   const router = useRouter();
   const [session] = useState(loadInitial);
+  const [started, setStarted] = useState(session.recovered);
   const [history, setHistory] = useState<HistoryState>(() => historyFrom(session.document));
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -435,17 +442,17 @@ export function StudioEditor({
     setSelectedId(id);
   }
 
-  async function onPrepareOrder() {
-    if (!checkoutEnabled) return;
+  async function onPrepareOrder(): Promise<boolean> {
+    if (!checkoutEnabled) return false;
     const current = historyRef.current?.present;
-    if (!current || prepareBusy || orderBusy) return;
+    if (!current || prepareBusy || orderBusy) return false;
     const gate = validateForExport(current);
     if (!gate.ready) {
       setNotice(gate.errors[0]?.message ?? "El diseño todavía no está listo para preparar el pedido.");
-      return;
+      return false;
     }
     setPrepareBusy(true);
-    setPrepareProgress("Iniciando sesión segura…");
+    setPrepareProgress("Preparando…");
     setError(null);
     setNotice(null);
     setPrepareReady(false);
@@ -458,12 +465,10 @@ export function StudioEditor({
         document: current,
         onProgress: (progress) => {
           if (progress.total === 0) {
-            setPrepareProgress("Sin imágenes nuevas para subir.");
+            setPrepareProgress("Preparando…");
             return;
           }
-          setPrepareProgress(
-            `Subiendo ${progress.completed + 1}/${progress.total}${progress.currentAlt ? `: ${progress.currentAlt}` : ""}`,
-          );
+          setPrepareProgress(`Subiendo ${progress.completed + 1}/${progress.total}`);
         },
       });
       if (!prepared.ok) {
@@ -479,7 +484,7 @@ export function StudioEditor({
                 ? "El cobro de Studio no está habilitado en este momento."
                 : "No pudimos subir una imagen. Revisá el archivo y reintentá.",
         );
-        return;
+        return false;
       }
       commercialDocumentRef.current = prepared.commercialDocument;
       preparedFromRef.current = current;
@@ -487,16 +492,14 @@ export function StudioEditor({
       createdPublicIdRef.current = null;
       setPrepareReady(true);
       setPrepareProgress(null);
-      setSaveLabel(
-        prepared.uploaded + prepared.reused > 0
-          ? `Imágenes privadas listas (${prepared.uploaded} nuevas, ${prepared.reused} reutilizadas). El lienzo no cambió.`
-          : "Diseño listo sin imágenes nuevas. Podés crear el pedido.",
-      );
+      setSaveLabel("Diseño listo para comprar.");
+      return true;
     } catch {
       setPrepareReady(false);
       commercialDocumentRef.current = null;
       preparedFromRef.current = null;
       setError("No pudimos preparar las imágenes. Probá de nuevo.");
+      return false;
     } finally {
       setPrepareBusy(false);
       setPrepareProgress(null);
@@ -509,13 +512,6 @@ export function StudioEditor({
       router.push(`/pedido/${createdPublicIdRef.current}`);
       return;
     }
-    const commercial = commercialDocumentRef.current;
-    const current = historyRef.current?.present;
-    if (!commercial || !current || preparedFromRef.current !== current || !prepareReady) {
-      setError("Prepará de nuevo las imágenes antes de crear el pedido.");
-      setPrepareReady(false);
-      return;
-    }
     const email = parseBuyerEmail(buyerEmail);
     if (!email) {
       setError(
@@ -525,9 +521,25 @@ export function StudioEditor({
       );
       return;
     }
+    const current = historyRef.current?.present;
+    if (!current) return;
     const gate = validateForExport(current);
     if (!gate.ready) {
       setNotice(gate.errors[0]?.message ?? "El diseño todavía no está listo para el pedido.");
+      return;
+    }
+
+    setError(null);
+    setNotice(null);
+
+    let commercial = commercialDocumentRef.current;
+    if (!commercial || preparedFromRef.current !== current || !prepareReady) {
+      const prepared = await onPrepareOrder();
+      if (!prepared) return;
+      commercial = commercialDocumentRef.current;
+    }
+    if (!commercial) {
+      setError("No pudimos preparar el diseño. Intentá de nuevo.");
       return;
     }
 
@@ -536,8 +548,6 @@ export function StudioEditor({
     }
 
     setOrderBusy(true);
-    setError(null);
-    setNotice(null);
     try {
       const response = await fetch("/api/orders", {
         method: "POST",
@@ -656,17 +666,70 @@ export function StudioEditor({
     },
   };
 
+  function startFrom(document: DesignDocumentV8) {
+    setHistory(historyFrom(document));
+    setSelectedId(null);
+    setStarted(true);
+    setNotice(null);
+    setError(null);
+    setSaveLabel("El diseño se guarda en esta sesión.");
+    if (typeof window !== "undefined") writeDesign(window.sessionStorage, document);
+  }
+
+  if (!started) {
+    return (
+      <div className="studio-shell mx-auto w-full max-w-3xl overflow-x-hidden px-4 py-10 sm:py-14">
+        <header className="max-w-2xl">
+          <p className="text-sm font-semibold text-accent">AtajoLab</p>
+          <h1 className="mt-1 text-3xl text-foreground sm:text-4xl">Creá tu cartel QR</h1>
+          <p className="mt-3 text-sm leading-6 text-muted">
+            Elegí un ejemplo o empezá desde cero. Después podés cambiar todo sobre el lienzo
+            {checkoutEnabled ? ` y comprar por ${formatArs(PIECE_PRICE_ARS)} ${PIECE_CURRENCY}.` : "."}
+          </p>
+        </header>
+        <ul className="mt-8 grid gap-3 sm:grid-cols-2">
+          {templateList.map((template) => (
+            <li key={template.id}>
+              <button
+                type="button"
+                className="flex h-full w-full flex-col items-start rounded-3xl border border-line bg-card px-5 py-5 text-left hover:border-accent"
+                onClick={() => startFrom(createDocument(template.id))}
+              >
+                <span className="text-lg font-semibold">{template.name}</span>
+                <span className="mt-2 text-sm text-muted">{template.description}</span>
+              </button>
+            </li>
+          ))}
+          <li className="sm:col-span-2">
+            <button
+              type="button"
+              className="flex w-full flex-col items-start rounded-3xl border border-dashed border-line bg-card px-5 py-5 text-left hover:border-accent"
+              onClick={() => startFrom(createBlankDocument())}
+            >
+              <span className="text-lg font-semibold">Desde cero</span>
+              <span className="mt-2 text-sm text-muted">
+                Lienzo blanco con un título y el código QR. Agregá y reorganizá lo que quieras.
+              </span>
+            </button>
+          </li>
+        </ul>
+      </div>
+    );
+  }
+
   return (
     <div className="studio-shell mx-auto w-full max-w-7xl overflow-x-hidden px-4 py-6">
-      <header className="mb-5 max-w-3xl">
-        <p className="text-sm font-semibold text-accent">AtajoLab Studio</p>
-        <h1 className="mt-1 text-3xl text-foreground">Editor de cartel</h1>
-        <p className="mt-2 text-sm leading-6 text-muted">
-          Editor A6. El diseño queda en esta sesión
-          {checkoutEnabled
-            ? `. Podés preparar imágenes privadas, crear un pedido congelado y pagar ${formatArs(PIECE_PRICE_ARS)} ${PIECE_CURRENCY}.`
-            : ". El cobro comercial no está habilitado en este entorno."}
-          {exportEnabled ? " Las descargas PNG/SVG/PDF de prueba son solo internas." : ""}
+      <header className="mb-4 flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h1 className="text-2xl text-foreground sm:text-3xl">Tu cartel</h1>
+          <p className="mt-1 text-sm text-muted">
+            Editá directo en el lienzo
+            {checkoutEnabled ? ` · ${formatArs(PIECE_PRICE_ARS)} ${PIECE_CURRENCY}` : ""}
+          </p>
+        </div>
+        <p className="text-xs text-muted" role="status">
+          {saveLabel}
+          {imageBusy ? " Preparando imagen…" : ""}
         </p>
       </header>
       {error ? (
@@ -685,11 +748,7 @@ export function StudioEditor({
           </button>
         </div>
       ) : null}
-      <p className="mb-4 text-xs text-muted" role="status">
-        {saveLabel}
-        {imageBusy ? " Estamos preparando la imagen…" : ""}
-      </p>
-      <div className="grid min-w-0 items-start gap-4 lg:grid-cols-[15rem_minmax(0,1fr)_18rem]">
+      <div className="grid min-w-0 items-start gap-4 lg:grid-cols-[13rem_minmax(0,1fr)_17rem]">
         <aside className="hidden min-w-0 lg:block">
           <StudioToolbar layout="column" {...toolbar} />
         </aside>
@@ -715,7 +774,6 @@ export function StudioEditor({
             checkoutEnabled={checkoutEnabled}
             prepareBusy={prepareBusy}
             prepareProgress={prepareProgress}
-            prepareReady={prepareReady}
             orderBusy={orderBusy}
             buyerEmail={buyerEmail}
             onBuyerEmailChange={setBuyerEmail}
@@ -746,9 +804,6 @@ export function StudioEditor({
             }}
             onBringQrForward={onBringQrForward}
             onExport={onExport}
-            onPrepareOrder={() => {
-              void onPrepareOrder();
-            }}
             onCreateOrder={() => {
               void onCreateOrder();
             }}
