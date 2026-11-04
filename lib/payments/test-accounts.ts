@@ -40,6 +40,39 @@ export function classifyAccount(
   return "unverified";
 }
 
+/**
+ * Any sign that the payer is a Mercado Pago test user. Used in production,
+ * where a public buyer profile usually hides email and tags.
+ */
+export function looksLikeTestUser(
+  account: MercadoPagoAccount | null,
+  linkedPaymentEmail?: string | null,
+): boolean {
+  const linkedEmail = linkedPaymentEmail?.trim() ?? "";
+  if (TEST_USER_EMAIL.test(linkedEmail)) return true;
+  if (!account) return false;
+  return (
+    (account.tags ?? []).includes("test_user") ||
+    account.testUserFlag === true ||
+    TEST_USER_EMAIL.test(account.email?.trim() ?? "") ||
+    TEST_USER_NICKNAME.test(account.nickname?.trim() ?? "")
+  );
+}
+
+/**
+ * Production parties. The seller is proven elsewhere: the payment's
+ * collector_id must equal the token owner, and the token owner was checked
+ * as a real account by GET /users/me. The buyer can be a guest (no payer id)
+ * or have a hidden profile; both are normal for real purchases. Only a payer
+ * that looks like a test user is rejected.
+ */
+export function classifyProductionParties(
+  payer: MercadoPagoAccount | null,
+  linkedPaymentEmail?: string | null,
+): PaymentParties {
+  return looksLikeTestUser(payer, linkedPaymentEmail) ? "unverified" : "verified-real";
+}
+
 export function classifyParties(payer: AccountKind, collector: AccountKind): PaymentParties {
   if (payer === "test-user" && collector === "test-user") return "verified-test-users";
   if (payer === "real" && collector === "real") return "verified-real";

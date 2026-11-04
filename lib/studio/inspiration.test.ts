@@ -8,7 +8,9 @@ import {
 import {
   renderInspirationPreviewDataUrl,
   renderInspirationPreviewSvg,
+  renderInspirationPreviewWebp,
 } from "@/lib/studio/inspiration-preview";
+import { inspirationPreviewUrl } from "@/lib/studio/inspiration-preview-url";
 import { wrapStudioText } from "@/lib/studio/export/wrap";
 import { validateForExport } from "@/lib/studio/export/validate";
 import { A6_HEIGHT_MM, A6_WIDTH_MM } from "@/lib/studio/types";
@@ -31,6 +33,15 @@ for (const item of inspirationDesigns) {
   );
   const dataUrl = await renderInspirationPreviewDataUrl(item.document);
   assert.match(dataUrl, /^data:image\/png;base64,/);
+  const webp = await renderInspirationPreviewWebp(item.document);
+  assert.equal(webp.subarray(0, 4).toString("ascii"), "RIFF");
+  assert.equal(webp.subarray(8, 12).toString("ascii"), "WEBP");
+  // Gallery previews must stay small: a fraction of the print PNG.
+  assert.ok(webp.length < 120_000, `${item.id}: preview too large (${webp.length} bytes)`);
+  assert.ok(webp.length * 2 < dataUrl.length, `${item.id}: preview not much smaller than the print PNG`);
+  assert.match(inspirationPreviewUrl(item.id), /^\/previews\/inspiracion\/[a-z]+\?v=[0-9a-f]{10}$/);
+  // The demo QR is a Google review link, so it also passes the commercial gate.
+  assert.equal(validateForExport(item.document, { requireGoogleLink: true }).ready, true, item.id);
 
   for (const element of item.document.elements) {
     assert.ok(element.x >= -0.05, `${item.id}/${element.role}: left of sheet`);

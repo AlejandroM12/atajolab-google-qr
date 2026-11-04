@@ -2,31 +2,54 @@ import Link from "next/link";
 import { Container } from "@/components/container";
 import { LogoMark } from "@/components/logo";
 
+const linkClass = "hover:text-accent-strong";
+
 export function SiteFooter() {
   return (
     <footer className="mt-auto border-t border-line bg-card">
-      <Container className="grid gap-8 py-10 sm:grid-cols-[minmax(0,1.4fr)_auto]">
+      <Container className="grid gap-8 py-10 sm:grid-cols-[minmax(0,1.4fr)_auto_auto]">
         <div className="max-w-xl">
           <div className="flex items-center gap-2.5">
             <LogoMark />
             <p className="text-sm font-semibold">AtajoLab</p>
           </div>
           <p className="mt-4 text-sm leading-relaxed text-muted">
-            Creá carteles y stickers QR personalizados para tu negocio. Descargalos listos para imprimir.
+            Creá carteles QR personalizados para que tus clientes te encuentren y te dejen reseñas en Google.
+            Descargalos listos para imprimir.
           </p>
         </div>
-        <nav aria-label="Pie de página" className="flex flex-col gap-2 text-sm font-semibold">
-          <Link href="/#como-funciona" className="hover:text-accent-strong">
+        <nav aria-label="Producto" className="flex flex-col gap-2 text-sm font-semibold">
+          <Link href="/#como-funciona" className={linkClass}>
             Cómo funciona
           </Link>
-          <Link href="/#formatos" className="hover:text-accent-strong">
-            Formatos
-          </Link>
-          <Link href="/crear" className="hover:text-accent-strong">
+          <Link href="/crear" className={linkClass}>
             Crear mi cartel QR
           </Link>
-          <Link href="/recuperar" className="hover:text-accent-strong">
+          <Link href="/preguntas-frecuentes" className={linkClass}>
+            Preguntas frecuentes
+          </Link>
+          <Link href="/recuperar" className={linkClass}>
             Recuperar descargas
+          </Link>
+          <Link href="/contacto" className={linkClass}>
+            Contacto
+          </Link>
+        </nav>
+        <nav aria-label="Legal" className="flex flex-col gap-2 text-sm">
+          <Link href="/terminos" className={linkClass}>
+            Términos y condiciones
+          </Link>
+          <Link href="/privacidad" className={linkClass}>
+            Privacidad
+          </Link>
+          <Link href="/reembolsos" className={linkClass}>
+            Reembolsos
+          </Link>
+          <Link
+            href="/arrepentimiento"
+            className="mt-1 inline-flex w-fit items-center rounded-full border border-line px-3 py-1 font-semibold hover:border-accent hover:text-accent-strong"
+          >
+            Botón de arrepentimiento
           </Link>
         </nav>
       </Container>

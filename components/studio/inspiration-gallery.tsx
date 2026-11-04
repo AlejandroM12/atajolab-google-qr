@@ -36,8 +36,16 @@ export function InspirationGallery({
                 style={{ aspectRatio: "105 / 148" }}
                 aria-hidden="true"
               >
-                {/* eslint-disable-next-line @next/next/no-img-element -- preview is a same-origin data URL from Studio export */}
-                <img src={previews[item.id] ?? ""} alt="" className="h-full w-full rounded-lg object-contain" />
+                {/* eslint-disable-next-line @next/next/no-img-element -- prebuilt same-origin WebP (app/previews), already sized */}
+                <img
+                  src={previews[item.id] ?? ""}
+                  alt=""
+                  width={600}
+                  height={846}
+                  loading="lazy"
+                  decoding="async"
+                  className="h-full w-full rounded-lg object-contain"
+                />
               </div>
               <span className="mt-3 text-sm font-semibold leading-snug">{item.name}</span>
               <span className="mt-1 text-xs leading-5 text-muted">{item.description}</span>

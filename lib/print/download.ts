@@ -2,6 +2,7 @@ import { isPremiumTemplate, templateSpec, type ArtworkExportFormat, type Product
 import { DIGITAL_DOWNLOADS_ENABLED, type OrderStatus } from "@/lib/delivery";
 import type { OrderArtwork } from "@/lib/order-draft";
 import { prisma } from "@/lib/db";
+import { logError } from "@/lib/log";
 import { digitalDeliveryAllowed } from "@/lib/payments/access";
 import { isPublicId } from "@/lib/public-id";
 import { isArtworkFormat, renderArtworkFile } from "@/lib/print/render";
@@ -183,7 +184,8 @@ export async function buildOrderDownloadAttachment(input: {
 
   try {
     if (decision.artwork.version === STUDIO_COMMERCIAL_ARTWORK_VERSION) {
-      return studioCommercialAttachment({
+      // await keeps async failures (DB, hydration) inside this try/catch.
+      return await studioCommercialAttachment({
         artwork: decision.artwork,
         format: decision.format,
         orderId: input.publicId,
@@ -194,7 +196,7 @@ export async function buildOrderDownloadAttachment(input: {
     const file = await artworkAttachment(decision.artwork, decision.format);
     return { ok: true, body: file.body, headers: file.headers };
   } catch (error) {
-    console.error("artwork export failed", error instanceof Error ? error.name : "unknown");
+    logError("download.export-failed", error, { publicId: input.publicId, format: decision.format });
     return { ok: false, status: 500, error: "export-failed" };
   }
 }

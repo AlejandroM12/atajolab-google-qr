@@ -2,14 +2,10 @@ import { ButtonLink } from "@/components/button-link";
 import { Container } from "@/components/container";
 import { SectionHeading } from "@/components/section-heading";
 import { inspirationDesigns } from "@/lib/studio/inspiration";
-import { renderInspirationPreviewDataUrl } from "@/lib/studio/inspiration-preview";
+import { inspirationPreviewUrls } from "@/lib/studio/inspiration-preview-url";
 
-export async function Inspiration() {
-  const previews = Object.fromEntries(
-    await Promise.all(
-      inspirationDesigns.map(async (item) => [item.id, await renderInspirationPreviewDataUrl(item.document)] as const),
-    ),
-  );
+export function Inspiration() {
+  const previews = inspirationPreviewUrls();
 
   return (
     <section id="inspiracion" className="scroll-mt-24 border-t border-line py-16 sm:py-20">
@@ -21,9 +17,13 @@ export async function Inspiration() {
           {inspirationDesigns.map((item) => (
             <li key={item.id} className="flex flex-col rounded-3xl border border-line bg-card p-4">
               <div className="rounded-2xl bg-background p-1" style={{ aspectRatio: "105 / 148" }}>
-                {/* eslint-disable-next-line @next/next/no-img-element -- preview is a same-origin data URL from Studio export */}
+                {/* eslint-disable-next-line @next/next/no-img-element -- prebuilt same-origin WebP (app/previews), already sized */}
                 <img
                   src={previews[item.id]}
+                  width={600}
+                  height={846}
+                  loading="lazy"
+                  decoding="async"
                   alt={`Ejemplo ${item.name}: ${item.business}`}
                   className="h-full w-full rounded-xl object-contain"
                 />

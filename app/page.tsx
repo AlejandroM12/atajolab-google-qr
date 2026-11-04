@@ -5,17 +5,20 @@ import { Hero } from "@/components/landing/hero";
 import { HowItWorks } from "@/components/landing/how-it-works";
 import { Includes } from "@/components/landing/includes";
 import { Inspiration } from "@/components/landing/inspiration";
+import { SITE_DESCRIPTION, SITE_NAME, homeStructuredData, jsonLd, siteUrl } from "@/lib/site";
+
+const TITLE = "Cartel QR para reseñas de Google";
 
 export const metadata: Metadata = {
-  title: "Carteles y stickers QR para tu negocio",
-  description:
-    "Creá un cartel o sticker con un código QR para que tus clientes dejen una reseña en Google. Personalizalo y descargalo listo para imprimir.",
+  title: { absolute: `${TITLE} · ${SITE_NAME}` },
+  description: SITE_DESCRIPTION,
+  alternates: { canonical: "/" },
   openGraph: {
-    title: "Carteles y stickers QR para tu negocio",
-    description:
-      "Creá un cartel o sticker con un código QR para que tus clientes dejen una reseña en Google. Personalizalo y descargalo listo para imprimir.",
+    title: TITLE,
+    description: SITE_DESCRIPTION,
     locale: "es_AR",
     type: "website",
+    url: "/",
   },
 };
 
@@ -28,6 +31,7 @@ export default function HomePage() {
       <Inspiration />
       <Formats />
       <Includes />
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLd(homeStructuredData(siteUrl())) }} />
     </main>
   );
 }

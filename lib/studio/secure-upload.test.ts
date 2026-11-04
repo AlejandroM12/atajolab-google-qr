@@ -215,6 +215,13 @@ async function pngOpaque(): Promise<Buffer> {
 
   const orderLimiter = createMemoryRateLimiter();
   assert.equal((await limitStudioOrderCreate("ip-2", draftHash, orderLimiter)).ok, true);
+
+  // The shared "untrusted" key (no trusted proxy) gets a site-wide cap that
+  // ordinary traffic does not reach, instead of the per-visitor number.
+  const sharedLimiter = createMemoryRateLimiter();
+  for (let index = 0; index < STUDIO_DRAFT_LIMIT.limit * 5; index += 1) {
+    assert.equal((await limitStudioDraftSession("untrusted", sharedLimiter)).ok, true);
+  }
   setStudioRateLimiterForTests(null);
 }
 

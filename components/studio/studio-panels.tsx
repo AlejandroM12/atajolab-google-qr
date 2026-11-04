@@ -1,5 +1,7 @@
 "use client";
 
+import Link from "next/link";
+import { useState } from "react";
 import { NumberField } from "@/components/studio/number-field";
 import { elementLabel } from "@/lib/studio/document";
 import { formatArs, PIECE_CURRENCY, PIECE_PRICE_ARS } from "@/lib/pricing";
@@ -176,11 +178,12 @@ export function StudioProperties({
   onReplaceImage: (id: string) => void;
   onBringQrForward: () => void;
   onExport: (format: "png" | "svg" | "pdf") => void;
-  onCreateOrder: () => void;
+  onCreateOrder: (acceptedTerms: boolean) => void;
 }) {
   const index = selected ? document.elements.findIndex((element) => element.id === selected.id) : -1;
   const blockingIssues = exportValidation.issues.filter((issue) => issue.blocking);
   const busy = prepareBusy || orderBusy;
+  const [termsAccepted, setTermsAccepted] = useState(false);
   return (
     <div className="flex min-w-0 flex-col gap-4">
       {checkoutEnabled ? (
@@ -201,12 +204,35 @@ export function StudioProperties({
               required
               className="mt-2 h-11 w-full rounded-xl border border-line bg-background px-3 text-sm"
             />
+            <span className="mt-1 block text-xs leading-5 text-muted">
+              Te enviamos ahí el acceso a tus archivos. Lo usamos solo para esta compra.
+            </span>
+          </label>
+          <label className="mt-3 flex items-start gap-2 text-xs leading-5">
+            <input
+              type="checkbox"
+              checked={termsAccepted}
+              onChange={(event) => setTermsAccepted(event.target.checked)}
+              disabled={busy}
+              className="mt-0.5 h-4 w-4 shrink-0"
+            />
+            <span>
+              Acepto los{" "}
+              <Link href="/terminos" target="_blank" className="underline">
+                términos y condiciones
+              </Link>{" "}
+              y la{" "}
+              <Link href="/privacidad" target="_blank" className="underline">
+                política de privacidad
+              </Link>
+              . Es un producto digital: los archivos se habilitan al confirmarse el pago.
+            </span>
           </label>
           <button
             type="button"
             className={`${primaryButton} mt-3`}
-            disabled={!exportValidation.ready || busy || !buyerEmail.trim()}
-            onClick={onCreateOrder}
+            disabled={!exportValidation.ready || busy || !buyerEmail.trim() || !termsAccepted}
+            onClick={() => onCreateOrder(termsAccepted)}
           >
             {prepareBusy
               ? prepareProgress ?? "Preparando…"
@@ -215,19 +241,7 @@ export function StudioProperties({
                 : "Comprar este diseño"}
           </button>
           {!exportValidation.ready && blockingIssues.length > 0 ? (
-            <ul className="mt-3 flex flex-col gap-2">
-              {blockingIssues.map((warning) => (
-                <li key={`${warning.code}-${warning.elementId}-${warning.message}`}>
-                  <button
-                    type="button"
-                    className="w-full rounded-xl border border-warning/30 bg-warning-bg px-3 py-2 text-left text-sm text-warning"
-                    onClick={() => warning.elementId && onSelect(warning.elementId)}
-                  >
-                    {warning.message}
-                  </button>
-                </li>
-              ))}
-            </ul>
+            <BlockingIssueList issues={blockingIssues} onSelect={onSelect} tone="bg-warning-bg" />
           ) : null}
           {validation.coveredBy.length > 0 ? (
             <button type="button" className={`${toolButton} mt-3 w-full`} onClick={onBringQrForward}>
@@ -238,19 +252,7 @@ export function StudioProperties({
       ) : blockingIssues.length > 0 ? (
         <section className="rounded-3xl border border-warning/30 bg-warning-bg p-4">
           <h2 className="text-sm font-semibold text-warning">Para continuar</h2>
-          <ul className="mt-3 flex flex-col gap-2">
-            {blockingIssues.map((warning) => (
-              <li key={`${warning.code}-${warning.elementId}-${warning.message}`}>
-                <button
-                  type="button"
-                  className="w-full rounded-xl border border-warning/30 bg-card px-3 py-2 text-left text-sm text-warning"
-                  onClick={() => warning.elementId && onSelect(warning.elementId)}
-                >
-                  {warning.message}
-                </button>
-              </li>
-            ))}
-          </ul>
+          <BlockingIssueList issues={blockingIssues} onSelect={onSelect} tone="bg-card" />
           {validation.coveredBy.length > 0 ? (
             <button type="button" className={`${toolButton} mt-3 w-full`} onClick={onBringQrForward}>
               Traer QR al frente
@@ -528,6 +530,33 @@ function ColorField({ label, value, onChange }: { label: string; value: string; 
         onChange={(event) => onChange(event.target.value)}
       />
     </label>
+  );
+}
+
+/** Blocking design issues; each one selects the element it refers to. */
+function BlockingIssueList({
+  issues,
+  onSelect,
+  tone,
+}: {
+  issues: ExportValidation["issues"];
+  onSelect: (id: string | null) => void;
+  tone: "bg-warning-bg" | "bg-card";
+}) {
+  return (
+    <ul className="mt-3 flex flex-col gap-2">
+      {issues.map((warning) => (
+        <li key={`${warning.code}-${warning.elementId}-${warning.message}`}>
+          <button
+            type="button"
+            className={`w-full rounded-xl border border-warning/30 ${tone} px-3 py-2 text-left text-sm text-warning`}
+            onClick={() => warning.elementId && onSelect(warning.elementId)}
+          >
+            {warning.message}
+          </button>
+        </li>
+      ))}
+    </ul>
   );
 }
 

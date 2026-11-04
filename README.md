@@ -45,13 +45,16 @@ La aplicación queda en el puerto que muestre `pnpm dev`. Si el 3000 está ocupa
 | `STUDIO_CLEANUP_SECRET` | ≥16 caracteres. Bearer de `POST /api/studio/assets/cleanup`. |
 | `STUDIO_CHECKOUT_ENABLED` | Off por defecto. Solo `true`/`1`/`yes`/`on` habilita pedidos y checkout Studio v8. |
 | `STUDIO_EXPORT_ENABLED` | En production, vacío = export preview cerrado. |
-| `RATE_LIMIT_TRUST_PROXY` | Vacío = no confiar IP headers (bucket `untrusted`). `cloudflare` solo con origen cerrado a Cloudflare. |
+| `RATE_LIMIT_TRUST_PROXY` | Vacío = no confiar IP headers (clave compartida `untrusted`, límites por IP ×20). `xff` = IP agregada por el proxy (Render, Caddy). `cloudflare` solo con origen cerrado a Cloudflare. |
+| `RATE_LIMIT_PROXY_HOPS` | Con `xff`: cuántos proxies agregan entradas a `X-Forwarded-For` (por defecto 1). |
+| `ALERT_WEBHOOK_URL` | Opcional. Webhook https (Slack/Discord) para avisos de error del servidor. |
+| `NEXT_PUBLIC_PLAUSIBLE_DOMAIN` | Opcional. Analítica sin cookies; se lee en el build. |
 
 `MERCADOPAGO_ACCESS_TOKEN_LIVE` y `MERCADOPAGO_WEBHOOK_SECRET_LIVE` no las lee el código. No las completes.
 
 Las descargas digitales (`DIGITAL_DOWNLOADS_ENABLED`) están **siempre habilitadas en código**; no hay flag de entorno para apagarlas (evitar romper pedidos PAID). Siguen exigiendo estado PAID y cookie/clave de acceso.
 
-Checklist de producción Studio: [docs/studio-v8-production-readiness.md](docs/studio-v8-production-readiness.md). Plantilla de env de producción: [deploy/env.production.example](deploy/env.production.example).
+Checklist de lanzamiento (configuración de Render, Neon y Mercado Pago, datos legales pendientes y riesgos): [docs/produccion-lanzamiento.md](docs/produccion-lanzamiento.md). Checklist de producción Studio: [docs/studio-v8-production-readiness.md](docs/studio-v8-production-readiness.md). Plantilla de env de producción: [deploy/env.production.example](deploy/env.production.example).
 
 ## Mercado Pago
 
@@ -82,15 +85,25 @@ En desarrollo, con `EMAIL_PROVIDER` vacío, el envío se “guarda” además en
 ## Comprobaciones
 
 ```bash
-pnpm test:links
-pnpm test:orders
-pnpm test:payments
-pnpm test:files
-pnpm test:access
+pnpm test        # todos los tests unitarios (links, studio, orders, payments, files, access, platform)
 pnpm lint
 pnpm build
 pnpm typecheck
 ```
+
+Tests de integración contra el PostgreSQL local (se niegan a correr contra una base remota). CI los corre en cada PR:
+
+```bash
+for f in scripts/*-pg.integration.mjs; do
+  node --experimental-strip-types --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --import ./scripts/register-test.mjs "$f"
+done
+```
+
+## Operación
+
+- `GET /api/health`: 200 si la base responde, 503 si no. Con `Authorization: Bearer $MAIL_DISPATCH_SECRET` agrega la vista de operador: qué configuración falta (sin valores), mails fallidos, pedidos pendientes con pago aprobado y la clave de rate limit del request.
+- Los logs del servidor son JSON (una línea por evento, `event` + `level`). Buscá `payment.approved-but-ignored`: es un pago cobrado que no se acreditó.
+- Los datos del titular y los textos legales están en `lib/legal.ts`. Mientras tengan `[COMPLETAR]`, las páginas legales muestran un aviso de borrador y el formulario de arrepentimiento queda apagado.
 
 `pnpm typecheck` necesita `next-env.d.ts`, que genera `pnpm build` o `pnpm dev`.
 

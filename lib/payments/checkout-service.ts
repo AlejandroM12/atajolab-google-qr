@@ -18,6 +18,7 @@ import {
 } from "@/lib/payments/checkout-policy";
 import { decidePayment, type PaymentEnvironment, type VerifiedPayment } from "@/lib/payments/decision";
 import type { CheckoutPreference, PaymentGateway } from "@/lib/payments/gateway";
+import { reportIgnoredPayment } from "@/lib/payments/ignored-payment";
 import type { AccountKind } from "@/lib/payments/test-accounts";
 
 const CHECKOUT_TITLE = "Pieza digital con QR";
@@ -178,7 +179,10 @@ export async function reconcilePayment(input: {
       checkedAt,
       input.environment ?? paymentEnvironmentMode(),
     );
-    if (decision.action === "ignore") continue;
+    if (decision.action === "ignore") {
+      reportIgnoredPayment("reconcile", order.publicId, payment, decision);
+      continue;
+    }
     try {
       await input.store.apply(order.publicId, payment, checkedAt);
     } catch (error) {

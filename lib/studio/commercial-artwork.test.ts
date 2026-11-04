@@ -23,6 +23,8 @@ import { createStudioOrderIdempotencyKey } from "@/lib/studio/order-idempotency"
 import { createDocument } from "@/lib/studio/templates";
 import type { DesignDocumentV8 } from "@/lib/studio/types";
 import { resolveArtworkDownload } from "@/lib/print/download";
+import { isGoogleQrLink, validateForExport } from "@/lib/studio/export/validate";
+import { estimateQrVersion, QR_MIN_MODULE_MM, qrDensity, qrModuleMm } from "@/lib/studio/qr-density";
 
 function v8Body(document: DesignDocumentV8, email = "cliente@example.com") {
   return {
@@ -355,5 +357,56 @@ assert.equal(
   })?.version,
   1,
 );
+
+// The product is a Google QR: orders need a Google Maps or review link.
+{
+  const base = createDocument("corporativo");
+  const notGoogle = withQr(base, "https://example.com/promo");
+  assert.deepEqual(buildStudioCommercialArtwork(notGoogle), { ok: false, error: "studio-not-ready" });
+  const parsed = parseOrderDraft(v8Body(notGoogle), { studioDraftKey: createStudioDraftKey() });
+  assert.deepEqual(parsed, { ok: false, error: "studio-qr-not-google" });
+  const issues = validateForExport(notGoogle, { requireGoogleLink: true }).errors.map((issue) => issue.code);
+  assert.ok(issues.includes("qr-not-google"));
+  // Stored snapshots are re-rendered without the Google requirement.
+  assert.equal(
+    validateForExport(notGoogle).errors.some((issue) => issue.code === "qr-not-google"),
+    false,
+  );
+
+  for (const href of [
+    REVIEW_URL,
+    "https://maps.app.goo.gl/AbCdEfGh12345",
+    "https://www.google.com/maps/place/Caf%C3%A9+Centro/@-34.6,-58.4,17z",
+  ]) {
+    assert.equal(isGoogleQrLink(href), true, href);
+    assert.equal(buildStudioCommercialArtwork(withQr(base, href)).ok, true, href);
+  }
+  assert.equal(isGoogleQrLink("https://evil.example/maps?q=google.com"), false);
+}
+
+// QR density: long links need a bigger printed QR.
+{
+  assert.equal(estimateQrVersion("a".repeat(14)), 1);
+  assert.equal(estimateQrVersion("a".repeat(15)), 2);
+  assert.equal(estimateQrVersion("a".repeat(3000)), null);
+  assert.equal(qrDensity(REVIEW_URL, 22), "ok");
+  const longLink = `https://www.google.com/maps/place/${"x".repeat(600)}`;
+  assert.equal(qrDensity(longLink, 22), "too-dense");
+  assert.equal(qrDensity(longLink, 60), "ok");
+  const moduleMm = qrModuleMm(REVIEW_URL, 22);
+  assert.ok(moduleMm !== null && moduleMm > QR_MIN_MODULE_MM);
+
+  const base = createDocument("corporativo");
+  const veryLongLink = `https://www.google.com/maps/place/${"x".repeat(1400)}`;
+  const longQr = withQr(base, veryLongLink);
+  const qrId = longQr.elements.find((element) => element.type === "qr")!.id;
+  const dense = updateElement(longQr, qrId, { width: 30, height: 30 });
+  const gate = validateForExport(dense, { requireGoogleLink: true });
+  assert.ok(gate.errors.some((issue) => issue.code === "qr-density"));
+  // Paid snapshots only get a warning, never a blocked download.
+  const stored = validateForExport(dense);
+  assert.equal(stored.errors.some((issue) => issue.code === "qr-density"), false);
+  assert.ok(stored.warnings.some((issue) => issue.code === "qr-density"));
+}
 
 console.log("commercial-artwork tests ok");

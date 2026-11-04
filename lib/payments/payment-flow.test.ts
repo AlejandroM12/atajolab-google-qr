@@ -25,8 +25,14 @@ import {
 } from "./checkout-policy.ts";
 import { reconcilePayment, startCheckout } from "./checkout-service.ts";
 import { decidePayment, type VerifiedPayment } from "./decision.ts";
-import { classifyAccount, classifyParties } from "./test-accounts.ts";
-import { PaymentProviderError, createMercadoPagoGateway, parseMercadoPagoUser, type PaymentGateway } from "./gateway.ts";
+import { classifyAccount, classifyParties, classifyProductionParties } from "./test-accounts.ts";
+import {
+  PaymentProviderError,
+  createMercadoPagoGateway,
+  parseMercadoPagoUser,
+  paymentParties,
+  type PaymentGateway,
+} from "./gateway.ts";
 import { processPaymentNotification } from "./webhook-handler.ts";
 import { notificationIsAuthentic } from "./webhook-auth.ts";
 import type { PaymentRecord } from "../orders.ts";
@@ -1166,6 +1172,136 @@ for (const status of ["rejected", "pending", "cancelled", "in_process"] as const
       storedHash: hash,
     }),
     true,
+  );
+}
+
+// Production buyers: guest payers and private profiles must be credited.
+{
+  const seller = "100";
+  const lookups: Array<string | number | null | undefined> = [];
+  const hiddenProfile = async (_token: string, id: string | number | null | undefined) => {
+    lookups.push(id);
+    return { email: null, tags: [], nickname: "COMPRADOR123", testUserFlag: false };
+  };
+
+  // Guest checkout: no payer id at all.
+  assert.equal(
+    await paymentParties(TOKEN, { payer: null, collector_id: seller }, "production", async () => null),
+    "verified-real",
+  );
+  // Real buyer with a private profile (no email, no tags).
+  assert.equal(
+    await paymentParties(TOKEN, { payer: { id: 555 }, collector_id: seller }, "production", hiddenProfile),
+    "verified-real",
+  );
+  // Production never reads the collector profile: the seller is proven by collector_id.
+  assert.deepEqual(lookups, [555]);
+  // A failed buyer lookup does not block the sale.
+  assert.equal(
+    await paymentParties(
+      TOKEN,
+      { payer: { id: 556 }, collector_id: seller },
+      "production",
+      async () => {
+        throw new PaymentProviderError();
+      },
+    ),
+    "verified-real",
+  );
+  // Test users are still rejected in production, by profile or by linked email.
+  assert.equal(
+    await paymentParties(
+      TOKEN,
+      { payer: { id: 557 }, collector_id: seller },
+      "production",
+      async () => ({ email: null, tags: ["test_user"], nickname: null, testUserFlag: false }),
+    ),
+    "unverified",
+  );
+  assert.equal(
+    await paymentParties(
+      TOKEN,
+      { payer: { id: 558, email: "test_user_99@testuser.com" }, collector_id: seller },
+      "production",
+      async () => null,
+    ),
+    "unverified",
+  );
+  assert.equal(classifyProductionParties({ nickname: "TESTUSER4821", email: null, tags: [] }), "unverified");
+  assert.equal(classifyProductionParties(null, "persona@example.com"), "verified-real");
+
+  // Test mode keeps the strict two-sided check.
+  assert.equal(
+    await paymentParties(TOKEN, { payer: { id: 555 }, collector_id: seller }, "test", hiddenProfile),
+    "unverified",
+  );
+
+  // End to end through the decision: a guest buyer's live payment marks the order PAID.
+  const guestDecision = decidePayment(
+    record(),
+    payment({
+      liveMode: true,
+      parties: await paymentParties(TOKEN, { payer: null, collector_id: seller }, "production", async () => null),
+      collectorId: seller,
+      accountId: seller,
+    }),
+    new Date("2026-11-04T12:00:00.000Z"),
+    "production",
+  );
+  assert.equal(guestDecision.action, "mark-paid");
+
+  // A test-user payer is refused in production even with live mode and the right collector.
+  assert.equal(
+    decidePayment(
+      record(),
+      payment({
+        liveMode: true,
+        parties: await paymentParties(
+          TOKEN,
+          { payer: { id: 557 }, collector_id: seller },
+          "production",
+          async () => ({ email: null, tags: ["test_user"], nickname: null, testUserFlag: false }),
+        ),
+        collectorId: seller,
+        accountId: seller,
+      }),
+      new Date(),
+      "production",
+    ).action,
+    "ignore",
+  );
+  // Wrong amount, currency or order reference stay refused for a verified real payment.
+  for (const wrong of [{ amount: 1 }, { currency: "USD" }, { externalReference: "bbbbbbbbbbbbbbbbbbbbbbbb" }]) {
+    assert.equal(
+      decidePayment(
+        record(),
+        payment({ liveMode: true, parties: "verified-real", collectorId: seller, accountId: seller, ...wrong }),
+        new Date(),
+        "production",
+      ).action,
+      "ignore",
+      JSON.stringify(wrong),
+    );
+  }
+
+  // Live mode and collector checks still apply to a guest buyer.
+  assert.equal(
+    decidePayment(
+      record(),
+      payment({ liveMode: false, parties: "verified-real", collectorId: seller, accountId: seller }),
+      new Date(),
+      "production",
+    ).action,
+    "ignore",
+  );
+  assert.equal(
+    decidePayment(
+      record(),
+      payment({ liveMode: true, parties: "verified-real", collectorId: "999", accountId: seller }),
+      new Date(),
+      "production",
+    ).action,
+    "ignore",
   );
 }
 
