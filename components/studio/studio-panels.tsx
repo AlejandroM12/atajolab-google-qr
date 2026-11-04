@@ -83,30 +83,30 @@ export function StudioToolbar({
   );
 
   const templates = (
-    <label className="block text-sm">
-      <span className="sr-only">Plantilla de ejemplo</span>
-      <select
-        className={fieldClass}
-        value={templateId}
-        onChange={(event) => onTemplate(event.target.value as TemplateId)}
-      >
-        {templateList.map((template) => (
-          <option key={template.id} value={template.id}>
-            {template.name}
-          </option>
-        ))}
-      </select>
-      <button type="button" className={`${toolButton} mt-2 w-full`} onClick={onApplyPalette}>
-        Colores sugeridos
+    <>
+      {templateList.map((template) => (
+        <button
+          key={template.id}
+          type="button"
+          aria-pressed={templateId === template.id}
+          className={`${toolButton} h-auto min-w-0 flex-col items-start px-3 py-2 text-left ${templateId === template.id ? "border-accent bg-ok-bg" : ""}`}
+          onClick={() => onTemplate(template.id)}
+        >
+          <span>{template.name}</span>
+          <span className="text-xs font-normal text-muted">{template.description}</span>
+        </button>
+      ))}
+      <button type="button" className={`${toolButton} h-auto min-w-0 px-3 py-2 text-left text-sm`} onClick={onApplyPalette}>
+        Aplicar colores sugeridos
       </button>
-    </label>
+    </>
   );
 
   if (layout === "column") {
     return (
       <div className="flex flex-col gap-2">
         <div className="grid grid-cols-2 gap-2">{tools}</div>
-        {templates}
+        <div className="flex flex-col gap-2">{templates}</div>
       </div>
     );
   }
@@ -116,7 +116,7 @@ export function StudioToolbar({
       <div className="flex w-full min-w-0 gap-2 overflow-x-auto pb-1 [-webkit-overflow-scrolling:touch]">
         <div className="flex min-w-max gap-2">{tools}</div>
       </div>
-      {templates}
+      <div className="grid w-full min-w-0 grid-cols-1 gap-2 sm:grid-cols-2">{templates}</div>
     </div>
   );
 }

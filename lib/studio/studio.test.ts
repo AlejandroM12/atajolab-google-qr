@@ -86,6 +86,14 @@ assert.equal(blank.elements.length, 2);
 assert.equal(blank.elements.filter((element) => element.type === "qr").length, 1);
 assert.equal(blank.elements.at(-1)?.type, "qr");
 
+const classic = createDocument("clasico", ids());
+assert.equal(classic.templateId, "clasico");
+assert.equal(classic.background, "#fffcf8");
+assert.ok(classic.elements.some((element) => element.type === "qr"));
+assert.ok(createDocument("vivo", ids()).elements.length >= 4);
+assert.ok(createDocument("nocturno", ids()).elements.length >= 4);
+assert.ok(createDocument("negocio", ids()).elements.length >= 4);
+
 const moved = updateElement(document, title.id, { x: 12.5, y: 40, width: 70, height: 18 });
 const movedTitle = textOf(moved, "titulo");
 assert.equal(movedTitle.x, 12.5);

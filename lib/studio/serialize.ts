@@ -22,7 +22,14 @@ import {
 
 const ID = /^[A-Za-z0-9_-]{1,80}$/;
 const ROLE = /^[a-z][a-z0-9-]{0,31}$/;
-const TEMPLATES = new Set<TemplateId>(["corporativo", "creativo"]);
+const TEMPLATES = new Set<TemplateId>([
+  "clasico",
+  "vivo",
+  "nocturno",
+  "negocio",
+  "corporativo",
+  "creativo",
+]);
 const FONTS = new Set<StudioFont>(["source", "sora", "fraunces"]);
 const ALIGNS = new Set<TextAlign>(["left", "center", "right"]);
 

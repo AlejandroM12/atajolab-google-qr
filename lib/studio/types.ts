@@ -18,7 +18,13 @@ export const QR_PAPER = "#ffffff";
 
 export type StudioFont = "source" | "sora" | "fraunces";
 export type TextAlign = "left" | "center" | "right";
-export type TemplateId = "corporativo" | "creativo";
+export type TemplateId =
+  | "clasico"
+  | "vivo"
+  | "nocturno"
+  | "negocio"
+  | "corporativo"
+  | "creativo";
 
 export type ElementBox = {
   x: number;

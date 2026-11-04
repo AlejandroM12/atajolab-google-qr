@@ -5,7 +5,7 @@ import { formatArs, PIECE_PRICE_ARS } from "@/lib/pricing";
 
 const items = [
   "Editor visual libre sobre lienzo A6.",
-  "Plantillas de ejemplo totalmente editables.",
+  "Cuatro estilos sugeridos, totalmente editables.",
   "Código QR legible y funcional.",
   "Archivos PNG, SVG y PDF.",
   "Descarga digital después de confirmar el pago.",

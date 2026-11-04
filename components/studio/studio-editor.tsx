@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { StudioCanvas } from "@/components/studio/studio-canvas";
 import { StudioProperties, StudioToolbar } from "@/components/studio/studio-panels";
 import { parseBuyerEmail } from "@/lib/buyer-email";
@@ -38,6 +38,7 @@ import {
   applyTemplate,
   createBlankDocument,
   createDocument,
+  suggestedTemplates,
   templateList,
 } from "@/lib/studio/templates";
 import {
@@ -60,8 +61,11 @@ export function StudioEditor({
   checkoutEnabled?: boolean;
 }) {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [session] = useState(loadInitial);
-  const [started, setStarted] = useState(session.recovered);
+  const requestedTemplate = parseTemplateParam(searchParams.get("plantilla"));
+  const [started, setStarted] = useState(session.recovered || Boolean(requestedTemplate));
+  const bootstrappedTemplate = useRef(false);
   const [history, setHistory] = useState<HistoryState>(() => historyFrom(session.document));
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -104,6 +108,15 @@ export function StudioEditor({
       /* Draft cookie is best-effort on first paint; prepare flow retries. */
     });
   }, [checkoutEnabled]);
+
+  useEffect(() => {
+    if (!requestedTemplate || session.recovered || bootstrappedTemplate.current) return;
+    bootstrappedTemplate.current = true;
+    const document = createDocument(requestedTemplate);
+    setHistory(historyFrom(document));
+    setStarted(true);
+    if (typeof window !== "undefined") writeDesign(window.sessionStorage, document);
+  }, [requestedTemplate, session.recovered]);
 
   useEffect(() => {
     if (!prepareReady) return;
@@ -688,7 +701,7 @@ export function StudioEditor({
           </p>
         </header>
         <ul className="mt-8 grid gap-3 sm:grid-cols-2">
-          {templateList.map((template) => (
+          {suggestedTemplates.map((template) => (
             <li key={template.id}>
               <button
                 type="button"
@@ -713,6 +726,25 @@ export function StudioEditor({
             </button>
           </li>
         </ul>
+        <details className="mt-6">
+          <summary className="cursor-pointer text-sm font-semibold text-muted">Más estilos</summary>
+          <ul className="mt-3 grid gap-3 sm:grid-cols-2">
+            {templateList
+              .filter((template) => !suggestedTemplates.some((item) => item.id === template.id))
+              .map((template) => (
+                <li key={template.id}>
+                  <button
+                    type="button"
+                    className="flex h-full w-full flex-col items-start rounded-3xl border border-line bg-card px-5 py-4 text-left hover:border-accent"
+                    onClick={() => startFrom(createDocument(template.id))}
+                  >
+                    <span className="font-semibold">{template.name}</span>
+                    <span className="mt-1 text-sm text-muted">{template.description}</span>
+                  </button>
+                </li>
+              ))}
+          </ul>
+        </details>
       </div>
     );
   }
@@ -824,11 +856,16 @@ export function StudioEditor({
 
 function loadInitial() {
   if (typeof window === "undefined") {
-    return { document: createDocument("corporativo"), notice: null, persist: false, recovered: false };
+    return { document: createDocument("clasico"), notice: null, persist: false, recovered: false };
   }
   const loaded = loadSessionDesign(window.sessionStorage);
   if (loaded.persist) writeDesign(window.sessionStorage, loaded.document);
   return loaded;
+}
+
+function parseTemplateParam(value: string | null): TemplateId | null {
+  if (!value) return null;
+  return templateList.some((template) => template.id === value) ? (value as TemplateId) : null;
 }
 
 function isField(target: EventTarget | null): boolean {
