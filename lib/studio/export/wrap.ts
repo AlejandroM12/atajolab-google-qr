@@ -2,7 +2,8 @@ import { measureText } from "@/lib/print/fonts";
 import { studioFontRole } from "@/lib/studio/export/fonts";
 import type { StudioFont } from "@/lib/studio/types";
 
-const LINE_HEIGHT = 1.15;
+/** Keep in sync with Konva Text lineHeight in studio-canvas. */
+export const STUDIO_TEXT_LINE_HEIGHT = 1.25;
 /**
  * Browser/Konva glyph advances can differ slightly from fontkit TTF metrics.
  * Wrapping a hair early avoids edge overflow/clipping in PNG/PDF while keeping
@@ -10,14 +11,14 @@ const LINE_HEIGHT = 1.15;
  */
 const WRAP_SLACK_MM = 0.35;
 
-/** Word-wrap at a fixed size, matching the Konva editor (lineHeight 1.15, wrap word). */
+/** Word-wrap at a fixed size, matching the Konva editor (wrap word). */
 export function wrapStudioText(input: {
   text: string;
   font: StudioFont;
   fontSize: number;
   width: number;
 }): { lines: string[]; lineHeight: number } {
-  const lineHeight = round(input.fontSize * LINE_HEIGHT);
+  const lineHeight = round(input.fontSize * STUDIO_TEXT_LINE_HEIGHT);
   const wrapWidth = Math.max(1, input.width - WRAP_SLACK_MM);
   const raw = input.text.replace(/\r\n/g, "\n");
   if (raw.trim().length === 0) return { lines: [""], lineHeight };

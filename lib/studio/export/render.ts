@@ -92,11 +92,10 @@ function drawSvg(command: StudioDrawCommand, index: number): string {
   if (command.type === "text") {
     const family = studioFontFamily(command.font);
     const weight = studioFontWeight(command.font);
-    const clipId = `text-clip-${index}`;
     const lines = command.lines
       .map((line, lineIndex) => {
-        const y = command.y + lineIndex * command.lineHeight;
-        if (y + command.size * 0.2 > command.y + command.height) return "";
+        const lineTop = command.y + lineIndex * command.lineHeight;
+        if (lineTop + command.size * 0.2 > command.y + command.height) return "";
         const anchor = command.align === "center" ? "middle" : command.align === "right" ? "end" : "start";
         const x =
           command.align === "center"
@@ -104,11 +103,13 @@ function drawSvg(command: StudioDrawCommand, index: number): string {
             : command.align === "right"
               ? command.x + command.width
               : command.x;
-        return `<text x="${num(x)}" y="${num(y)}" font-family="${family}" font-weight="${weight}" font-size="${num(command.size)}" fill="${command.color}" text-anchor="${anchor}" dominant-baseline="hanging">${xml(line)}</text>`;
+        // resvg ignores dominant-baseline=hanging. Alphabetic baseline ~0.8em from the line
+        // top matches Konva top alignment and leaves room for accents + descenders.
+        const baseline = lineTop + command.size * 0.8;
+        return `<text x="${num(x)}" y="${num(baseline)}" font-family="${family}" font-weight="${weight}" font-size="${num(command.size)}" fill="${command.color}" text-anchor="${anchor}">${xml(line)}</text>`;
       })
       .join("");
-    const clipped = `<defs><clipPath id="${clipId}"><rect x="${num(command.x)}" y="${num(command.y)}" width="${num(command.width)}" height="${num(command.height)}"/></clipPath></defs><g clip-path="url(#${clipId})">${lines}</g>`;
-    return withRotation(clipped, command.x, command.y, command.width, command.height, command.rotation);
+    return withRotation(`<g>${lines}</g>`, command.x, command.y, command.width, command.height, command.rotation);
   }
 
   if (command.type === "image") {
@@ -153,8 +154,6 @@ function drawPdf(doc: PDFKit.PDFDocument, command: StudioDrawCommand): void {
 
   if (command.type === "text") {
     withPdfRotation(doc, command.x, command.y, command.width, command.height, command.rotation, () => {
-      doc.save();
-      doc.rect(mmToPt(command.x), mmToPt(command.y), mmToPt(command.width), mmToPt(command.height)).clip();
       doc.font(studioFontFile(command.font)).fontSize(mmToPt(command.size)).fillColor(command.color);
       for (let index = 0; index < command.lines.length; index += 1) {
         const y = command.y + index * command.lineHeight;
@@ -165,7 +164,6 @@ function drawPdf(doc: PDFKit.PDFDocument, command: StudioDrawCommand): void {
           lineBreak: false,
         });
       }
-      doc.restore();
     });
     return;
   }

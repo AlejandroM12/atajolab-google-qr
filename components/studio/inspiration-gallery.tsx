@@ -32,12 +32,15 @@ export function InspirationGallery({
           <li key={item.id}>
             <button type="button" className={cardButton} onClick={() => onPick(item.id)}>
               <div
-                className="w-full overflow-hidden rounded-xl bg-background [&_svg]:h-auto [&_svg]:w-full"
+                className="w-full rounded-xl bg-background p-1"
+                style={{ aspectRatio: "105 / 148" }}
                 aria-hidden="true"
-                dangerouslySetInnerHTML={{ __html: previews[item.id] ?? "" }}
-              />
-              <span className="mt-3 text-sm font-semibold">{item.name}</span>
-              <span className="mt-1 text-xs leading-relaxed text-muted">{item.description}</span>
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element -- preview is a same-origin data URL from Studio export */}
+                <img src={previews[item.id] ?? ""} alt="" className="h-full w-full rounded-lg object-contain" />
+              </div>
+              <span className="mt-3 text-sm font-semibold leading-snug">{item.name}</span>
+              <span className="mt-1 text-xs leading-5 text-muted">{item.description}</span>
               <span className="mt-3 text-sm font-semibold text-accent">Usar este diseño</span>
             </button>
           </li>

@@ -1,6 +1,8 @@
 "use client";
 
 import dynamic from "next/dynamic";
+import { useSearchParams } from "next/navigation";
+import { studioBootKey } from "@/lib/studio/bootstrap";
 import type { InspirationId } from "@/lib/studio/inspiration";
 
 const StudioEditor = dynamic(
@@ -24,8 +26,12 @@ export function StudioLoader({
   checkoutEnabled?: boolean;
   inspirationPreviews: Record<InspirationId, string>;
 }) {
+  const searchParams = useSearchParams();
+  const bootKey = studioBootKey(searchParams.toString());
+
   return (
     <StudioEditor
+      key={bootKey}
       exportEnabled={exportEnabled}
       checkoutEnabled={checkoutEnabled}
       inspirationPreviews={inspirationPreviews}
