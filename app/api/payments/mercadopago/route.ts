@@ -1,4 +1,5 @@
 import { applyVerifiedPayment, findPaymentRecord } from "@/lib/orders";
+import { logError, logWarn } from "@/lib/log";
 import { processPaymentNotification } from "@/lib/payments/webhook-handler";
 import { notificationIsAuthentic } from "@/lib/payments/webhook-auth";
 import { paymentRuntime, paymentWebhookSecret } from "@/lib/payments/mercadopago";
@@ -14,6 +15,12 @@ export async function POST(request: Request) {
     secret: paymentWebhookSecret(),
   });
 
+  if (!authentic) {
+    // Unsigned or forged: answer before touching Mercado Pago or the database.
+    logWarn("payment.webhook.unauthentic", { topic: topic ?? "" });
+    return new Response(null, { status: 401, headers: { "cache-control": "no-store" } });
+  }
+
   const runtime = await paymentRuntime();
   const status = await processPaymentNotification({
     authentic,
@@ -26,7 +33,7 @@ export async function POST(request: Request) {
   });
 
   if (status === 500) {
-    console.error("mercadopago webhook retry");
+    logError("payment.webhook.retry", undefined, { topic: topic ?? "" });
   }
 
   return new Response(null, { status, headers: { "cache-control": "no-store" } });

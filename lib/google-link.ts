@@ -194,6 +194,34 @@ export function validateGoogleLink(input: string, goal: GoogleLinkGoal): LinkRes
   return decision(kind, goal, url.href);
 }
 
+const KGS_SHORT = /^\/kgs\/[A-Za-z0-9_-]{4,64}\/?$/;
+const GPAGE_PROFILE = /^\/(?:r\/[A-Za-z0-9_-]{4,128}|[A-Za-z0-9][A-Za-z0-9-]{1,80})\/?$/i;
+const REVIEW_DIALOG_HASH = /^#lrd=0x[0-9a-f]{1,32}:0x[0-9a-f]{1,32},\d/i;
+
+/**
+ * Other ways Google lets a business share itself, accepted for Studio QR codes
+ * (the legacy order flow keeps validateGoogleLink only):
+ * - g.co/kgs/<code>: "Compartir" from the business panel in Google Search.
+ * - g.page/r/<id> or g.page/<name>: the Business Profile link.
+ * - google.<tld>/search?…#lrd=0x…:0x…,<n>: the classic "write a review" dialog.
+ * - google.<tld>/search?…kgmid=…: newer Search share links.
+ * Same safety checks as validateGoogleLink (https, no credentials/ports/punycode).
+ */
+export function isGoogleBusinessShareLink(input: string): boolean {
+  const inspected = inspectUrl(input);
+  if (!inspected.ok) return false;
+  const url = inspected.url;
+  if (url.href.length > MAX_URL_LENGTH) return false;
+
+  if (url.hostname === "g.co") return KGS_SHORT.test(url.pathname);
+  if (url.hostname === "g.page" || url.hostname === "www.g.page") return GPAGE_PROFILE.test(url.pathname);
+
+  const host = classifyGoogleCountryHost(url.hostname);
+  if (host !== "standard" || url.pathname !== "/search") return false;
+  if (REVIEW_DIALOG_HASH.test(url.hash)) return true;
+  return /^\/[a-z]\/[A-Za-z0-9_-]{2,64}$/.test(url.searchParams.get("kgmid") ?? "");
+}
+
 function decision(kind: LinkKind, goal: GoogleLinkGoal, href: string): LinkResult {
   if (goal === "ubicacion") {
     if (kind.type === "location") return { ok: true, href, goal };

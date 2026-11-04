@@ -20,6 +20,7 @@ import type { VerifiedPayment } from "@/lib/payments/decision";
 import {
   classifyAccount,
   classifyParties,
+  classifyProductionParties,
   type MercadoPagoAccount,
   type PaymentParties,
 } from "@/lib/payments/test-accounts";
@@ -84,7 +85,7 @@ function asPreference(value: {
   };
 }
 
-type PaymentIdentity = {
+export type PaymentIdentity = {
   id?: number | string;
   status?: string;
   transaction_amount?: number;
@@ -204,12 +205,31 @@ async function readAccount(
   return parsed.account;
 }
 
-async function paymentParties(accessToken: string, payment: PaymentIdentity): Promise<PaymentParties> {
-  const [payer, collector] = await Promise.all([
-    readAccount(accessToken, payment.payer?.id),
-    readAccount(accessToken, payment.collector_id),
-  ]);
+export async function paymentParties(
+  accessToken: string,
+  payment: PaymentIdentity,
+  environment: string | undefined,
+  lookup: typeof readAccount = readAccount,
+): Promise<PaymentParties> {
   const payerEmail = typeof payment.payer?.email === "string" ? payment.payer.email : null;
+
+  if (environment === "production") {
+    // The seller is proven by collector_id === token owner (checked in decidePayment).
+    // The buyer profile is only read to reject test users. A guest buyer has no id
+    // and a real profile is usually private, so a missing or failed lookup is fine.
+    let payer: MercadoPagoAccount | null = null;
+    try {
+      payer = await lookup(accessToken, payment.payer?.id);
+    } catch {
+      payer = null;
+    }
+    return classifyProductionParties(payer, payerEmail);
+  }
+
+  const [payer, collector] = await Promise.all([
+    lookup(accessToken, payment.payer?.id),
+    lookup(accessToken, payment.collector_id),
+  ]);
 
   // The buyer profile hides email and tags. The linked email comes from this
   // payment resource, fetched with the server token, never from the webhook body.
@@ -224,6 +244,7 @@ export function createMercadoPagoGateway(env: {
 }): PaymentGateway {
   const accessToken = env.accessToken?.trim() ?? "";
   const collectorId = env.collectorId.trim();
+  const environment = env.environment;
 
   if (credentialShape(accessToken, env.environment) !== "ready" || !ACCOUNT_ID.test(collectorId)) {
     throw new PaymentProviderError();
@@ -299,7 +320,7 @@ export function createMercadoPagoGateway(env: {
         if (!payment) return null;
         payment.collectorId = accountId(response.collector_id);
         payment.accountId = collectorId;
-        payment.parties = await paymentParties(accessToken, response);
+        payment.parties = await paymentParties(accessToken, response, environment);
         return payment;
       } catch (error) {
         if (error instanceof PaymentProviderError) throw error;
@@ -328,7 +349,7 @@ export function createMercadoPagoGateway(env: {
           if (!mapped) continue;
           mapped.collectorId = accountId(payment.collector_id);
           mapped.accountId = collectorId;
-          mapped.parties = await paymentParties(accessToken, payment);
+          mapped.parties = await paymentParties(accessToken, payment, environment);
           verified.push(mapped);
         }
 

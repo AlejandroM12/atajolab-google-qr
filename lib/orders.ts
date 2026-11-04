@@ -20,6 +20,7 @@ import {
   studioOrderRequestHashesMatch,
 } from "@/lib/studio/order-idempotency";
 import { dispatchPurchaseAccessMail } from "@/lib/purchase-notify";
+import { logError } from "@/lib/log";
 
 export type StoredOrder = {
   publicId: string;
@@ -412,7 +413,7 @@ export async function applyVerifiedPayment(
   try {
     await (options?.dispatch ?? defaultPurchaseDispatch)(publicId);
   } catch (error) {
-    console.error("purchase notify dispatch failed", error instanceof Error ? error.name : "unknown");
+    logError("mail.purchase-dispatch-failed", error, { publicId });
   }
 }
 

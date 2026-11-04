@@ -59,6 +59,10 @@ import {
   type TemplateId,
 } from "@/lib/studio/types";
 import { elementsCoveringQr, validateDesign } from "@/lib/studio/validation";
+import { trackEvent } from "@/lib/analytics";
+
+/** The editor sells Google QR signs: require a Google Maps or review link. */
+const COMMERCIAL_VALIDATION = { requireGoogleLink: true } as const;
 
 export function StudioEditor({
   exportEnabled = true,
@@ -103,6 +107,10 @@ export function StudioEditor({
     redo: () => {},
     remove: () => {},
   });
+
+  useEffect(() => {
+    trackEvent("editor_opened");
+  }, []);
 
   useEffect(() => {
     if (!checkoutEnabled) return;
@@ -456,7 +464,7 @@ export function StudioEditor({
     if (!checkoutEnabled) return false;
     const current = historyRef.current?.present;
     if (!current || prepareBusy || orderBusy) return false;
-    const gate = validateForExport(current);
+    const gate = validateForExport(current, COMMERCIAL_VALIDATION);
     if (!gate.ready) {
       setNotice(gate.errors[0]?.message ?? "El diseño todavía no está listo para preparar el pedido.");
       return false;
@@ -516,8 +524,12 @@ export function StudioEditor({
     }
   }
 
-  async function onCreateOrder() {
+  async function onCreateOrder(acceptedTerms: boolean) {
     if (!checkoutEnabled || orderBusy || prepareBusy) return;
+    if (!acceptedTerms) {
+      setError("Para comprar tenés que aceptar los términos y la política de privacidad.");
+      return;
+    }
     if (createdPublicIdRef.current) {
       router.push(`/pedido/${createdPublicIdRef.current}`);
       return;
@@ -533,7 +545,7 @@ export function StudioEditor({
     }
     const current = historyRef.current?.present;
     if (!current) return;
-    const gate = validateForExport(current);
+    const gate = validateForExport(current, COMMERCIAL_VALIDATION);
     if (!gate.ready) {
       setNotice(gate.errors[0]?.message ?? "El diseño todavía no está listo para el pedido.");
       return;
@@ -568,6 +580,7 @@ export function StudioEditor({
           email,
           document: commercial,
           idempotencyKey: purchaseIdempotencyKeyRef.current,
+          acceptedTerms,
         }),
       });
       const body = (await response.json().catch(() => null)) as
@@ -585,6 +598,7 @@ export function StudioEditor({
         return;
       }
       createdPublicIdRef.current = publicId;
+      trackEvent("order_created");
       router.push(`/pedido/${publicId}`);
       // Keep orderBusy true after success to block double-submit while navigating.
     } catch {
@@ -600,7 +614,7 @@ export function StudioEditor({
     }
     const current = historyRef.current?.present;
     if (!current || exportBusy) return;
-    const gate = validateForExport(current);
+    const gate = validateForExport(current, COMMERCIAL_VALIDATION);
     if (!gate.ready) {
       setNotice(gate.errors[0]?.message ?? "El diseño todavía no está listo para exportar.");
       return;
@@ -653,7 +667,7 @@ export function StudioEditor({
 
   const selected = history.present.elements.find((element) => element.id === selectedId) ?? null;
   const validation = useMemo(() => validateDesign(history.present), [history.present]);
-  const exportValidation = useMemo(() => validateForExport(history.present), [history.present]);
+  const exportValidation = useMemo(() => validateForExport(history.present, COMMERCIAL_VALIDATION), [history.present]);
   const toolbar = {
     templateId: history.present.templateId,
     canUndo: history.past.length > 0 || drafting,
@@ -693,6 +707,7 @@ export function StudioEditor({
   function applyInspiration(id: InspirationId) {
     const source = getInspiration(id);
     if (!source) return;
+    trackEvent("inspiration_picked", { design: id });
     if (started) {
       const ok = window.confirm(
         "Esto reemplaza el diseño actual del lienzo. ¿Querés continuar?",
@@ -902,8 +917,8 @@ export function StudioEditor({
             }}
             onBringQrForward={onBringQrForward}
             onExport={onExport}
-            onCreateOrder={() => {
-              void onCreateOrder();
+            onCreateOrder={(acceptedTerms) => {
+              void onCreateOrder(acceptedTerms);
             }}
           />
         </aside>
@@ -959,8 +974,11 @@ function contextualTips(exportValidation: ExportValidation, fromBlank: boolean):
     tips.push("¿No sabés cómo empezar? Explorá diseños listos para personalizar.");
   }
   const codes = new Set(exportValidation.issues.map((issue) => issue.code));
-  if (codes.has("qr-empty") || codes.has("qr-url")) {
-    tips.push("El QR necesita un enlace http o https.");
+  if (codes.has("qr-empty") || codes.has("qr-url") || codes.has("qr-not-google")) {
+    tips.push("Pegá el enlace de tu ficha de Google Maps o el de reseñas de Google.");
+  }
+  if (codes.has("qr-density")) {
+    tips.push("Si el QR queda muy denso, agrandalo o usá el enlace corto de Google Maps.");
   }
   if (codes.has("qr-covered")) {
     tips.push("Evitá tapar el QR con otros elementos.");
@@ -1015,6 +1033,11 @@ function studioOrderErrorMessage(code: string): string {
     return "No pudimos validar el intento de compra. Prepará de nuevo e intentá otra vez.";
   }
   if (code === "invalid-email") return "Revisá el correo antes de continuar.";
+  if (code === "terms-required") return "Para comprar tenés que aceptar los términos y la política de privacidad.";
+  if (code === "studio-qr-not-google") {
+    return "El QR tiene que llevar el enlace de tu ficha de Google Maps o el de reseñas de Google.";
+  }
+  if (code === "studio-not-ready") return "Revisá los avisos del diseño antes de continuar.";
   if (code === "rate-limited") return "Llegaste al límite de pedidos. Esperá un rato y reintentá.";
   if (code === "database-unavailable" || code === "order-failed") {
     return "No pudimos guardar el pedido. Intentá de nuevo en un momento.";

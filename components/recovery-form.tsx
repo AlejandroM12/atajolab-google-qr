@@ -2,6 +2,7 @@
 
 import { useState, type FormEvent } from "react";
 import { parseBuyerEmail } from "@/lib/buyer-email";
+import { trackEvent } from "@/lib/analytics";
 
 export function RecoveryForm() {
   const [email, setEmail] = useState("");
@@ -32,6 +33,7 @@ export function RecoveryForm() {
         "Listo. Si ese correo tiene compras confirmadas, preparamos el enlace. Esta respuesta no indica si el correo tiene compras.",
       );
       setEmail("");
+      trackEvent("recovery_requested");
     } catch {
       setError("No pudimos preparar el acceso. Intentá de nuevo en un momento.");
     } finally {

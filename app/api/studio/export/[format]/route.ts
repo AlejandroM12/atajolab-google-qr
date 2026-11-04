@@ -1,9 +1,13 @@
+import { readBodyText } from "@/lib/http/body";
+import { ROUTE_LIMITS, consumeBuckets, ipBucket, rateLimitedResponse } from "@/lib/rate-limit/policies";
+import { studioClientKeyFromRequest, studioRequestTrusted } from "@/lib/studio/draft-session";
 import { studioExportAllowed } from "@/lib/studio/export/access";
 import {
   exportStudioDesign,
   isStudioExportFormat,
   studioContentDisposition,
 } from "@/lib/studio/export/index";
+import { sharedRateLimiter } from "@/lib/studio/rate-limits";
 import { parseDesign } from "@/lib/studio/serialize";
 
 /** Internal Studio preview only. Not wired to orders or commercial downloads. */
@@ -17,6 +21,10 @@ export async function POST(
     return Response.json({ error: "export-disabled" }, { status: 403, headers: noStore() });
   }
 
+  if (!studioRequestTrusted(request)) {
+    return Response.json({ error: "origin-rejected" }, { status: 403, headers: noStore() });
+  }
+
   const { format } = await context.params;
   if (!isStudioExportFormat(format)) {
     return Response.json({ error: "invalid-format" }, { status: 400, headers: noStore() });
@@ -27,13 +35,19 @@ export async function POST(
     return Response.json({ error: "invalid-body" }, { status: 400, headers: noStore() });
   }
 
+  // Rendering is CPU heavy: cap per client before reading the body.
+  const limited = await consumeBuckets(sharedRateLimiter(), [
+    ipBucket("studio:export", studioClientKeyFromRequest(request), ROUTE_LIMITS.exportIp),
+  ]);
+  if (!limited.ok) return rateLimitedResponse(limited);
+
   let raw = "";
   try {
-    raw = await request.text();
+    raw = await readBodyText(request, MAX_BODY_CHARS);
   } catch {
     return Response.json({ error: "invalid-body" }, { status: 400, headers: noStore() });
   }
-  if (raw.length === 0 || raw.length > MAX_BODY_CHARS) {
+  if (raw.length === 0) {
     return Response.json({ error: "invalid-body" }, { status: 400, headers: noStore() });
   }
 

@@ -4,6 +4,7 @@ import {
   mailDispatchAuthorized,
   runMailDispatchJob,
 } from "@/lib/purchase-notify";
+import { logError } from "@/lib/log";
 
 /**
  * Processes durable purchase-access mail notifications (Resend / local outbox).
@@ -35,22 +36,16 @@ export async function POST(request: Request) {
     return Response.json({ ok: true, ...result }, { status: 200, headers: noStore() });
   } catch (error) {
     if (isDatabaseUnavailable(error)) {
-      console.error(
-        "mail dispatch failed",
-        JSON.stringify({ kind: "database-unavailable", name: "DatabaseUnavailable" }),
-      );
+      logError("mail.dispatch-failed", undefined, { kind: "database-unavailable" });
       return Response.json({ error: "database-unavailable" }, { status: 503, headers: noStore() });
     }
     const described = describeMailDispatchError(error);
-    console.error(
-      "mail dispatch failed",
-      JSON.stringify({
-        name: described.name,
-        kind: described.kind,
-        prismaCode: described.prismaCode ?? null,
-        detail: described.detail ?? null,
-      }),
-    );
+    logError("mail.dispatch-failed", undefined, {
+      errorName: described.name,
+      kind: described.kind,
+      prismaCode: described.prismaCode ?? null,
+      detail: described.detail ?? null,
+    });
     return Response.json(
       {
         error: "dispatch-failed",

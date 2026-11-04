@@ -13,6 +13,8 @@ const eslintConfig = defineConfig([
     "build/**",
     "next-env.d.ts",
     "lib/**/*.test.ts",
+    // Local, gitignored scratch files (dev mail outbox, render experiments).
+    ".data/**",
   ]),
 ]);
 

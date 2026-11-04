@@ -2,6 +2,8 @@ import type { Metadata, Viewport } from "next";
 import { Fraunces, Source_Sans_3, Sora } from "next/font/google";
 import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
+import { AnalyticsScript } from "@/components/analytics-script";
+import { SITE_DESCRIPTION, SITE_NAME, siteUrl } from "@/lib/site";
 import "./globals.css";
 
 const sourceSans = Source_Sans_3({
@@ -23,20 +25,25 @@ const fraunces = Fraunces({
 });
 
 export const metadata: Metadata = {
+  metadataBase: siteUrl(),
   title: {
-    default: "AtajoLab Google QR",
-    template: "%s · AtajoLab Google QR",
+    default: SITE_NAME,
+    template: `%s · ${SITE_NAME}`,
   },
-  description:
-    "Creá un cartel o sticker QR para que tus clientes dejen una reseña en Google o encuentren tu negocio. Descargalo listo para imprimir.",
+  description: SITE_DESCRIPTION,
   openGraph: {
-    title: "AtajoLab Google QR",
-    description:
-      "Creá un cartel o sticker QR para que tus clientes dejen una reseña en Google o encuentren tu negocio. Descargalo listo para imprimir.",
+    title: SITE_NAME,
+    description: SITE_DESCRIPTION,
+    siteName: SITE_NAME,
     locale: "es_AR",
     type: "website",
   },
-  applicationName: "AtajoLab Google QR",
+  twitter: {
+    card: "summary_large_image",
+    title: SITE_NAME,
+    description: SITE_DESCRIPTION,
+  },
+  applicationName: SITE_NAME,
 };
 
 export const viewport: Viewport = {
@@ -61,6 +68,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
           {children}
         </div>
         <SiteFooter />
+        <AnalyticsScript />
       </body>
     </html>
   );

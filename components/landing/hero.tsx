@@ -1,9 +1,9 @@
 import { ButtonLink } from "@/components/button-link";
 import { Container } from "@/components/container";
-import { DEMO_BUSINESS_NAME, designSampleSvg } from "@/components/landing/samples";
+import { DEMO_BUSINESS_NAME, SAMPLE_HEIGHT_PX, SAMPLE_WIDTH_PX, sampleImageUrl } from "@/lib/landing-samples";
 
 export function Hero() {
-  const sample = designSampleSvg("stand-classic");
+  const sample = sampleImageUrl("stand-classic");
 
   return (
     <section className="relative overflow-hidden">
@@ -34,11 +34,15 @@ export function Hero() {
           </p>
         </div>
         <figure className="mx-auto w-full max-w-sm">
-          <div
-            className="[&_svg]:block [&_svg]:h-auto [&_svg]:w-full"
-            role="img"
-            aria-label={`Ejemplo del diseño Clásico para ${DEMO_BUSINESS_NAME}`}
-            dangerouslySetInnerHTML={{ __html: sample }}
+          {/* eslint-disable-next-line @next/next/no-img-element -- prebuilt same-origin WebP (app/previews), already sized */}
+          <img
+            src={sample}
+            width={SAMPLE_WIDTH_PX}
+            height={SAMPLE_HEIGHT_PX}
+            fetchPriority="high"
+            decoding="async"
+            alt={`Ejemplo del diseño Clásico para ${DEMO_BUSINESS_NAME}`}
+            className="block h-auto w-full"
           />
           <figcaption className="mt-3 text-center text-sm text-muted">
             Ejemplo de muestra · {DEMO_BUSINESS_NAME}

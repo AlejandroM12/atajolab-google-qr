@@ -184,6 +184,7 @@ export type OrderDraftError =
   | "accent-contrast"
   | "review-unverified"
   | "studio-not-ready"
+  | "studio-qr-not-google"
   | "studio-draft-key"
   | "studio-embedded-image"
   | "studio-assets"
@@ -1065,13 +1066,20 @@ function parseStudioV8Draft(
   // Commercial snapshot must not embed images — client dehydrates first.
   if (documentHasDataUrls(parsed.document)) return { ok: false, error: "studio-embedded-image" };
 
-  const exportCheck = validateForExport(parsed.document);
+  const exportCheck = validateForExport(parsed.document, { requireGoogleLink: true });
   if (!exportCheck.ready) {
     const codes = new Set(exportCheck.errors.map((issue) => issue.code));
     if (codes.has("qr-covered") || codes.has("out-of-bounds") || codes.has("composition" as never)) {
       return { ok: false, error: "composition" };
     }
-    if (codes.has("qr-empty") || codes.has("missing-qr") || codes.has("qr-url") || codes.has("qr-size")) {
+    if (codes.has("qr-not-google")) return { ok: false, error: "studio-qr-not-google" };
+    if (
+      codes.has("qr-empty") ||
+      codes.has("missing-qr") ||
+      codes.has("qr-url") ||
+      codes.has("qr-size") ||
+      codes.has("qr-density")
+    ) {
       return { ok: false, error: "studio-not-ready" };
     }
     if (codes.has("image-src")) return { ok: false, error: "studio-embedded-image" };

@@ -4,6 +4,7 @@ import {
   type RateLimiter,
   type RateLimitResult,
 } from "@/lib/rate-limit/postgres";
+import { ipScopedLimit } from "@/lib/rate-limit/policies";
 
 const HOUR_MS = 60 * 60 * 1000;
 
@@ -20,6 +21,9 @@ export function studioRateLimiter(): RateLimiter {
   return sharedLimiter;
 }
 
+/** Shared Postgres limiter for every route (Studio and others). */
+export const sharedRateLimiter = studioRateLimiter;
+
 /** Test seam. */
 export function setStudioRateLimiterForTests(limiter: RateLimiter | null): void {
   sharedLimiter = limiter;
@@ -33,7 +37,11 @@ export async function limitStudioDraftSession(
   clientKey: string,
   limiter: RateLimiter = studioRateLimiter(),
 ): Promise<RateLimitResult> {
-  return limiter.consume(`studio:draft:${clientKey}`, STUDIO_DRAFT_LIMIT.limit, STUDIO_DRAFT_LIMIT.windowMs);
+  return limiter.consume(
+    `studio:draft:${clientKey}`,
+    ipScopedLimit(STUDIO_DRAFT_LIMIT.limit, clientKey),
+    STUDIO_DRAFT_LIMIT.windowMs,
+  );
 }
 
 export async function limitStudioUpload(
@@ -43,7 +51,7 @@ export async function limitStudioUpload(
 ): Promise<RateLimitResult> {
   const byIp = await limiter.consume(
     `studio:upload:ip:${clientKey}`,
-    STUDIO_UPLOAD_IP_LIMIT.limit,
+    ipScopedLimit(STUDIO_UPLOAD_IP_LIMIT.limit, clientKey),
     STUDIO_UPLOAD_IP_LIMIT.windowMs,
   );
   if (!byIp.ok) return byIp;
@@ -61,7 +69,7 @@ export async function limitStudioOrderCreate(
 ): Promise<RateLimitResult> {
   const byIp = await limiter.consume(
     `studio:order:ip:${clientKey}`,
-    STUDIO_ORDER_IP_LIMIT.limit,
+    ipScopedLimit(STUDIO_ORDER_IP_LIMIT.limit, clientKey),
     STUDIO_ORDER_IP_LIMIT.windowMs,
   );
   if (!byIp.ok) return byIp;

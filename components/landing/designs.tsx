@@ -1,6 +1,6 @@
 import { ButtonLink } from "@/components/button-link";
 import { Container } from "@/components/container";
-import { DEMO_BUSINESS_NAME, designSampleSvg } from "@/components/landing/samples";
+import { DEMO_BUSINESS_NAME, SAMPLE_HEIGHT_PX, SAMPLE_WIDTH_PX, sampleImageUrl } from "@/lib/landing-samples";
 import { SectionHeading } from "@/components/section-heading";
 import { premiumTemplates } from "@/lib/artwork";
 
@@ -14,12 +14,18 @@ export function Designs() {
         <ul className="mt-10 grid gap-4 sm:grid-cols-2">
           {premiumTemplates.map((template) => (
             <li key={template.id} className="flex flex-col rounded-3xl border border-line bg-background p-4">
-              <div
-                className="overflow-hidden rounded-2xl bg-card [&_svg]:h-auto [&_svg]:w-full"
-                role="img"
-                aria-label={`Ejemplo del diseño ${template.name} para ${DEMO_BUSINESS_NAME}`}
-                dangerouslySetInnerHTML={{ __html: designSampleSvg(template.id) }}
-              />
+              <div className="overflow-hidden rounded-2xl bg-card">
+                {/* eslint-disable-next-line @next/next/no-img-element -- prebuilt same-origin WebP (app/previews), already sized */}
+                <img
+                  src={sampleImageUrl(template.id)}
+                  width={SAMPLE_WIDTH_PX}
+                  height={SAMPLE_HEIGHT_PX}
+                  loading="lazy"
+                  decoding="async"
+                  alt={`Ejemplo del diseño ${template.name} para ${DEMO_BUSINESS_NAME}`}
+                  className="block h-auto w-full"
+                />
+              </div>
               <h3 className="mt-4 text-lg font-semibold">{template.name}</h3>
               <p className="mt-1 text-sm leading-relaxed text-muted">{template.description}</p>
               <div className="mt-4">
