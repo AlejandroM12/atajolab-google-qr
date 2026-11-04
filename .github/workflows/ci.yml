@@ -32,8 +32,6 @@ jobs:
       APP_URL: http://localhost:3000
       # CI-only placeholder, not a real secret.
       ORDER_ACCESS_SECRET: ci-order-access-secret-0123456789abcdef
-      # Integration tests use mocked Mercado Pago test-mode payments.
-      MERCADOPAGO_ENV: test
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -60,6 +58,9 @@ jobs:
           --exit-code
 
       - name: Postgres integration tests
+        env:
+          # Mocked Mercado Pago test-mode payments; unit tests run without it.
+          MERCADOPAGO_ENV: test
         run: |
           set -e
           for script in scripts/*-pg.integration.mjs; do
