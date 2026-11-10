@@ -24,12 +24,11 @@ import {
   removeElement,
   replaceElement,
   replaceImage,
-  restoreAllParked,
-  restoreParked,
   setBackground,
   updateElement,
   withGeometry,
 } from "@/lib/studio/document";
+import { recoverAll, recoverElement } from "@/lib/studio/canvas-space";
 import { commitDraft, flushDraft, historyFrom, redo, replacePresent, undo, type HistoryState } from "@/lib/studio/history";
 import { createId } from "@/lib/studio/ids";
 import { prepareStudioImage } from "@/lib/studio/images.browser";
@@ -45,6 +44,7 @@ import {
   applyTemplate,
   createBlankDocument,
   createDocument,
+  hiddenEditedTexts,
   suggestedTemplates,
   templateList,
 } from "@/lib/studio/templates";
@@ -283,12 +283,18 @@ export function StudioEditor({
     const next = applyTemplate(current, templateId, { applyPalette: false });
     commitDocument(next);
     setError(null);
-    if (next.parked.length === 1) {
-      setNotice("Quedó 1 elemento fuera de la composición. Podés recuperarlo desde el panel.");
-    } else if (next.parked.length > 1) {
-      setNotice(`Quedaron ${next.parked.length} elementos fuera de la composición. Podés recuperarlos desde el panel.`);
+    // Never drop the user's text silently: say what the new style does not show and how to get it back.
+    const hidden = hiddenEditedTexts(current, next);
+    const from = templateList.find((item) => item.id === current.templateId)?.name ?? "el estilo anterior";
+    const to = templateList.find((item) => item.id === templateId)?.name ?? "este estilo";
+    if (hidden.length === 1) {
+      const text = hidden[0]!.text.trim();
+      const label = text.length > 32 ? `${text.slice(0, 31)}…` : text;
+      setNotice(`«${label}» no tiene lugar en ${to}. No se perdió: volvé a ${from} o tocá Deshacer.`);
+    } else if (hidden.length > 1) {
+      setNotice(`${hidden.length} textos tuyos no tienen lugar en ${to}. No se perdieron: volvé a ${from} o tocá Deshacer.`);
     } else {
-      setNotice("Cambiamos la composición. Tu fondo y tus textos se conservaron.");
+      setNotice("Cambiamos la composición. Tu fondo, tus textos y tus elementos se conservaron.");
     }
   }
 
@@ -403,29 +409,36 @@ export function StudioEditor({
   function onRestore(id: string) {
     const current = historyRef.current?.present;
     if (!current) return;
-    if (current.elements.length >= MAX_ELEMENTS) {
+    const parked = current.parked.some((item) => item.id === id);
+    if (parked && current.elements.length >= MAX_ELEMENTS) {
       setError("Llegaste al máximo de 40 elementos. Quitá uno para recuperar este.");
       return;
     }
-    const next = restoreParked(current, id);
-    if (next === current) return;
+    const result = recoverElement(current, id);
+    if (!result) return;
     setError(null);
-    setNotice(null);
-    commitDocument(next);
+    setNotice(result.clear ? null : "No había un lugar libre: lo ubicamos donde menos tapa a otros elementos. Podés moverlo.");
+    commitDocument(result.document);
     setSelectedId(id);
   }
 
   function onRestoreAll() {
     const current = historyRef.current?.present;
     if (!current) return;
-    const next = restoreAllParked(current);
+    const result = recoverAll(current);
     setError(null);
-    commitDocument(next);
-    setNotice(
-      next.parked.length > 0
-        ? "Recuperamos los que entraron. Todavía quedan elementos fuera porque el cartel llegó a 40."
-        : null,
-    );
+    commitDocument(result.document);
+    if (result.left > 0) {
+      setNotice("Recuperamos los que entraron. Todavía quedan elementos fuera porque el cartel llegó a 40.");
+    } else if (result.crowded > 0) {
+      setNotice(
+        result.crowded === 1
+          ? "Uno no tenía lugar libre: quedó donde menos tapa. Revisalo y movelo si hace falta."
+          : `${result.crowded} no tenían lugar libre: quedaron donde menos tapan. Revisalos y movelos si hace falta.`,
+      );
+    } else {
+      setNotice(null);
+    }
   }
 
   async function onFile(event: ChangeEvent<HTMLInputElement>) {
@@ -929,7 +942,9 @@ export function StudioEditor({
             onRestoreAll={onRestoreAll}
             onDiscard={(id) => {
               const current = historyRef.current?.present;
-              if (current) commitDocument(discardParked(current, id));
+              if (!current) return;
+              const parked = current.parked.some((item) => item.id === id);
+              commitDocument(parked ? discardParked(current, id) : removeElement(current, id));
             }}
             onReplaceImage={(id) => {
               replaceId.current = id;

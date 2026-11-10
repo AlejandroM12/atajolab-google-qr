@@ -1,4 +1,5 @@
 import { isHexColor } from "@/lib/color";
+import { isUserContent } from "@/lib/studio/canvas-space";
 import { createId, type IdFactory } from "@/lib/studio/ids";
 import { clampQrGeometry } from "@/lib/studio/qr-rules";
 import {
@@ -578,7 +579,10 @@ export type ApplyTemplateOptions = {
 /**
  * Switches composition while keeping user content.
  * Saves the current arrangement into layouts[current] and restores layouts[next] when present.
- * Background is preserved unless applyPalette is set.
+ * Pieces a template generated (bands, rails, frames) belong to that template: they are not
+ * carried over or parked, they come back when the user returns to it. Elements the user added
+ * (role null) and images stay on the sheet where they were. Background is preserved unless
+ * applyPalette is set.
  */
 export function applyTemplate(
   document: DesignDocumentV8,
@@ -600,18 +604,42 @@ export function applyTemplate(
 
   const pool = uniquePool([...document.elements, ...document.parked]);
   const saved = layouts[templateId];
+  // Only user content stays in the parked list; old template leftovers are dropped.
+  const keptParked = document.parked.filter((item) => item.type !== "qr" && isUserContent(item));
   let next: DesignDocumentV8;
 
   if (saved) {
-    next = restoreSavedLayout(document, templateId, saved, pool, layouts);
+    next = restoreSavedLayout(document, templateId, saved, pool, layouts, keptParked);
   } else {
-    next = buildFromFrames(document, templateId, pool, layouts, idFor);
+    next = buildFromFrames(document, templateId, pool, layouts, idFor, keptParked);
   }
 
   if (applyPalette) {
     next = applySuggestedColors(next);
   }
   return next;
+}
+
+/**
+ * Texts the user wrote that the new composition has no place for. They are not lost
+ * (layouts keep them for the previous template and undo works), but the editor says so.
+ */
+export function hiddenEditedTexts(before: DesignDocumentV8, after: DesignDocumentV8): TextElement[] {
+  const shown = new Set([...after.elements, ...after.parked].map((item) => item.id));
+  return before.elements.filter((item): item is TextElement => {
+    if (item.type !== "text" || shown.has(item.id)) return false;
+    const text = item.text.trim();
+    if (!text) return false;
+    return !Object.values(templates).some((template) =>
+      template.frames.some((frame) => frame.type === "text" && frame.role === item.role && frame.text === text),
+    );
+  });
+}
+
+/** Drops parked pieces that templates generated (left by older versions of the editor). */
+export function withoutTemplateLeftovers(document: DesignDocumentV8): DesignDocumentV8 {
+  const parked = document.parked.filter((item) => item.type !== "qr" && isUserContent(item));
+  return parked.length === document.parked.length ? document : { ...document, parked };
 }
 
 export function applySuggestedColors(document: DesignDocumentV8): DesignDocumentV8 {
@@ -638,31 +666,25 @@ function restoreSavedLayout(
   saved: TemplateLayoutSnapshot,
   pool: StudioElement[],
   layouts: DesignDocumentV8["layouts"],
+  keptParked: StudioElement[],
 ): DesignDocumentV8 {
   const byId = new Map(pool.map((item) => [item.id, item]));
+  const parkedIds = new Set(keptParked.map((item) => item.id));
   const used = new Set<string>();
   const elements: StudioElement[] = [];
 
   for (const snapshot of saved.elements) {
-    const live = byId.get(snapshot.id) ?? snapshot;
+    const live = byId.get(snapshot.id);
+    // User content deleted or parked since then must not come back with the old layout.
+    if (isUserContent(snapshot) && (!live || parkedIds.has(snapshot.id))) continue;
     used.add(snapshot.id);
-    elements.push(mergeContent(snapshot, live));
+    elements.push(mergeContent(snapshot, live ?? snapshot));
   }
 
-  const parked: StudioElement[] = [];
-  for (const snapshot of saved.parked) {
-    if (used.has(snapshot.id) || snapshot.type === "qr") continue;
-    const live = byId.get(snapshot.id) ?? snapshot;
-    used.add(snapshot.id);
-    parked.push(mergeContent(snapshot, live));
-  }
-
-  for (const item of pool) {
-    if (used.has(item.id) || item.type === "qr") continue;
-    parked.push(cloneElement(item));
-  }
-
-  const withQr = ensureSingleQr(elements, pool);
+  const carried = pool.filter(
+    (item) => !used.has(item.id) && !parkedIds.has(item.id) && item.type !== "qr" && isUserContent(item),
+  );
+  const withQr = withCarried(ensureSingleQr(elements, pool), carried);
   return {
     version: STUDIO_VERSION,
     format: { id: "a6", widthMm: A6_WIDTH_MM, heightMm: A6_HEIGHT_MM },
@@ -670,8 +692,18 @@ function restoreSavedLayout(
     templateId,
     layouts,
     elements: withQr,
-    parked: parked.slice(0, 40),
+    parked: keptParked.filter((item) => !withQr.some((element) => element.id === item.id)).slice(0, 40),
   };
+}
+
+/** Keeps the elements the user added on the sheet, below the QR, up to the element limit. */
+function withCarried(elements: StudioElement[], carried: StudioElement[]): StudioElement[] {
+  const room = Math.max(0, 40 - elements.length);
+  const extra = carried.slice(0, room).map(cloneElement);
+  if (extra.length === 0) return elements;
+  const qrIndex = elements.findIndex((item) => item.type === "qr");
+  if (qrIndex < 0) return [...elements, ...extra];
+  return [...elements.slice(0, qrIndex), ...extra, ...elements.slice(qrIndex)];
 }
 
 function buildFromFrames(
@@ -680,7 +712,9 @@ function buildFromFrames(
   pool: StudioElement[],
   layouts: DesignDocumentV8["layouts"],
   idFor: IdFactory,
+  keptParked: StudioElement[],
 ): DesignDocumentV8 {
+  const parkedIds = new Set(keptParked.map((item) => item.id));
   const template = templates[templateId];
   const used = new Set<string>();
   const elements: StudioElement[] = [];
@@ -704,15 +738,17 @@ function buildFromFrames(
     }
   }
 
-  const parked = pool.filter((item) => !used.has(item.id) && item.type !== "qr").slice(0, 40);
+  const carried = pool.filter(
+    (item) => !used.has(item.id) && !parkedIds.has(item.id) && item.type !== "qr" && isUserContent(item),
+  );
   return {
     version: STUDIO_VERSION,
     format: { id: "a6", widthMm: A6_WIDTH_MM, heightMm: A6_HEIGHT_MM },
     background: document.background,
     templateId,
     layouts,
-    elements,
-    parked,
+    elements: withCarried(elements, carried),
+    parked: keptParked.slice(0, 40),
   };
 }
 

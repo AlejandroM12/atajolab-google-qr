@@ -143,8 +143,10 @@ assert.equal(qrOf(creative).value, "https://example.com/puesto");
 assert.equal(qrOf(creative).width, 50);
 assert.equal(creative.elements.filter((element) => element.type === "qr").length, 1);
 assert.ok(creative.layouts?.corporativo);
-assert.ok(creative.parked.some((element) => element.type === "text" && element.text === "Horario de 9 a 18"));
-assert.ok(creative.parked.some((element) => element.type === "image"));
+// Elements the user added stay on the sheet; nothing from the old composition is parked.
+assert.ok(creative.elements.some((element) => element.type === "text" && element.text === "Horario de 9 a 18"));
+assert.ok(creative.elements.some((element) => element.type === "image"));
+assert.equal(creative.parked.length, 0);
 
 const painted = applySuggestedColors(creative);
 assert.equal(painted.background, "#0b5348");
@@ -158,7 +160,14 @@ assert.equal(textOf(back, "rubro").text, "Puesto del parque");
 assert.equal(qrOf(back).value, "https://example.com/puesto");
 assert.ok(back.layouts?.creativo);
 
-const restored = restoreParked(back, creative.parked.find((element) => element.text === "Horario de 9 a 18")!.id);
+assert.equal(back.elements.filter((element) => element.type === "text" && element.text === "Horario de 9 a 18").length, 1);
+assert.equal(back.elements.filter((element) => element.type === "image").length, 1);
+assert.equal(back.parked.length, 0);
+
+// Legacy parked user content can still be restored.
+const legacyText = back.elements.find((element) => element.type === "text" && element.text === "Horario de 9 a 18")!;
+const legacy = { ...back, elements: back.elements.filter((element) => element.id !== legacyText.id), parked: [legacyText] };
+const restored = restoreParked(legacy, legacyText.id);
 assert.ok(restored.elements.some((element) => element.type === "text" && element.text === "Horario de 9 a 18"));
 
 const topId = document.elements.at(-1)?.id;

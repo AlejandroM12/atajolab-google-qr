@@ -7,7 +7,7 @@ import {
   writeDesign,
   type StorageLike,
 } from "@/lib/studio/persistence";
-import { createDocument, templateList } from "@/lib/studio/templates";
+import { createDocument, templateList, withoutTemplateLeftovers } from "@/lib/studio/templates";
 import type { DesignDocumentV8 } from "@/lib/studio/types";
 
 export type StudioBootstrap = {
@@ -61,7 +61,10 @@ export function resolveStudioBootstrap(input: {
     };
   }
 
-  const loaded = loadSessionDesign(input.storage);
+  const stored = loadSessionDesign(input.storage);
+  // Sessions saved by older editors may hold template pieces in "Fuera del lienzo".
+  const cleaned = withoutTemplateLeftovers(stored.document);
+  const loaded = cleaned === stored.document ? stored : { ...stored, document: cleaned, persist: true };
   if (loaded.persist) writeDesign(input.storage, loaded.document);
   if (loaded.recovered) {
     return {

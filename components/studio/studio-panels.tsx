@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import { NumberField } from "@/components/studio/number-field";
+import { recoverableElements } from "@/lib/studio/canvas-space";
 import { elementLabel } from "@/lib/studio/document";
 import { formatArs, PIECE_CURRENCY, PIECE_PRICE_ARS } from "@/lib/pricing";
 import { qrContrastIssue } from "@/lib/studio/qr-rules";
@@ -186,6 +187,7 @@ export function StudioProperties({
   const index = selected ? document.elements.findIndex((element) => element.id === selected.id) : -1;
   const blockingIssues = exportValidation.issues.filter((issue) => issue.blocking);
   const busy = prepareBusy || orderBusy;
+  const recoverable = recoverableElements(document);
   const [termsAccepted, setTermsAccepted] = useState(false);
   return (
     <div className="flex min-w-0 flex-col gap-4">
@@ -319,11 +321,12 @@ export function StudioProperties({
         )}
       </section>
 
-      {document.parked.length > 0 ? (
+      {recoverable.length > 0 ? (
         <section className="rounded-3xl border border-warning/30 bg-warning-bg p-4">
           <h2 className="text-sm font-semibold text-warning">Fuera del lienzo</h2>
+          <p className="mt-1 text-xs leading-5 text-muted">Quedaron fuera del área que se imprime.</p>
           <ul className="mt-3 flex flex-col gap-2">
-            {document.parked.map((element) => (
+            {recoverable.map((element) => (
               <li key={element.id} className="flex min-w-0 flex-wrap items-center gap-2">
                 <span className="min-w-0 flex-1 truncate text-sm">{elementLabel(element)}</span>
                 <button type="button" className={toolButton} onClick={() => onRestore(element.id)}>
@@ -335,7 +338,7 @@ export function StudioProperties({
               </li>
             ))}
           </ul>
-          {document.parked.length > 1 ? (
+          {recoverable.length > 1 ? (
             <button type="button" className={`${toolButton} mt-3`} onClick={onRestoreAll}>
               Recuperar todos
             </button>
