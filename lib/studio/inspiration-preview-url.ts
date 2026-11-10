@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { PREVIEW_RENDER_VERSION } from "@/lib/print/fonts";
 import { inspirationDesigns, type InspirationId } from "@/lib/studio/inspiration";
 
 /**
@@ -9,7 +10,7 @@ import { inspirationDesigns, type InspirationId } from "@/lib/studio/inspiration
 const versions = new Map<InspirationId, string>(
   inspirationDesigns.map((item) => [
     item.id,
-    createHash("sha256").update(JSON.stringify(item.document)).digest("hex").slice(0, 10),
+    createHash("sha256").update(PREVIEW_RENDER_VERSION).update(JSON.stringify(item.document)).digest("hex").slice(0, 10),
   ]),
 );
 

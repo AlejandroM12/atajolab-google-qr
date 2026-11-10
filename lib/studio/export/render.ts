@@ -2,6 +2,7 @@ import { Resvg } from "@resvg/resvg-js";
 import PDFDocument from "pdfkit";
 import {
   printFonts,
+  svgFontFamily,
   studioFontFaceCss,
   studioFontFamily,
   studioFontFile,
@@ -106,7 +107,7 @@ function drawSvg(command: StudioDrawCommand, index: number): string {
         // resvg ignores dominant-baseline=hanging. Alphabetic baseline ~0.8em from the line
         // top matches Konva top alignment and leaves room for accents + descenders.
         const baseline = lineTop + command.size * 0.8;
-        return `<text x="${num(x)}" y="${num(baseline)}" font-family="${family}" font-weight="${weight}" font-size="${num(command.size)}" fill="${command.color}" text-anchor="${anchor}">${xml(line)}</text>`;
+        return `<text x="${num(x)}" y="${num(baseline)}" font-family="${svgFontFamily(family)}" font-weight="${weight}" font-size="${num(command.size)}" fill="${command.color}" text-anchor="${anchor}">${xml(line)}</text>`;
       })
       .join("");
     return withRotation(`<g>${lines}</g>`, command.x, command.y, command.width, command.height, command.rotation);

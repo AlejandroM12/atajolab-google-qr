@@ -4,17 +4,33 @@ import path from "node:path";
 
 const require = createRequire(import.meta.url);
 
+/**
+ * family + weight must match what each TTF declares, because resvg (PNG) picks
+ * fonts by the typographic family name (name ID 16, else ID 1) and OS/2 weight.
+ * A mismatch silently falls back to Source Sans. lib/print/fonts.test.ts checks it.
+ */
 export const printFonts = {
-  display: { family: "Sora SemiBold", weight: 600 },
+  display: { family: "Sora", weight: 600 },
   label: { family: "Source Sans 3 SemiBold", weight: 600 },
   body: { family: "Source Sans 3", weight: 400 },
-  fraunces: { family: "Fraunces Medium", weight: 500 },
-  frauncesBold: { family: "Fraunces SemiBold", weight: 600 },
-  sora: { family: "Sora Medium", weight: 500 },
-  sourceMedium: { family: "Source Sans 3 Medium", weight: 500 },
+  fraunces: { family: "Fraunces", weight: 500 },
+  frauncesBold: { family: "Fraunces", weight: 600 },
+  sora: { family: "Sora", weight: 500 },
+  sourceMedium: { family: "Source Sans 3 ExtraLight", weight: 500 },
 } as const;
 
+/**
+ * Value for an SVG font-family attribute. Quoted: browsers drop unquoted
+ * names with a token that starts with a digit ("Source Sans 3").
+ */
+export function svgFontFamily(family: string): string {
+  return `'${family.replace(/['\\]/g, "")}'`;
+}
+
 export type PrintFontRole = keyof typeof printFonts;
+
+/** Bump when rendered output changes for the same design, so cached preview URLs refresh. */
+export const PREVIEW_RENDER_VERSION = "2";
 
 type MeasuredFont = {
   unitsPerEm: number;

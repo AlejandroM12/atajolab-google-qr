@@ -5,6 +5,7 @@ import {
   premiumTemplates,
   type PremiumTemplateId,
 } from "@/lib/artwork";
+import { PREVIEW_RENDER_VERSION } from "@/lib/print/fonts";
 import { premiumAccent } from "@/lib/print/premium";
 import { renderArtworkFile } from "@/lib/print/render";
 
@@ -37,7 +38,7 @@ export function isSampleTemplate(id: string): id is PremiumTemplateId {
  * Inline SVG samples embedded every font as base64 (~700 KB of HTML).
  */
 export function sampleImageUrl(templateId: PremiumTemplateId): string {
-  const version = createHash("sha256").update(JSON.stringify(sampleArtwork(templateId))).digest("hex").slice(0, 10);
+  const version = createHash("sha256").update(PREVIEW_RENDER_VERSION).update(JSON.stringify(sampleArtwork(templateId))).digest("hex").slice(0, 10);
   return `/previews/plantilla/${templateId}?v=${version}`;
 }
 

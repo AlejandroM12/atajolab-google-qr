@@ -1,4 +1,4 @@
-import { fontFaceCss, fontFile, printFonts, type PrintFontRole } from "@/lib/print/fonts";
+import { fontFaceCss, fontFile, printFonts, svgFontFamily, type PrintFontRole } from "@/lib/print/fonts";
 import type { StudioFont } from "@/lib/studio/types";
 
 const FONT_ROLE: Record<StudioFont, PrintFontRole> = {
@@ -35,4 +35,4 @@ export function studioFontFiles(fonts: readonly StudioFont[]): string[] {
   return roles.map((role) => fontFile(role));
 }
 
-export { printFonts };
+export { printFonts, svgFontFamily };

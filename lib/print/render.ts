@@ -1,7 +1,7 @@
 import { Resvg } from "@resvg/resvg-js";
 import PDFDocument from "pdfkit";
 import { artworkExportFormats, type ArtworkExportFormat, type ProductArtwork } from "@/lib/artwork";
-import { fontFaceCss, fontFile, printFonts, type PrintFontRole } from "@/lib/print/fonts";
+import { fontFaceCss, fontFile, printFonts, svgFontFamily, type PrintFontRole } from "@/lib/print/fonts";
 import { layoutArtwork, type ArtworkScene, type DrawCommand } from "@/lib/print/layout";
 import { QR_QUIET_ZONE, qrMatrix } from "@/lib/print/qr-matrix";
 
@@ -109,7 +109,7 @@ function drawSvg(command: DrawCommand, index: number): string {
     const x = command.align === "center" ? command.x + command.width / 2 : command.x;
     const spacing = command.letterSpacing ? ` letter-spacing="${num(command.size * command.letterSpacing)}"` : "";
     const opacity = command.opacity !== undefined && command.opacity < 1 ? ` fill-opacity="${num(command.opacity)}"` : "";
-    return `<text x="${num(x)}" y="${num(command.y)}" font-family="${family}" font-weight="${weight}" font-size="${num(command.size)}" fill="${command.color}" text-anchor="${anchor}" dominant-baseline="hanging"${spacing}${opacity}>${xml(command.text)}</text>`;
+    return `<text x="${num(x)}" y="${num(command.y)}" font-family="${svgFontFamily(family)}" font-weight="${weight}" font-size="${num(command.size)}" fill="${command.color}" text-anchor="${anchor}" dominant-baseline="hanging"${spacing}${opacity}>${xml(command.text)}</text>`;
   }
   if (command.type === "image") {
     if (!/^[A-Za-z0-9+/]+={0,2}$/.test(command.data)) throw new Error("artwork-logo");

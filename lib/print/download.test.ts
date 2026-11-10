@@ -356,12 +356,12 @@ for (const templateId of ["minimal-elegance", "dark-premium", "brand-identity"] 
   assert.equal(decodePdf(pdfFile.body), piece.href);
 
   if (templateId === "minimal-elegance") {
-    assert.equal(svg.includes("Fraunces Medium"), true);
+    assert.equal(svg.includes(`font-family="'Fraunces'" font-weight="500"`), true);
     assert.equal(svg.includes("<image "), false);
   }
-  if (templateId === "dark-premium") assert.equal(svg.includes("Sora Medium"), true);
+  if (templateId === "dark-premium") assert.equal(svg.includes(`font-family="'Sora'" font-weight="500"`), true);
   if (templateId === "brand-identity") {
-    assert.equal(svg.includes("Source Sans 3 SemiBold"), true);
+    assert.equal(svg.includes(`font-family="'Source Sans 3 SemiBold'"`), true);
     assert.equal(svg.includes(`data:image/png;base64,${logoData.slice(0, 48)}`), true);
     assert.equal(svg.includes("ESCANE"), true);
   }
