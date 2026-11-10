@@ -73,7 +73,7 @@ function renderPdf(scene: ArtworkScene): Promise<Buffer> {
     const doc = new PDFDocument({
       size: [pt(scene.widthMm), pt(scene.heightMm)],
       margin: 0,
-      info: { Creator: "AtajoLab Google QR" },
+      info: { Creator: "AtajoLab QR" },
     });
     const chunks: Buffer[] = [];
     doc.on("data", (chunk: Buffer) => chunks.push(chunk));

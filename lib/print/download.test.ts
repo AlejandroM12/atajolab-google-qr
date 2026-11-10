@@ -137,6 +137,11 @@ for (const templateId of ["tarjeta-resena", "cartel-ubicacion", "sticker"] as co
   assert.equal(svg.includes("#14221f"), true);
   assert.equal(svg.includes("Otro negocio"), false);
 
+  // PDF metadata carries the product name; the library keeps its own Producer.
+  assert.equal(pdfInfoString(pdfFile.body, "Creator"), "AtajoLab QR");
+  assert.equal(pdfInfoString(pdfFile.body, "Producer"), "PDFKit");
+  assert.equal(pdfFile.body.toString("latin1").includes("Google QR"), false);
+
   const media = pdfFile.body.toString("latin1").match(/\/MediaBox\s*\[\s*0\s+0\s+([0-9.]+)\s+([0-9.]+)\s*\]/);
   assert.ok(media);
   const widthMm = (Number(media?.[1]) * 25.4) / 72;
@@ -258,6 +263,17 @@ function decodePdf(body: Buffer): string | null {
     }
   }
   return jsQR(new Uint8ClampedArray(image.data), image.width, image.height)?.data ?? null;
+}
+
+/** Reads a string entry of the PDF Info dictionary, inline or by indirect reference. */
+function pdfInfoString(body: Buffer, key: string): string | null {
+  const text = body.toString("latin1");
+  const inline = text.match(new RegExp(`/${key}\\s*\\(([^)]*)\\)`));
+  if (inline) return inline[1];
+  const ref = text.match(new RegExp(`/${key}\\s+(\\d+)\\s+0\\s+R`));
+  if (!ref) return null;
+  const value = text.match(new RegExp(`(?:^|\\n)${ref[1]}\\s+0\\s+obj\\s*\\(([^)]*)\\)`));
+  return value ? value[1] : null;
 }
 
 function pdfStreams(body: Buffer): Buffer[] {
