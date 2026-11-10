@@ -1,5 +1,5 @@
 import { createHash, randomBytes } from "node:crypto";
-import { legalDataComplete } from "@/lib/legal";
+import { promoLegalDataComplete } from "@/lib/legal";
 import { ipScopedLimit, type Bucket } from "@/lib/rate-limit/policies";
 
 /**
@@ -25,12 +25,13 @@ function flagOn(value: string | undefined): boolean {
 }
 
 /**
- * Server switch: FREE_FIRST_QR_ENABLED=true. In production the seller data in
- * lib/legal.ts must be complete too, the same rule that keeps sales closed.
+ * Server switch: FREE_FIRST_QR_ENABLED=true. In production the seller identity
+ * needed for a free download (name, address, contact) must be complete in lib/legal.ts.
+ * Sales keep their own stricter rule (studioSalesOpen).
  */
 export function freeFirstQrOpen(
   env: NodeJS.ProcessEnv = process.env,
-  legalComplete: boolean = legalDataComplete(),
+  legalComplete: boolean = promoLegalDataComplete(),
 ): boolean {
   if (!flagOn(env.FREE_FIRST_QR_ENABLED)) return false;
   if (env.NODE_ENV === "production" && !legalComplete) return false;

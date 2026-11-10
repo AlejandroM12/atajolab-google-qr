@@ -16,6 +16,7 @@ import { createDeliveryKey, digitalDeliveryAllowed, hashDeliveryKey } from "./pa
 import { paymentView } from "./payments/checkout-policy.ts";
 import { decidePayment } from "./payments/decision.ts";
 import { recoveryTargets } from "./recovery.ts";
+import { legalFieldsComplete, PROMO_LEGAL_FIELDS } from "./legal.ts";
 
 const env = (values: Record<string, string>) => values as unknown as NodeJS.ProcessEnv;
 
@@ -26,6 +27,19 @@ assert.equal(freeFirstQrOpen(env({ FREE_FIRST_QR_ENABLED: "true" }), true), true
 assert.equal(freeFirstQrOpen(env({ FREE_FIRST_QR_ENABLED: "on", NODE_ENV: "development" }), false), true);
 assert.equal(freeFirstQrOpen(env({ FREE_FIRST_QR_ENABLED: "true", NODE_ENV: "production" }), false), false);
 assert.equal(freeFirstQrOpen(env({ FREE_FIRST_QR_ENABLED: "true", NODE_ENV: "production" }), true), true);
+
+// The promo needs seller identity (name, address, contact), not the tax fields used for sales.
+const seller = {
+  legalName: "Nombre",
+  address: "Calle 123, Ciudad",
+  supportEmail: "soporte@example.com",
+  taxId: "[COMPLETAR: CUIT válido]",
+  taxCondition: "[COMPLETAR: condición fiscal]",
+};
+assert.equal(legalFieldsComplete(seller, PROMO_LEGAL_FIELDS), true);
+assert.equal(legalFieldsComplete({ ...seller, address: "[COMPLETAR: domicilio]" }, PROMO_LEGAL_FIELDS), false);
+assert.equal(legalFieldsComplete({ ...seller, legalName: "  " }, PROMO_LEGAL_FIELDS), false);
+assert.equal(legalFieldsComplete(seller, ["taxId"]), false);
 
 // Daily cap and per-IP buckets.
 assert.equal(freeFirstQrDailyLimit(env({})), 100);

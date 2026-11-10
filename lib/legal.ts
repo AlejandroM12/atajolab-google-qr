@@ -69,6 +69,28 @@ export function legalDataComplete(): boolean {
   return pendingLegalFields().length === 0;
 }
 
+/**
+ * Seller data needed for the free promotional download ("Tu primer QR es gratis").
+ * No sale and no invoice, so CUIT and IVA condition stay sales-only. Still required:
+ * who is responsible and where (Ley 24.240 also covers free relationships; Ley 25.326,
+ * because we collect an email) and a monitored contact.
+ */
+export const PROMO_LEGAL_FIELDS = ["legalName", "address", "supportEmail"] as const;
+
+export function legalFieldsComplete(
+  record: Record<string, unknown>,
+  fields: readonly string[],
+): boolean {
+  return fields.every((field) => {
+    const value = record[field];
+    return typeof value === "string" && value.trim().length > 0 && !isPending(value);
+  });
+}
+
+export function promoLegalDataComplete(): boolean {
+  return legalFieldsComplete(legal, PROMO_LEGAL_FIELDS);
+}
+
 /** Support mailbox, or null while it is still a placeholder. */
 export function supportMailbox(): string | null {
   const value = legal.supportEmail.trim();
