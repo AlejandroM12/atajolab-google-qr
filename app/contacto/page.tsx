@@ -42,13 +42,19 @@ export default function ContactPage() {
             Titular: <LegalValue value={legal.legalName} />
           </li>
           <li>
+            Ubicación: <LegalValue value={legal.publicLocation} /> (ciudad y provincia, no es un domicilio)
+          </li>
+          <li>
+            Contacto: <LegalValue value={legal.supportEmail} />
+          </li>
+          <li>
             CUIT: <LegalValue value={legal.taxId} />
           </li>
           <li>
             Condición frente al IVA: <LegalValue value={legal.taxCondition} />
           </li>
           <li>
-            Domicilio: <LegalValue value={legal.address} />
+            Domicilio legal: <LegalValue value={legal.address} />
           </li>
         </ul>
       </LegalSection>

@@ -17,7 +17,8 @@ export default function PrivacyPage() {
     >
       <LegalSection title="Responsable">
         <p>
-          <LegalValue value={legal.legalName} />, CUIT <LegalValue value={legal.taxId} />, domicilio{" "}
+          <LegalValue value={legal.legalName} />, con base en <LegalValue value={legal.publicLocation} /> (ciudad
+          y provincia, no es un domicilio). CUIT <LegalValue value={legal.taxId} />. Domicilio legal:{" "}
           <LegalValue value={legal.address} />. Contacto: <LegalValue value={legal.supportEmail} />.
         </p>
       </LegalSection>

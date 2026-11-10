@@ -27,8 +27,13 @@ export const legal = {
   taxId: pending("CUIT válido"),
   /** e.g. "Responsable Inscripto" or "Monotributista". Defines whether prices include IVA. */
   taxCondition: pending("condición fiscal"),
-  /** Legal address (domicilio legal / comercial). */
+  /** Legal address (domicilio legal / comercial). Never a private home address. */
   address: pending("domicilio legal o comercial"),
+  /**
+   * City and province shown publicly. Confirmed by the owner. It is NOT a legal
+   * address and does not satisfy `address` (sales and the free promo still need it).
+   */
+  publicLocation: "Formosa, Formosa, Argentina",
   /** Mailbox that receives support and revocation requests. Must be monitored. Confirmed by the owner. */
   supportEmail: "atajolab.tools@gmail.com",
   /** Optional extra channel, e.g. WhatsApp. Leave empty to hide it. */

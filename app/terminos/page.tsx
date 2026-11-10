@@ -24,8 +24,9 @@ export default function TermsPage() {
     >
       <LegalSection title="1. Quién vende">
         <p>
-          El servicio lo presta <LegalValue value={legal.legalName} />, CUIT <LegalValue value={legal.taxId} />,
-          con domicilio en <LegalValue value={legal.address} />. Contacto:{" "}
+          El servicio lo presta <LegalValue value={legal.legalName} />, con base en{" "}
+          <LegalValue value={legal.publicLocation} /> (ciudad y provincia, no es un domicilio). CUIT{" "}
+          <LegalValue value={legal.taxId} />. Domicilio legal: <LegalValue value={legal.address} />. Contacto:{" "}
           <LegalValue value={legal.supportEmail} />.
         </p>
       </LegalSection>

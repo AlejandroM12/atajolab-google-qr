@@ -16,7 +16,7 @@ import { createDeliveryKey, digitalDeliveryAllowed, hashDeliveryKey } from "./pa
 import { paymentView } from "./payments/checkout-policy.ts";
 import { decidePayment } from "./payments/decision.ts";
 import { recoveryTargets } from "./recovery.ts";
-import { legalFieldsComplete, PROMO_LEGAL_FIELDS } from "./legal.ts";
+import { isPending, legal, legalFieldsComplete, promoLegalDataComplete, PROMO_LEGAL_FIELDS } from "./legal.ts";
 
 const env = (values: Record<string, string>) => values as unknown as NodeJS.ProcessEnv;
 
@@ -40,6 +40,13 @@ assert.equal(legalFieldsComplete(seller, PROMO_LEGAL_FIELDS), true);
 assert.equal(legalFieldsComplete({ ...seller, address: "[COMPLETAR: domicilio]" }, PROMO_LEGAL_FIELDS), false);
 assert.equal(legalFieldsComplete({ ...seller, legalName: "  " }, PROMO_LEGAL_FIELDS), false);
 assert.equal(legalFieldsComplete(seller, ["taxId"]), false);
+
+// City and province are public info, never a substitute for the legal address.
+assert.equal((PROMO_LEGAL_FIELDS as readonly string[]).includes("address"), true);
+if (isPending(legal.address)) {
+  assert.equal(promoLegalDataComplete(), false);
+  assert.equal(freeFirstQrOpen(env({ FREE_FIRST_QR_ENABLED: "true", NODE_ENV: "production" })), false);
+}
 
 // Daily cap and per-IP buckets.
 assert.equal(freeFirstQrDailyLimit(env({})), 100);
