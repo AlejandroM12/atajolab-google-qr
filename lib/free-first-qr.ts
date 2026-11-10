@@ -1,5 +1,4 @@
 import { createHash, randomBytes } from "node:crypto";
-import { promoLegalDataComplete } from "@/lib/legal";
 import { ipScopedLimit, type Bucket } from "@/lib/rate-limit/policies";
 
 /**
@@ -25,17 +24,11 @@ function flagOn(value: string | undefined): boolean {
 }
 
 /**
- * Server switch: FREE_FIRST_QR_ENABLED=true. In production the seller identity
- * needed for a free download (name, address, contact) must be complete in lib/legal.ts.
- * Sales keep their own stricter rule (studioSalesOpen).
+ * Server switch: FREE_FIRST_QR_ENABLED=true. Independent of lib/legal.ts by the
+ * owner's decision; sales keep their own seller-data rule (studioSalesOpen).
  */
-export function freeFirstQrOpen(
-  env: NodeJS.ProcessEnv = process.env,
-  legalComplete: boolean = promoLegalDataComplete(),
-): boolean {
-  if (!flagOn(env.FREE_FIRST_QR_ENABLED)) return false;
-  if (env.NODE_ENV === "production" && !legalComplete) return false;
-  return true;
+export function freeFirstQrOpen(env: NodeJS.ProcessEnv = process.env): boolean {
+  return flagOn(env.FREE_FIRST_QR_ENABLED);
 }
 
 /** Site-wide daily cap of free orders (FREE_FIRST_QR_DAILY_LIMIT, default 100). */
