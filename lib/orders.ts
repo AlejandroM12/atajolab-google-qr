@@ -1,7 +1,7 @@
 import { Prisma } from "@prisma/client";
 import { ARTWORK_VERSION, COMMERCIAL_ARTWORK_VERSION, COUNTER_ARTWORK_VERSION, PREMIUM_ARTWORK_VERSION, PRESS_ARTWORK_VERSION, SIGNAGE_ARTWORK_VERSION, STUDIO_ARTWORK_VERSION } from "@/lib/artwork";
 import { prisma } from "@/lib/db";
-import { orderStatuses, type OrderStatus } from "@/lib/delivery";
+import { orderDeliverable, orderStatuses, type OrderStatus } from "@/lib/delivery";
 import { readArtworkSnapshot, type OrderDraft } from "@/lib/order-draft";
 import { ACCESS_TOKEN_PATTERN, consumeAccessLink, hashAccessToken, issueAccessLink, linkCapOpen, type AccessLinkRecord } from "@/lib/access-link";
 import { createDeliveryKey, deliveryKeysMatch, hashDeliveryKey } from "@/lib/payments/access";
@@ -43,9 +43,20 @@ export type PaymentRecord = {
   deliveryKeyHash: string | null;
 };
 
+/** Free-first claim for one browser cookie and one email (both hashed). */
+export type FreeOrderClaim = { visitorKeyHash: string; emailHash: string };
+
+export type SavedOrder = { publicId: string; deliveryKey: string; status: "PENDING" | "FREE" };
+
+/**
+ * Create an order. With `free`, a Studio v8 order is created as FREE (amount 0)
+ * when the claim is still unused; otherwise it falls back to a normal PENDING
+ * order, or throws "free-unavailable" when `allowPaid` is false (sales closed).
+ */
 export async function savePendingOrder(
   draft: OrderDraft,
-): Promise<{ publicId: string; deliveryKey: string }> {
+  options: { free?: FreeOrderClaim | null; allowPaid?: boolean } = {},
+): Promise<SavedOrder> {
   if (draft.amountArs !== PIECE_PRICE_ARS || draft.currency !== PIECE_CURRENCY) {
     throw new Error("order-price");
   }
@@ -54,7 +65,10 @@ export async function savePendingOrder(
   }
 
   if (draft.artwork.version === STUDIO_COMMERCIAL_ARTWORK_VERSION) {
-    return savePendingStudioV8Order(draft);
+    return savePendingStudioV8Order(draft, options.free ?? null, options.allowPaid ?? true);
+  }
+  if (options.allowPaid === false) {
+    throw new Error("free-unavailable");
   }
 
   if (
@@ -85,7 +99,7 @@ export async function savePendingOrder(
           buyerEmail: draft.buyerEmail,
         },
       });
-      return { publicId, deliveryKey };
+      return { publicId, deliveryKey, status: "PENDING" };
     } catch (error) {
       if (isUniqueViolation(error) && attempt < 2) continue;
       throw error;
@@ -102,7 +116,9 @@ export async function savePendingOrder(
  */
 async function savePendingStudioV8Order(
   draft: OrderDraft,
-): Promise<{ publicId: string; deliveryKey: string }> {
+  freeClaim: FreeOrderClaim | null,
+  allowPaid: boolean,
+): Promise<SavedOrder> {
   if (draft.artwork.version !== STUDIO_COMMERCIAL_ARTWORK_VERSION) {
     throw new Error("order-artwork");
   }
@@ -138,6 +154,10 @@ async function savePendingStudioV8Order(
   });
   if (existing) return existing;
 
+  // Cheap pre-check; the unique keys on FreeQrClaim are what actually enforce one per browser/email.
+  let free = freeClaim && !(await freeClaimTaken(freeClaim)) ? freeClaim : null;
+  if (!free && !allowPaid) throw new Error("free-unavailable");
+
   for (let attempt = 0; attempt < 3; attempt += 1) {
     const publicId = createPublicId();
     const deliveryKey = deriveStudioV8DeliveryKey({
@@ -151,8 +171,8 @@ async function savePendingStudioV8Order(
         await tx.order.create({
           data: {
             id: publicId,
-            status: "PENDING",
-            amountArs: PIECE_PRICE_ARS,
+            status: free ? "FREE" : "PENDING",
+            amountArs: free ? 0 : PIECE_PRICE_ARS,
             currency: PIECE_CURRENCY,
             artworkVersion: STUDIO_COMMERCIAL_ARTWORK_VERSION,
             artwork: artwork as unknown as Prisma.InputJsonValue,
@@ -160,6 +180,12 @@ async function savePendingStudioV8Order(
             buyerEmail: draft.buyerEmail,
           },
         });
+
+        if (free) {
+          await tx.freeQrClaim.create({
+            data: { visitorKeyHash: free.visitorKeyHash, emailHash: free.emailHash, orderId: publicId },
+          });
+        }
 
         await tx.studioOrderAttempt.create({
           data: {
@@ -184,7 +210,7 @@ async function savePendingStudioV8Order(
         }
       });
 
-      return { publicId, deliveryKey };
+      return { publicId, deliveryKey, status: free ? "FREE" : "PENDING" };
     } catch (error) {
       if (error instanceof Error && error.message === "order-assets") throw error;
       if (isUniqueViolation(error)) {
@@ -196,6 +222,11 @@ async function savePendingStudioV8Order(
           secret,
         });
         if (raced) return raced;
+        // A concurrent request won the free claim: continue as a normal order, or stop.
+        if (free && (await freeClaimTaken(free))) {
+          free = null;
+          if (!allowPaid) throw new Error("free-unavailable");
+        }
         if (attempt < 2) continue;
       }
       throw error;
@@ -211,7 +242,7 @@ async function resolveStudioV8IdempotentReplay(input: {
   requestHash: string;
   idempotencyKey: string;
   secret: string;
-}): Promise<{ publicId: string; deliveryKey: string } | null> {
+}): Promise<SavedOrder | null> {
   const attempt = await prisma.studioOrderAttempt.findUnique({
     where: {
       draftKeyHash_idempotencyKeyHash: {
@@ -234,12 +265,27 @@ async function resolveStudioV8IdempotentReplay(input: {
   });
   const order = await prisma.order.findUnique({
     where: { id: attempt.orderId },
-    select: { deliveryKeyHash: true },
+    select: { deliveryKeyHash: true, status: true },
   });
   if (!order || !deliveryKeysMatch(deliveryKey, order.deliveryKeyHash)) {
     throw new Error("order-idempotency");
   }
-  return { publicId: attempt.orderId, deliveryKey };
+  return { publicId: attempt.orderId, deliveryKey, status: order.status === "FREE" ? "FREE" : "PENDING" };
+}
+
+/** True when this browser or this email already used the free order. */
+export async function freeClaimTaken(claim: FreeOrderClaim): Promise<boolean> {
+  const found = await prisma.freeQrClaim.findFirst({
+    where: { OR: [{ visitorKeyHash: claim.visitorKeyHash }, { emailHash: claim.emailHash }] },
+    select: { orderId: true },
+  });
+  return found !== null;
+}
+
+/** True when this browser already used the free order. */
+export async function visitorFreeClaimUsed(visitorKeyHash: string): Promise<boolean> {
+  const found = await prisma.freeQrClaim.findUnique({ where: { visitorKeyHash }, select: { orderId: true } });
+  return found !== null;
 }
 
 export async function findOrder(publicId: string): Promise<StoredOrder | null> {
@@ -446,8 +492,8 @@ export async function findRecoveryCandidates(email: string): Promise<{
   label: string;
 }[]> {
   const rows = await prisma.order.findMany({
-    where: { buyerEmail: email, status: "PAID" },
-    orderBy: { paidAt: "desc" },
+    where: { buyerEmail: email, status: { in: ["PAID", "FREE"] } },
+    orderBy: [{ paidAt: { sort: "desc", nulls: "last" } }, { createdAt: "desc" }],
     take: 5,
     select: { id: true, status: true, buyerEmail: true, artwork: true },
   });
@@ -503,7 +549,7 @@ export async function createDownloadAccessLink(
     where: { id: publicId },
     select: { status: true },
   });
-  if (!order || order.status !== "PAID") return "unavailable";
+  if (!order || !orderDeliverable(order.status)) return "unavailable";
   const active = await countActiveAccessLinks(publicId, now);
   if (!linkCapOpen(active)) return "capped";
   const issued = issueAccessLink(publicId, now);
@@ -537,7 +583,7 @@ export async function redeemDownloadAccess(
         : null,
       now,
     );
-    if (!link || !decision.ok || link.order.status !== "PAID") return null;
+    if (!link || !decision.ok || !orderDeliverable(link.order.status)) return null;
 
     const updated = await tx.downloadAccessLink.updateMany({
       where: { tokenHash, usedAt: null, expiresAt: { gt: now } },

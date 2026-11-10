@@ -1,4 +1,5 @@
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
+import { orderDeliverable } from "@/lib/delivery";
 
 export const ORDER_ACCESS_COOKIE = "atajo_pedido";
 
@@ -78,7 +79,7 @@ export function digitalDeliveryAllowed(input: {
   storedHash: string | null;
   extraHashes?: readonly string[];
 }): boolean {
-  if (!input.downloadsEnabled || input.status !== "PAID" || input.key === null) return false;
+  if (!input.downloadsEnabled || !orderDeliverable(input.status) || input.key === null) return false;
   const key = input.key;
   if (deliveryKeysMatch(key, input.storedHash)) return true;
   return (input.extraHashes ?? []).some((hash) => deliveryKeysMatch(key, hash));

@@ -98,7 +98,8 @@ export function readStudioCommercialArtwork(value: unknown): StudioCommercialArt
   if (value.title.length > BUSINESS_NAME_MAX) return null;
   if (typeof value.frozenAt !== "string" || Number.isNaN(Date.parse(value.frozenAt))) return null;
   if (typeof value.background !== "string") return null;
-  if (value.templateId !== "corporativo" && value.templateId !== "creativo") return null;
+  // Any Studio template; parseDesign validates it and it must match the document below.
+  if (typeof value.templateId !== "string") return null;
   if (!isRecord(value.format) || value.format.id !== "a6") return null;
   if (value.format.widthMm !== A6_WIDTH_MM || value.format.heightMm !== A6_HEIGHT_MM) return null;
   if (!Array.isArray(value.assetIds) || !value.assetIds.every((id) => typeof id === "string")) return null;

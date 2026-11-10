@@ -1,6 +1,13 @@
 import { parseOrderDraft } from "@/lib/order-draft";
 import { isDatabaseUnavailable } from "@/lib/db-error";
-import { savePendingOrder } from "@/lib/orders";
+import { freeClaimTaken, savePendingOrder, type FreeOrderClaim } from "@/lib/orders";
+import {
+  freeFirstQrBuckets,
+  freeFirstQrOpen,
+  hashFreeEmail,
+  hashVisitorKey,
+  readVisitorKey,
+} from "@/lib/free-first-qr";
 import { orderAccessCookie } from "@/lib/payments/access";
 import { appOrigin } from "@/lib/payments/checkout-policy";
 import { PIECE_CURRENCY, PIECE_PRICE_ARS } from "@/lib/pricing";
@@ -51,7 +58,9 @@ export async function POST(request: Request) {
     return orderError(400, "invalid-body");
   }
 
-  if (studioV8 && !studioSalesOpen()) {
+  const salesOpen = studioSalesOpen();
+  const promoOpen = studioV8 && freeFirstQrOpen();
+  if (studioV8 && !salesOpen && !promoOpen) {
     return orderError(403, "studio-checkout-disabled");
   }
 
@@ -95,9 +104,30 @@ export async function POST(request: Request) {
   if (!parsed.ok) return orderError(400, parsed.error);
 
   try {
-    const created = await savePendingOrder(parsed.draft);
+    // "Tu primer QR es gratis": decided here, never by the browser.
+    let free: FreeOrderClaim | null = null;
+    const visitorKey = promoOpen ? readVisitorKey(request.headers.get("cookie")) : null;
+    if (visitorKey && parsed.draft.buyerEmail) {
+      const claim = {
+        visitorKeyHash: hashVisitorKey(visitorKey),
+        emailHash: hashFreeEmail(parsed.draft.buyerEmail),
+      };
+      if (!(await freeClaimTaken(claim))) {
+        const freeLimited = await consumeBuckets(
+          sharedRateLimiter(),
+          freeFirstQrBuckets(studioClientKeyFromRequest(request)),
+        );
+        if (freeLimited.ok) free = claim;
+        else logInfo("order.free-first-limited");
+      }
+    }
+
+    const created = await savePendingOrder(parsed.draft, { free, allowPaid: !studioV8 || salesOpen });
     if (studioV8) {
       logInfo("order.terms-accepted", { publicId: created.publicId, termsVersion: legal.lastUpdated });
+    }
+    if (created.status === "FREE") {
+      logInfo("order.free-first-created", { publicId: created.publicId });
     }
     const headers = new Headers({ "cache-control": "no-store" });
     headers.set(
@@ -111,8 +141,8 @@ export async function POST(request: Request) {
     return Response.json(
       {
         publicId: created.publicId,
-        status: "PENDING",
-        amountArs: PIECE_PRICE_ARS,
+        status: created.status,
+        amountArs: created.status === "FREE" ? 0 : PIECE_PRICE_ARS,
         currency: PIECE_CURRENCY,
       },
       { status: 201, headers },
@@ -120,6 +150,9 @@ export async function POST(request: Request) {
   } catch (error) {
     if (error instanceof Error && error.message === "order-assets") {
       return orderError(400, "studio-assets");
+    }
+    if (error instanceof Error && error.message === "free-unavailable") {
+      return orderError(409, "free-already-used");
     }
     if (error instanceof Error && error.message === "order-idempotency-conflict") {
       return orderError(409, "studio-idempotency-conflict");

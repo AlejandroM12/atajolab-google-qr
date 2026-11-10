@@ -9,7 +9,8 @@ import { OrderAccessLink } from "@/components/order-access-link";
 import { OrderDownloads } from "@/components/order-downloads";
 import { OrderPaymentActions } from "@/components/order-payment-actions";
 import { premiumPhrases, premiumTemplates, signageFormatSpec, templateSpec } from "@/lib/artwork";
-import { formatArs } from "@/lib/pricing";
+import { formatArs, PIECE_CURRENCY, PIECE_PRICE_ARS } from "@/lib/pricing";
+import { orderDeliverable } from "@/lib/delivery";
 import type { PaymentView } from "@/lib/payments/checkout-policy";
 import type { StoredOrder } from "@/lib/orders";
 import { pieceComposes } from "@/lib/print/layout";
@@ -104,6 +105,8 @@ function OrderLayout({
   );
   const payable = paymentsReady && canPay && order.status === "PENDING" && (view === "pending" || view === "rejected");
   const verifying = paymentsReady && view === "verifying";
+  // "Tu primer QR es gratis": same files as a purchase, no payment involved.
+  const free = order.status === "FREE";
 
   return (
     <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_20rem] lg:items-start">
@@ -111,7 +114,7 @@ function OrderLayout({
         <p className="text-xs font-semibold uppercase tracking-[0.18em] text-accent">Tu compra</p>
         <h1 className="mt-3 text-4xl font-semibold leading-tight">Resumen de tu compra</h1>
         <p className="mt-4 text-lg text-muted" role="status">
-          {viewLabel[view]}
+          {free ? "Tu primer QR gratis está listo" : viewLabel[view]}
         </p>
         <dl className="mt-8 space-y-4 text-sm">
           <div>
@@ -134,16 +137,22 @@ function OrderLayout({
           ) : null}
           <div>
             <dt className="font-semibold">Total</dt>
-            <dd className="mt-1 text-muted">{formatArs(order.amountArs)} (ARS, pago único)</dd>
+            <dd className="mt-1 text-muted">
+              {free ? "Gratis · Tu primer QR es gratis" : `${formatArs(order.amountArs)} (ARS, pago único)`}
+            </dd>
           </div>
         </dl>
         <div className="mt-8 space-y-3 text-sm leading-relaxed text-muted">
-          <p>{viewCopy[view]}</p>
+          <p>
+            {free
+              ? `Ya podés descargar los archivos. Los siguientes QR cuestan ${formatArs(PIECE_PRICE_ARS)} ${PIECE_CURRENCY}.`
+              : viewCopy[view]}
+          </p>
           {notes}
           {!paymentsReady && order.status === "PENDING" ? (
             <p>Por ahora no podemos tomar pagos en línea. Guardá este enlace y volvé a intentarlo más tarde.</p>
           ) : null}
-          {downloads ? null : order.status === "PAID" ? (
+          {downloads ? null : orderDeliverable(order.status) ? (
             <p>
               Para descargar PNG, SVG y PDF, abrí esta compra en el navegador donde la creaste. Desde otro
               dispositivo, recuperá los archivos con el mismo correo.
@@ -154,7 +163,7 @@ function OrderLayout({
         </div>
         {downloads ? <OrderDownloads publicId={order.publicId} /> : null}
         {downloads ? <OrderAccessLink publicId={order.publicId} /> : null}
-        {order.status === "PAID" && !downloads ? (
+        {orderDeliverable(order.status) && !downloads ? (
           <div className="mt-4">
             <ButtonLink href="/recuperar" variant="secondary">
               Recuperar mis descargas

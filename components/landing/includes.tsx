@@ -1,5 +1,6 @@
 import { ButtonLink } from "@/components/button-link";
 import { Container } from "@/components/container";
+import { FreeFirstNote } from "@/components/landing/free-first-note";
 import { SectionHeading } from "@/components/section-heading";
 import { formatArs, PIECE_PRICE_ARS } from "@/lib/pricing";
 
@@ -30,6 +31,7 @@ export function Includes() {
           </ul>
         </div>
         <aside className="rounded-3xl border border-accent/30 bg-ok-bg p-6 sm:p-8">
+          <FreeFirstNote variant="price" />
           <p className="text-sm font-semibold text-accent-strong">Pago único, sin suscripciones.</p>
           <p className="mt-3 text-4xl font-semibold">{formatArs(PIECE_PRICE_ARS)}</p>
           <p className="mt-1 text-sm text-muted">ARS</p>

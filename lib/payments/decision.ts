@@ -22,7 +22,7 @@ export type VerifiedPayment = {
 
 export type PaymentOrderSnapshot = {
   publicId: string;
-  status: "PENDING" | "PAID" | "CANCELLED";
+  status: "PENDING" | "PAID" | "CANCELLED" | "FREE";
   amountArs: number;
   currency: string;
   paymentId: string | null;
@@ -72,7 +72,8 @@ export function decidePayment(
 
   // Refunds and chargebacks for an order that is already PAID are ignored.
   // The download stays available. Changing that needs a separate product decision.
-  if (order.status === "PAID" || order.status === "CANCELLED") {
+  // FREE orders never take payments.
+  if (order.status === "PAID" || order.status === "CANCELLED" || order.status === "FREE") {
     return { action: "ignore", reason: "order-closed" };
   }
 

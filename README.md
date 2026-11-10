@@ -45,6 +45,8 @@ La aplicación queda en el puerto que muestre `pnpm dev`. Si el 3000 está ocupa
 | `STUDIO_CLEANUP_SECRET` | ≥16 caracteres. Bearer de `POST /api/studio/assets/cleanup`. |
 | `STUDIO_CHECKOUT_ENABLED` | Off por defecto. Solo `true`/`1`/`yes`/`on` habilita pedidos y checkout Studio v8. |
 | `STUDIO_EXPORT_ENABLED` | En production, vacío = export preview cerrado. |
+| `FREE_FIRST_QR_ENABLED` | Off por defecto. `true` activa "Tu primer QR es gratis": un pedido FREE (sin Mercado Pago) por navegador y por correo. En production además exige los datos del vendedor completos en `lib/legal.ts`. Requiere la migración `20261110220000_free_first_qr`. |
+| `FREE_FIRST_QR_DAILY_LIMIT` | Opcional. Tope diario global de pedidos gratis (por defecto 100). |
 | `RATE_LIMIT_TRUST_PROXY` | Vacío = no confiar IP headers (clave compartida `untrusted`, límites por IP ×20). `xff` = IP agregada por el proxy (Render, Caddy). `cloudflare` solo con origen cerrado a Cloudflare. |
 | `RATE_LIMIT_PROXY_HOPS` | Con `xff`: cuántos proxies agregan entradas a `X-Forwarded-For` (por defecto 1). |
 | `ALERT_WEBHOOK_URL` | Opcional. Webhook https (Slack/Discord) para avisos de error del servidor. |

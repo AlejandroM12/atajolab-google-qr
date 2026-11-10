@@ -20,10 +20,12 @@ const StudioEditor = dynamic(
 export function StudioLoader({
   exportEnabled = true,
   checkoutEnabled = false,
+  freeFirstEnabled = false,
   inspirationPreviews,
 }: {
   exportEnabled?: boolean;
   checkoutEnabled?: boolean;
+  freeFirstEnabled?: boolean;
   inspirationPreviews: Record<InspirationId, string>;
 }) {
   const searchParams = useSearchParams();
@@ -34,6 +36,7 @@ export function StudioLoader({
       key={bootKey}
       exportEnabled={exportEnabled}
       checkoutEnabled={checkoutEnabled}
+      freeFirstEnabled={freeFirstEnabled}
       inspirationPreviews={inspirationPreviews}
     />
   );

@@ -67,13 +67,18 @@ const COMMERCIAL_VALIDATION = { requireGoogleLink: true } as const;
 export function StudioEditor({
   exportEnabled = true,
   checkoutEnabled = false,
+  freeFirstEnabled = false,
   inspirationPreviews,
 }: {
   exportEnabled?: boolean;
   checkoutEnabled?: boolean;
+  /** "Tu primer QR es gratis" is on; the server still decides per browser. */
+  freeFirstEnabled?: boolean;
   inspirationPreviews: Record<InspirationId, string>;
 }) {
   const router = useRouter();
+  const orderingEnabled = checkoutEnabled || freeFirstEnabled;
+  const [freeAvailable, setFreeAvailable] = useState(false);
   const [session] = useState(loadInitial);
   const [started, setStarted] = useState(session.started);
   const [fromBlank, setFromBlank] = useState(false);
@@ -113,15 +118,20 @@ export function StudioEditor({
   }, []);
 
   useEffect(() => {
-    if (!checkoutEnabled) return;
+    if (!orderingEnabled) return;
     void fetch("/api/studio/draft", {
       method: "POST",
       credentials: "same-origin",
       headers: { accept: "application/json" },
-    }).catch(() => {
-      /* Draft cookie is best-effort on first paint; prepare flow retries. */
-    });
-  }, [checkoutEnabled]);
+    })
+      .then((response) => (response.ok ? response.json() : null))
+      .then((body: { freeFirst?: unknown } | null) => {
+        setFreeAvailable(freeFirstEnabled && body?.freeFirst === true);
+      })
+      .catch(() => {
+        /* Draft cookie is best-effort on first paint; prepare flow retries. */
+      });
+  }, [orderingEnabled, freeFirstEnabled]);
 
   useEffect(() => {
     if (!prepareReady) return;
@@ -461,7 +471,7 @@ export function StudioEditor({
   }
 
   async function onPrepareOrder(): Promise<boolean> {
-    if (!checkoutEnabled) return false;
+    if (!orderingEnabled) return false;
     const current = historyRef.current?.present;
     if (!current || prepareBusy || orderBusy) return false;
     const gate = validateForExport(current, COMMERCIAL_VALIDATION);
@@ -525,9 +535,9 @@ export function StudioEditor({
   }
 
   async function onCreateOrder(acceptedTerms: boolean) {
-    if (!checkoutEnabled || orderBusy || prepareBusy) return;
+    if (!orderingEnabled || orderBusy || prepareBusy) return;
     if (!acceptedTerms) {
-      setError("Para comprar tenés que aceptar los términos y la política de privacidad.");
+      setError("Para continuar tenés que aceptar los términos y la política de privacidad.");
       return;
     }
     if (createdPublicIdRef.current) {
@@ -587,6 +597,7 @@ export function StudioEditor({
         | { publicId?: unknown; error?: unknown }
         | null;
       if (!response.ok) {
+        if (body?.error === "free-already-used") setFreeAvailable(false);
         setError(studioOrderErrorMessage(typeof body?.error === "string" ? body.error : ""));
         setOrderBusy(false);
         return;
@@ -740,7 +751,11 @@ export function StudioEditor({
           <h1 className="mt-1 text-3xl text-foreground sm:text-4xl">Creá tu cartel QR</h1>
           <p className="mt-3 text-sm leading-6 text-muted">
             Elegí un ejemplo o empezá desde cero. Después podés cambiar todo sobre el lienzo
-            {checkoutEnabled ? ` y comprar por ${formatArs(PIECE_PRICE_ARS)} ${PIECE_CURRENCY}.` : "."}
+            {freeAvailable
+              ? ". Tu primer QR es gratis."
+              : checkoutEnabled
+                ? ` y comprar por ${formatArs(PIECE_PRICE_ARS)} ${PIECE_CURRENCY}.`
+                : "."}
           </p>
         </header>
         <div className="mt-6">
@@ -823,7 +838,11 @@ export function StudioEditor({
           <h1 className="text-2xl text-foreground sm:text-3xl">Tu cartel</h1>
           <p className="mt-1 text-sm text-muted">
             Editá directo en el lienzo
-            {checkoutEnabled ? ` · ${formatArs(PIECE_PRICE_ARS)} ${PIECE_CURRENCY}` : ""}
+            {freeAvailable
+              ? " · Tu primer QR es gratis"
+              : checkoutEnabled
+                ? ` · ${formatArs(PIECE_PRICE_ARS)} ${PIECE_CURRENCY}`
+                : ""}
           </p>
           <button
             type="button"
@@ -885,6 +904,7 @@ export function StudioEditor({
             exportBusy={exportBusy}
             exportEnabled={exportEnabled}
             checkoutEnabled={checkoutEnabled}
+            freeAvailable={freeAvailable}
             prepareBusy={prepareBusy}
             prepareProgress={prepareProgress}
             orderBusy={orderBusy}
@@ -1031,6 +1051,9 @@ function studioOrderErrorMessage(code: string): string {
   }
   if (code === "studio-idempotency-key") {
     return "No pudimos validar el intento de compra. Prepará de nuevo e intentá otra vez.";
+  }
+  if (code === "free-already-used") {
+    return "Ya usaste tu QR gratis en este navegador o con este correo.";
   }
   if (code === "invalid-email") return "Revisá el correo antes de continuar.";
   if (code === "terms-required") return "Para comprar tenés que aceptar los términos y la política de privacidad.";

@@ -8,10 +8,12 @@ datasource db {
 }
 
 /// Solo un aviso de pago confirmado, del lado del servidor, puede salir de PENDING.
+/// FREE: pedido de la promoción "Tu primer QR es gratis". Nace así, nunca pasa por Mercado Pago.
 enum OrderStatus {
   PENDING
   PAID
   CANCELLED
+  FREE
 }
 
 model Order {
@@ -36,8 +38,18 @@ model Order {
   studioAssets             StudioAsset[]
   studioOrderAttempt       StudioOrderAttempt?
   mailNotifications        MailNotification[]
+  freeQrClaim              FreeQrClaim?
 
   @@index([buyerEmail])
+}
+
+/// Un QR gratis por navegador y por correo. Solo guarda hashes, nunca la cookie ni el correo.
+model FreeQrClaim {
+  visitorKeyHash String   @id
+  emailHash      String   @unique
+  orderId        String   @unique
+  createdAt      DateTime @default(now())
+  order          Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
 }
 
 /// Outbox durable de correos post-pago. El token de acceso vive cifrado solo mientras PENDING.

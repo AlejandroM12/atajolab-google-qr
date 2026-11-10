@@ -133,6 +133,7 @@ export function StudioProperties({
   exportBusy,
   exportEnabled,
   checkoutEnabled,
+  freeAvailable = false,
   prepareBusy,
   prepareProgress,
   orderBusy,
@@ -160,6 +161,8 @@ export function StudioProperties({
   exportBusy: boolean;
   exportEnabled: boolean;
   checkoutEnabled: boolean;
+  /** The server confirmed this browser can still get its free QR. */
+  freeAvailable?: boolean;
   prepareBusy: boolean;
   prepareProgress: string | null;
   orderBusy: boolean;
@@ -186,9 +189,19 @@ export function StudioProperties({
   const [termsAccepted, setTermsAccepted] = useState(false);
   return (
     <div className="flex min-w-0 flex-col gap-4">
-      {checkoutEnabled ? (
+      {checkoutEnabled || freeAvailable ? (
         <section className="rounded-3xl border border-accent/30 bg-ok-bg p-4">
-          <h2 className="text-sm font-semibold">Comprar · {formatPriceHint()}</h2>
+          {freeAvailable ? (
+            <>
+              <h2 className="text-sm font-semibold">Tu primer QR es gratis</h2>
+              <p className="mt-1 text-xs leading-5 text-muted">
+                Descargalo completo en PNG, SVG y PDF, sin pagar. Es uno por navegador y por correo. Los
+                siguientes cuestan {formatPriceHint()}.
+              </p>
+            </>
+          ) : (
+            <h2 className="text-sm font-semibold">Comprar · {formatPriceHint()}</h2>
+          )}
           <label className="mt-3 block text-sm">
             <span className="font-semibold">Tu correo</span>
             <input
@@ -205,7 +218,9 @@ export function StudioProperties({
               className="mt-2 h-11 w-full rounded-xl border border-line bg-background px-3 text-sm"
             />
             <span className="mt-1 block text-xs leading-5 text-muted">
-              Te enviamos ahí el acceso a tus archivos. Lo usamos solo para esta compra.
+              {freeAvailable
+                ? "Lo usamos para que puedas recuperar tus archivos."
+                : "Te enviamos ahí el acceso a tus archivos. Lo usamos solo para esta compra."}
             </span>
           </label>
           <label className="mt-3 flex items-start gap-2 text-xs leading-5">
@@ -225,7 +240,9 @@ export function StudioProperties({
               <Link href="/privacidad" target="_blank" className="underline">
                 política de privacidad
               </Link>
-              . Es un producto digital: los archivos se habilitan al confirmarse el pago.
+              {freeAvailable
+                ? ". Es un producto digital: los archivos se habilitan al instante."
+                : ". Es un producto digital: los archivos se habilitan al confirmarse el pago."}
             </span>
           </label>
           <button
@@ -238,7 +255,9 @@ export function StudioProperties({
               ? prepareProgress ?? "Preparando…"
               : orderBusy
                 ? "Creando el pedido…"
-                : "Comprar este diseño"}
+                : freeAvailable
+                  ? "Descargar gratis"
+                  : "Comprar este diseño"}
           </button>
           {!exportValidation.ready && blockingIssues.length > 0 ? (
             <BlockingIssueList issues={blockingIssues} onSelect={onSelect} tone="bg-warning-bg" />

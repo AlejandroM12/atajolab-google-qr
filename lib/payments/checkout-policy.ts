@@ -127,11 +127,11 @@ export type PaymentView =
   | "cancelled";
 
 export function paymentView(input: {
-  orderStatus: "PENDING" | "PAID" | "CANCELLED";
+  orderStatus: "PENDING" | "PAID" | "CANCELLED" | "FREE";
   hint: ReturnHint | null;
   externalStatus: string | null;
 }): PaymentView {
-  if (input.orderStatus === "PAID") {
+  if (input.orderStatus === "PAID" || input.orderStatus === "FREE") {
     return "approved";
   }
 

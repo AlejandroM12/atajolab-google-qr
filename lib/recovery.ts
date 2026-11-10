@@ -1,3 +1,4 @@
+import { orderDeliverable } from "@/lib/delivery";
 import { parseBuyerEmail } from "@/lib/buyer-email";
 import {
   issueAccessLink,
@@ -41,7 +42,7 @@ export function recoveryAcknowledgement(): { status: "accepted" } {
 
 export function recoveryTargets(email: string, orders: RecoveryCandidate[]): RecoveryCandidate[] {
   return orders
-    .filter((order) => order.status === "PAID" && order.buyerEmail === email)
+    .filter((order) => orderDeliverable(order.status) && order.buyerEmail === email)
     .slice(0, MAX_RECOVERY_ORDERS);
 }
 

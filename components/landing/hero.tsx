@@ -1,5 +1,6 @@
 import { ButtonLink } from "@/components/button-link";
 import { Container } from "@/components/container";
+import { FreeFirstNote } from "@/components/landing/free-first-note";
 import { DEMO_BUSINESS_NAME, SAMPLE_HEIGHT_PX, SAMPLE_WIDTH_PX, sampleImageUrl } from "@/lib/landing-samples";
 
 export function Hero() {
@@ -23,6 +24,7 @@ export function Hero() {
             Diseñá un cartel A6 con código QR hacia Google. Editá el lienzo a tu gusto y descargalo listo
             para imprimir.
           </p>
+          <FreeFirstNote variant="hero" />
           <div className="mt-8 flex flex-col gap-3 sm:flex-row">
             <ButtonLink href="/crear">Crear mi cartel QR</ButtonLink>
             <ButtonLink href="/#como-funciona" variant="secondary">

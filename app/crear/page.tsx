@@ -4,6 +4,7 @@ import { Suspense } from "react";
 import { StudioLoader } from "@/components/studio/studio-loader";
 import { inspirationPreviewUrls } from "@/lib/studio/inspiration-preview-url";
 import { studioSalesOpen } from "@/lib/studio/checkout-access";
+import { freeFirstQrOpen } from "@/lib/free-first-qr";
 import { studioExportAllowed } from "@/lib/studio/export/access";
 
 export const metadata: Metadata = {
@@ -38,6 +39,7 @@ async function StudioGate() {
     <StudioLoader
       exportEnabled={studioExportAllowed()}
       checkoutEnabled={studioSalesOpen()}
+      freeFirstEnabled={freeFirstQrOpen()}
       inspirationPreviews={inspirationPreviews}
     />
   );
