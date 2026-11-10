@@ -1,31 +1,30 @@
+import Image from "next/image";
 import Link from "next/link";
 
-export function Logo() {
+/** Official AtajoLab horizontal logo (copied from atajolab-web public/brand). */
+const LOGO_SRC = "/brand/atajolab-logo.svg";
+const LOGO_RATIO = 413 / 74;
+
+export function BrandLogo({ height, priority = false }: { height: number; priority?: boolean }) {
   return (
-    <Link href="/" className="flex items-center gap-2.5 rounded-xl" aria-label="AtajoLab, inicio">
-      <LogoMark />
-      <span>
-        <span className="block text-sm font-semibold leading-none tracking-tight text-foreground">
-          AtajoLab
-        </span>
-        <span className="mt-1 block text-xs leading-none text-muted">Google QR</span>
-      </span>
-    </Link>
+    <Image
+      src={LOGO_SRC}
+      alt="AtajoLab"
+      width={Math.round(height * LOGO_RATIO)}
+      height={height}
+      priority={priority}
+      className="block shrink-0"
+      style={{ height, width: "auto" }}
+    />
   );
 }
 
-export function LogoMark() {
+export function Logo() {
   return (
-    <svg viewBox="0 0 32 32" className="size-9 shrink-0" aria-hidden="true">
-      <rect width="32" height="32" rx="9" fill="#0f6e62" />
-      <path
-        d="M8.5 16h11M15.5 11.5 20.5 16l-5 4.5"
-        fill="none"
-        stroke="#ffffff"
-        strokeWidth="2.2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
+    <Link href="/" className="flex w-fit items-center gap-2.5 rounded-xl" aria-label="AtajoLab Google QR, inicio">
+      <BrandLogo height={26} priority />
+      <span aria-hidden="true" className="h-5 w-px bg-line" />
+      <span className="font-display text-sm font-semibold leading-none tracking-tight text-accent">Google QR</span>
+    </Link>
   );
 }

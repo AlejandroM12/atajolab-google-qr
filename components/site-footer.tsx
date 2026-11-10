@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { Container } from "@/components/container";
-import { LogoMark } from "@/components/logo";
+import { BrandLogo } from "@/components/logo";
 
 const linkClass = "hover:text-accent-strong";
 
@@ -10,8 +10,9 @@ export function SiteFooter() {
       <Container className="grid gap-8 py-10 sm:grid-cols-[minmax(0,1.4fr)_auto_auto]">
         <div className="max-w-xl">
           <div className="flex items-center gap-2.5">
-            <LogoMark />
-            <p className="text-sm font-semibold">AtajoLab</p>
+            <BrandLogo height={24} />
+            <span aria-hidden="true" className="h-4 w-px bg-line" />
+            <p className="font-display text-sm font-semibold text-accent">Google QR</p>
           </div>
           <p className="mt-4 text-sm leading-relaxed text-muted">
             Creá carteles QR personalizados para que tus clientes te encuentren y te dejen reseñas en Google.
