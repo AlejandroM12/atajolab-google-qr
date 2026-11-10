@@ -100,7 +100,7 @@ export function recoveryMail(
   return {
     subject: "Acceso a tus descargas de AtajoLab",
     text: [
-      "Pediste entrar a tus descargas de AtajoLab Google QR.",
+      "Pediste entrar a tus descargas de AtajoLab QR.",
       "Cada enlace vence en 30 minutos y funciona una sola vez.",
       "Desde la página del pedido podés bajar PNG, SVG y PDF.",
       "",
@@ -129,7 +129,7 @@ export function purchaseMail(input: {
   return {
     subject: "Tu compra de AtajoLab está lista",
     text: [
-      "Confirmamos tu compra en AtajoLab Google QR.",
+      "Confirmamos tu compra en AtajoLab QR.",
       "",
       `Diseño: ${label}`,
       `Pedido: ${publicId}`,

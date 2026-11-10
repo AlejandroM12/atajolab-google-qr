@@ -21,10 +21,10 @@ export function BrandLogo({ height, priority = false }: { height: number; priori
 
 export function Logo() {
   return (
-    <Link href="/" className="flex w-fit items-center gap-2.5 rounded-xl" aria-label="AtajoLab Google QR, inicio">
+    <Link href="/" className="flex w-fit items-center gap-2.5 rounded-xl" aria-label="AtajoLab QR, inicio">
       <BrandLogo height={26} priority />
       <span aria-hidden="true" className="h-5 w-px bg-line" />
-      <span className="font-display text-sm font-semibold leading-none tracking-tight text-accent">Google QR</span>
+      <span className="font-display text-sm font-semibold leading-none tracking-tight text-accent">QR</span>
     </Link>
   );
 }

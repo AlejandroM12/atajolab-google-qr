@@ -1,4 +1,4 @@
-# AtajoLab Google QR
+# AtajoLab QR
 
 Aplicación web para que un comercio o profesional arme un código QR con el enlace de su ubicación en Google Maps o con el enlace para dejar una reseña.
 

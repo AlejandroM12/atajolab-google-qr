@@ -3,7 +3,7 @@ import { PIECE_CURRENCY, PIECE_PRICE_ARS } from "@/lib/pricing";
 /** Production domain (README). APP_URL overrides it in every environment. */
 const DEFAULT_SITE_URL = "https://qr.atajolab.dev";
 
-export const SITE_NAME = "AtajoLab Google QR";
+export const SITE_NAME = "AtajoLab QR";
 export const BRAND_NAME = "AtajoLab";
 
 export const SITE_DESCRIPTION =

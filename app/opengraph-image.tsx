@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { ImageResponse } from "next/og";
 import { PIECE_PRICE_ARS, formatArs } from "@/lib/pricing";
 
-export const alt = "AtajoLab: carteles QR para reseñas de Google";
+export const alt = "AtajoLab QR: carteles QR para reseñas de Google";
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 
@@ -30,7 +30,7 @@ export default function OpenGraphImage() {
           {/* eslint-disable-next-line @next/next/no-img-element -- ImageResponse needs a plain img */}
           <img src={logoSrc} alt="AtajoLab" width={335} height={60} />
           <div style={{ display: "flex", width: 2, height: 40, background: "#e4dccb" }} />
-          <div style={{ display: "flex", fontSize: 34, fontWeight: 700, color: "#0f6e62" }}>Google QR</div>
+          <div style={{ display: "flex", fontSize: 34, fontWeight: 700, color: "#0f6e62" }}>QR</div>
         </div>
         <div style={{ display: "flex", flexDirection: "column" }}>
           <div style={{ display: "flex", fontSize: 76, fontWeight: 700, lineHeight: 1.05, maxWidth: 900 }}>

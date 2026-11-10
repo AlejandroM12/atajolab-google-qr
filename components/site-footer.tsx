@@ -12,7 +12,7 @@ export function SiteFooter() {
           <div className="flex items-center gap-2.5">
             <BrandLogo height={24} />
             <span aria-hidden="true" className="h-4 w-px bg-line" />
-            <p className="font-display text-sm font-semibold text-accent">Google QR</p>
+            <p className="font-display text-sm font-semibold text-accent">QR</p>
           </div>
           <p className="mt-4 text-sm leading-relaxed text-muted">
             Creá carteles QR personalizados para que tus clientes te encuentren y te dejen reseñas en Google.
