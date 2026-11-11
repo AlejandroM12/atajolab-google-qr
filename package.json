@@ -39,7 +39,7 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",
-    "eslint-config-next": "16.4.3",
+    "eslint-config-next": "16.4.5",
     "jsqr": "^1.4.0",
     "pngjs": "^7.0.0",
     "prisma": "^6.19.3",
