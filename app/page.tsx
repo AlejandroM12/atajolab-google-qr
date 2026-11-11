@@ -7,7 +7,7 @@ import { Includes } from "@/components/landing/includes";
 import { Inspiration } from "@/components/landing/inspiration";
 import { SITE_DESCRIPTION, SITE_NAME, homeStructuredData, jsonLd, siteUrl } from "@/lib/site";
 
-const TITLE = "Cartel QR para reseñas de Google";
+const TITLE = "Códigos QR con diseño listo para usar";
 
 export const metadata: Metadata = {
   title: { absolute: `${TITLE} · ${SITE_NAME}` },

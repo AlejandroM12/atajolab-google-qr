@@ -7,7 +7,7 @@ export const SITE_NAME = "AtajoLab QR";
 export const BRAND_NAME = "AtajoLab";
 
 export const SITE_DESCRIPTION =
-  "Creá un cartel QR para que tus clientes dejen una reseña en Google o encuentren tu negocio en Google Maps. Personalizalo y descargalo listo para imprimir.";
+  "Creá un código QR con diseño para tu sitio, tus redes, WhatsApp, el Wi-Fi, tu menú o tus reseñas de Google. Elegí una propuesta, personalizala y descargala lista para imprimir o publicar.";
 
 /** Public origin without trailing slash. Safe to call at build time. */
 export function siteUrl(env: NodeJS.ProcessEnv = process.env): URL {
@@ -26,6 +26,7 @@ export function siteUrl(env: NodeJS.ProcessEnv = process.env): URL {
 /** Pages that search engines may list. Everything else is private or utility. */
 export const PUBLIC_PATHS = [
   "/",
+  "/empezar",
   "/crear",
   "/preguntas-frecuentes",
   "/terminos",
@@ -57,16 +58,16 @@ export function homeStructuredData(origin: URL): Record<string, unknown> {
       },
       {
         "@type": "Product",
-        name: "Cartel QR A6 para reseñas de Google",
+        name: "Diseño con código QR",
         description:
-          "Pieza digital A6 (105 × 148 mm) con código QR a tu ficha o a tus reseñas de Google. Archivos PNG, SVG y PDF listos para imprimir.",
+          "Pieza digital con código QR para enlaces, redes sociales, WhatsApp, Wi-Fi, contactos o reseñas de Google, en formatos para imprimir o publicar. Archivos PNG, SVG y PDF.",
         brand: { "@id": `${url}/#organization` },
         offers: {
           "@type": "Offer",
           price: String(PIECE_PRICE_ARS),
           priceCurrency: PIECE_CURRENCY,
           availability: "https://schema.org/OnlineOnly",
-          url: `${url}/crear`,
+          url: `${url}/empezar`,
         },
       },
     ],

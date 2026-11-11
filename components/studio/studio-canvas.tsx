@@ -4,11 +4,9 @@ import { useEffect, useRef, useState } from "react";
 import type Konva from "konva";
 import { Group, Image as KonvaImage, Layer, Rect, Stage, Text, Transformer } from "react-konva";
 import QRCode from "qrcode";
+import { formatLabel, qrMaxMm } from "@/lib/studio/formats";
 import {
-  A6_HEIGHT_MM,
-  A6_WIDTH_MM,
   QR_INK,
-  QR_MAX_MM,
   QR_MIN_MM,
   QR_PAPER,
   type DesignDocumentV8,
@@ -42,7 +40,9 @@ export function StudioCanvas({ document, selectedId, onSelect, onGeometry }: Stu
   const [fonts] = useState(readFonts);
   const qr = document.elements.find((element): element is QrElement => element.type === "qr");
   const qrPicture = useQrPicture(qr?.value ?? "", qr?.foreground ?? QR_INK, qr?.background ?? QR_PAPER);
-  const px = size.width / A6_WIDTH_MM;
+  const sheetWidth = document.format.widthMm;
+  const sheetHeight = document.format.heightMm;
+  const px = size.width / sheetWidth;
   const selected = document.elements.find((element) => element.id === selectedId) ?? null;
 
   useEffect(() => {
@@ -51,7 +51,7 @@ export function StudioCanvas({ document, selectedId, onSelect, onGeometry }: Stu
     const measure = () => {
       const bounds = shell.getBoundingClientRect();
       const maxHeight = Math.min(window.innerHeight * 0.68, 860);
-      const ratio = A6_HEIGHT_MM / A6_WIDTH_MM;
+      const ratio = sheetHeight / sheetWidth;
       let width = bounds.width;
       let height = width * ratio;
       if (height > maxHeight && maxHeight > 0) {
@@ -69,7 +69,7 @@ export function StudioCanvas({ document, selectedId, onSelect, onGeometry }: Stu
       observer.disconnect();
       window.removeEventListener("resize", measure);
     };
-  }, []);
+  }, [sheetWidth, sheetHeight]);
 
   useEffect(() => {
     const transformer = transformerRef.current;
@@ -87,7 +87,7 @@ export function StudioCanvas({ document, selectedId, onSelect, onGeometry }: Stu
   }
 
   return (
-    <div ref={shellRef} className="w-full" aria-label="Lienzo del cartel A6">
+    <div ref={shellRef} className="w-full" aria-label={`Lienzo: ${formatLabel(document.format.id)}`}>
       {size.width === 0 ? (
         <p className="py-16 text-center text-sm text-muted" role="status">
           Preparando el lienzo…
@@ -153,7 +153,7 @@ export function StudioCanvas({ document, selectedId, onSelect, onGeometry }: Stu
                     if (newBox.width < 12 || newBox.height < 12) return oldBox;
                     if (selected?.type === "qr") {
                       const min = QR_MIN_MM * px;
-                      const max = Math.min(QR_MAX_MM * px, size.width, size.height);
+                      const max = Math.min(qrMaxMm(document.format) * px, size.width, size.height);
                       if (newBox.width < min || newBox.height < min) return oldBox;
                       if (newBox.width > max || newBox.height > max) return oldBox;
                     }
@@ -163,10 +163,10 @@ export function StudioCanvas({ document, selectedId, onSelect, onGeometry }: Stu
               </Layer>
             </Stage>
           </div>
-          <p className="mt-2 text-center text-xs text-muted">A6 · 105 × 148 mm</p>
+          <p className="mt-2 text-center text-xs text-muted">{formatLabel(document.format.id)}</p>
           {qrPicture.failed ? (
             <p className="mt-1 text-center text-sm text-danger" role="alert">
-              No pudimos armar el QR con ese texto. Probá con un enlace más corto.
+              No pudimos armar el QR con ese contenido. Probá con uno más corto.
             </p>
           ) : null}
         </div>

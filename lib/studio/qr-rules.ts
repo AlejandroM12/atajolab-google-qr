@@ -1,8 +1,7 @@
 import { assessContrast, isHexColor } from "@/lib/color";
 import { clamp, maxQrSize, mm, normalizeRotation, rotationFactor } from "@/lib/studio/geometry";
+import { A6_SHEET, type Sheet } from "@/lib/studio/formats";
 import {
-  A6_HEIGHT_MM,
-  A6_WIDTH_MM,
   QR_INK,
   QR_MIN_CONTRAST,
   QR_MIN_MM,
@@ -40,19 +39,19 @@ export function qrContrastIssue(foreground: string, background: string): QrIssue
  * Keeps the QR square, inside the sheet even when rotated, and at least 22 mm.
  * The box is the unrotated rectangle. Rotation happens around its center.
  */
-export function clampQrGeometry(element: QrElement): QrElement {
+export function clampQrGeometry(element: QrElement, sheet: Sheet = A6_SHEET): QrElement {
   const rotation = normalizeRotation(element.rotation);
   let size = Math.max(element.width, element.height);
   if (!Number.isFinite(size)) size = QR_MIN_MM;
-  size = mm(clamp(size, QR_MIN_MM, maxQrSize(rotation)));
+  size = mm(clamp(size, QR_MIN_MM, maxQrSize(rotation, sheet)));
 
   const half = (size * rotationFactor(rotation)) / 2;
   let centerX = element.x + element.width / 2;
   let centerY = element.y + element.height / 2;
-  if (!Number.isFinite(centerX)) centerX = A6_WIDTH_MM / 2;
-  if (!Number.isFinite(centerY)) centerY = A6_HEIGHT_MM / 2;
-  centerX = clamp(centerX, half, A6_WIDTH_MM - half);
-  centerY = clamp(centerY, half, A6_HEIGHT_MM - half);
+  if (!Number.isFinite(centerX)) centerX = sheet.widthMm / 2;
+  if (!Number.isFinite(centerY)) centerY = sheet.heightMm / 2;
+  centerX = clamp(centerX, half, sheet.widthMm - half);
+  centerY = clamp(centerY, half, sheet.heightMm - half);
 
   return {
     ...element,

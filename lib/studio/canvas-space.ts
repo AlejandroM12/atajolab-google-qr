@@ -1,9 +1,8 @@
 import { insertBelowQr, normalizeElement } from "@/lib/studio/document";
 import { axisAlignedBounds } from "@/lib/studio/geometry";
 import { qrProtectedBounds } from "@/lib/studio/validation";
+import type { Sheet } from "@/lib/studio/formats";
 import {
-  A6_HEIGHT_MM,
-  A6_WIDTH_MM,
   MAX_ELEMENTS,
   type DesignDocumentV8,
   type QrElement,
@@ -21,16 +20,16 @@ export function isUserContent(element: StudioElement): boolean {
   return element.role === null || element.type === "image";
 }
 
-function visibleShare(element: StudioElement): number {
+function visibleShare(element: StudioElement, sheet: Sheet): number {
   const box = axisAlignedBounds(element);
   const area = box.width * box.height;
   if (area <= 0) return 1;
-  return intersection(box, { x: 0, y: 0, width: A6_WIDTH_MM, height: A6_HEIGHT_MM }) / area;
+  return intersection(box, { x: 0, y: 0, width: sheet.widthMm, height: sheet.heightMm }) / area;
 }
 
 /** On-sheet elements the user dragged (mostly) outside the printable area. */
 export function offCanvasElements(document: DesignDocumentV8): StudioElement[] {
-  return document.elements.filter((item) => item.type !== "qr" && visibleShare(item) < MIN_VISIBLE_SHARE);
+  return document.elements.filter((item) => item.type !== "qr" && visibleShare(item, document.format) < MIN_VISIBLE_SHARE);
 }
 
 /** What the "Fuera del lienzo" panel lists: parked user content plus elements off the sheet. */
@@ -53,20 +52,22 @@ export function findPlacement(
   document: DesignDocumentV8,
   element: StudioElement,
 ): { x: number; y: number; clear: boolean } {
-  const width = Math.min(element.width, A6_WIDTH_MM);
-  const height = Math.min(element.height, A6_HEIGHT_MM);
+  const sheetWidth = document.format.widthMm;
+  const sheetHeight = document.format.heightMm;
+  const width = Math.min(element.width, sheetWidth);
+  const height = Math.min(element.height, sheetHeight);
   const obstacles: { box: Box; weight: number }[] = [];
   for (const item of document.elements) {
     if (item.id === element.id) continue;
     if (item.type === "qr") obstacles.push({ box: qrProtectedBounds(item as QrElement), weight: 100 });
     else obstacles.push({ box: axisAlignedBounds(item), weight: item.type === "rect" ? 1 : 3 });
   }
-  const wantX = Math.min(Math.max(element.x, 0), A6_WIDTH_MM - width);
-  const wantY = Math.min(Math.max(element.y, 0), A6_HEIGHT_MM - height);
+  const wantX = Math.min(Math.max(element.x, 0), sheetWidth - width);
+  const wantY = Math.min(Math.max(element.y, 0), sheetHeight - height);
 
   let best = { x: wantX, y: wantY, score: Number.POSITIVE_INFINITY, distance: Number.POSITIVE_INFINITY };
-  const xs = steps(A6_WIDTH_MM - width);
-  const ys = steps(A6_HEIGHT_MM - height);
+  const xs = steps(sheetWidth - width);
+  const ys = steps(sheetHeight - height);
   for (const y of ys) {
     for (const x of xs) {
       const box = { x, y, width, height };
@@ -102,14 +103,14 @@ export function recoverElement(
   if (parked) {
     if (parked.type === "qr" || document.elements.length >= MAX_ELEMENTS) return null;
     const without = { ...document, parked: document.parked.filter((item) => item.id !== id) };
-    const element = normalizeElement(parked);
+    const element = normalizeElement(parked, document.format);
     const spot = findPlacement(without, element);
-    return { document: insertBelowQr(without, normalizeElement({ ...element, ...spot })), clear: spot.clear };
+    return { document: insertBelowQr(without, normalizeElement({ ...element, ...spot }, document.format)), clear: spot.clear };
   }
   const current = document.elements.find((item) => item.id === id);
-  if (!current || current.type === "qr" || visibleShare(current) >= MIN_VISIBLE_SHARE) return null;
+  if (!current || current.type === "qr" || visibleShare(current, document.format) >= MIN_VISIBLE_SHARE) return null;
   const spot = findPlacement(document, current);
-  const moved = normalizeElement({ ...current, x: spot.x, y: spot.y });
+  const moved = normalizeElement({ ...current, x: spot.x, y: spot.y }, document.format);
   return {
     document: { ...document, elements: document.elements.map((item) => (item.id === id ? moved : item)) },
     clear: spot.clear,

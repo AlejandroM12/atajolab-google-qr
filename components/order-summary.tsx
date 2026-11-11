@@ -237,10 +237,11 @@ function StudioV8OrderSummary({
             </div>
           ) : (
             <div
-              className="flex aspect-[105/148] w-full max-w-[20rem] flex-col justify-between rounded-sm border border-line bg-card px-5 py-6 text-center"
+              className="flex w-full max-w-[20rem] flex-col justify-between rounded-sm border border-line bg-card px-5 py-6 text-center"
+              style={{ aspectRatio: `${artwork.format.widthMm} / ${artwork.format.heightMm}` }}
               aria-label="Vista previa del diseño"
             >
-              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-accent">{templateName} · A6</p>
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-accent">{templateName}</p>
               <p className="text-2xl font-semibold leading-snug text-foreground">{artwork.title}</p>
               <p className="text-xs text-muted">Diseño guardado · {frozen}</p>
             </div>

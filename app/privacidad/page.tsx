@@ -13,7 +13,7 @@ export default function PrivacyPage() {
     <LegalPage
       eyebrow="Legal"
       title="Política de privacidad"
-      intro={<p>Usamos los datos mínimos para preparar tu cartel, cobrarlo y entregarte los archivos.</p>}
+      intro={<p>Usamos los datos mínimos para preparar tu diseño, cobrarlo y entregarte los archivos.</p>}
     >
       <LegalSection title="Responsable">
         <p>
@@ -30,7 +30,9 @@ export default function PrivacyPage() {
             descargas.
           </li>
           <li>
-            <strong>Tu diseño</strong>: textos, colores, el enlace de Google del QR y las imágenes que subas.
+            <strong>Tu diseño</strong>: textos, colores, las imágenes que subas y el contenido del código QR (el
+            enlace, los datos de la red Wi-Fi con su contraseña, los datos de contacto o el texto que cargues). Se
+            guarda con el pedido para poder generar tus archivos cada vez que los descargues.
           </li>
           <li>
             <strong>Datos del pago</strong> que informa Mercado Pago: número de operación, estado y monto. No

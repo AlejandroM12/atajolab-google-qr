@@ -15,7 +15,7 @@ export function SiteFooter() {
             <p className="font-display text-sm font-semibold text-accent">QR</p>
           </div>
           <p className="mt-4 text-sm leading-relaxed text-muted">
-            Creá carteles QR personalizados para que tus clientes te encuentren y te dejen reseñas en Google.
+            Creá códigos QR con diseño para tu sitio, tus redes, WhatsApp, Wi-Fi, tu menú o tus reseñas de Google.
             Descargalos listos para imprimir.
           </p>
         </div>
@@ -23,8 +23,11 @@ export function SiteFooter() {
           <Link href="/#como-funciona" className={linkClass}>
             Cómo funciona
           </Link>
+          <Link href="/empezar" className={linkClass}>
+            Crear mi QR
+          </Link>
           <Link href="/crear" className={linkClass}>
-            Crear mi cartel QR
+            Editor avanzado
           </Link>
           <Link href="/preguntas-frecuentes" className={linkClass}>
             Preguntas frecuentes

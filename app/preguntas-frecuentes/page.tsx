@@ -6,7 +6,7 @@ import { jsonLd } from "@/lib/site";
 
 export const metadata: Metadata = {
   title: "Preguntas frecuentes",
-  description: "Cómo funciona el cartel QR para reseñas de Google: enlace, pago, descarga e impresión.",
+  description: "Cómo funciona AtajoLab QR: qué puede abrir el código, formatos, pago, descarga e impresión.",
   alternates: { canonical: "/preguntas-frecuentes" },
 };
 

@@ -1,4 +1,6 @@
-/** Millimeters on the physical A6 sheet. The editor scales this same document to the screen. */
+import type { DesignFormat } from "@/lib/studio/formats";
+
+/** Millimeters on the physical sheet. The editor scales this same document to the screen. */
 export const STUDIO_VERSION = 8 as const;
 
 export const A6_WIDTH_MM = 105;
@@ -76,11 +78,8 @@ export type TemplateLayoutSnapshot = {
 
 export type DesignDocumentV8 = {
   version: typeof STUDIO_VERSION;
-  format: {
-    id: "a6";
-    widthMm: typeof A6_WIDTH_MM;
-    heightMm: typeof A6_HEIGHT_MM;
-  };
+  /** One of lib/studio/formats.ts. A6 is the default and the only size older designs use. */
+  format: DesignFormat;
   background: string;
   templateId: TemplateId;
   /** Saved arrangements per template so switching back restores local layout. */

@@ -1,4 +1,4 @@
-import { A6_HEIGHT_MM, A6_WIDTH_MM, QR_MAX_MM } from "@/lib/studio/types";
+import { A6_SHEET, qrMaxMm, type Sheet } from "@/lib/studio/formats";
 
 export function mm(value: number): number {
   return Math.round(value * 100) / 100;
@@ -22,9 +22,9 @@ export function rotationFactor(rotation: number): number {
   return Math.abs(Math.cos(radians)) + Math.abs(Math.sin(radians));
 }
 
-export function maxQrSize(rotation: number): number {
+export function maxQrSize(rotation: number, sheet: Sheet = A6_SHEET): number {
   const factor = rotationFactor(rotation);
-  return Math.min(QR_MAX_MM, A6_WIDTH_MM / factor, A6_HEIGHT_MM / factor);
+  return Math.min(qrMaxMm(sheet), sheet.widthMm / factor, sheet.heightMm / factor);
 }
 
 export type AxisBox = {

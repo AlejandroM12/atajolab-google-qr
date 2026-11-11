@@ -18,17 +18,17 @@ export function Hero() {
             Para comercios y profesionales
           </p>
           <h1 className="mt-4 max-w-xl text-4xl font-semibold leading-[1.05] text-foreground sm:text-6xl">
-            Hacé que dejar una reseña sea más fácil
+            Tu código QR, con un diseño listo para usar
           </h1>
           <p className="mt-5 max-w-xl text-lg leading-relaxed text-muted">
-            Diseñá un cartel A6 con código QR hacia Google. Editá el lienzo a tu gusto y descargalo listo
-            para imprimir.
+            Compartí tu sitio, tus redes, WhatsApp, el Wi-Fi, tu menú o tus reseñas de Google. Contanos qué
+            necesitás, elegí una propuesta y descargala lista para imprimir o publicar.
           </p>
           <FreeFirstNote variant="hero" />
           <div className="mt-8 flex flex-col gap-3 sm:flex-row">
-            <ButtonLink href="/crear">Crear mi cartel QR</ButtonLink>
-            <ButtonLink href="/#como-funciona" variant="secondary">
-              Cómo funciona
+            <ButtonLink href="/empezar">Crear mi QR</ButtonLink>
+            <ButtonLink href="/crear" variant="secondary">
+              Editor avanzado
             </ButtonLink>
           </div>
           <p className="mt-5 text-sm font-semibold text-foreground/80">

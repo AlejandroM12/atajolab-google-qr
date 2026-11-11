@@ -8,9 +8,9 @@ import { freeFirstQrOpen } from "@/lib/free-first-qr";
 import { studioExportAllowed } from "@/lib/studio/export/access";
 
 export const metadata: Metadata = {
-  title: "Crear mi cartel QR",
+  title: "Editor de diseños QR",
   description:
-    "Diseñá tu cartel A6 con código QR, personalizalo a tu gusto y descargalo listo para imprimir.",
+    "Diseñá tu pieza con código QR sobre un lienzo libre, personalizala a tu gusto y descargala lista para imprimir o publicar.",
   alternates: { canonical: "/crear" },
 };
 

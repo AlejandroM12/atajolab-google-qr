@@ -9,7 +9,7 @@ export function Designs() {
     <section id="disenos" className="scroll-mt-24 border-t border-line bg-card py-16 sm:py-20">
       <Container>
         <SectionHeading eyebrow="Diseños" title="Un diseño para cada negocio">
-          Elegí entre cuatro estilos sugeridos y personalizalos a tu manera en el editor.
+          Estos son ejemplos para reseñas de Google. Abrí cualquiera en el editor y cambialo a tu manera.
         </SectionHeading>
         <ul className="mt-10 grid gap-4 sm:grid-cols-2">
           {premiumTemplates.map((template) => (
@@ -40,7 +40,7 @@ export function Designs() {
           Los ejemplos usan el nombre «{DEMO_BUSINESS_NAME}» y un enlace de prueba. En el editor podés cambiarlo todo.
         </p>
         <div className="mt-8">
-          <ButtonLink href="/crear">Crear mi cartel QR</ButtonLink>
+          <ButtonLink href="/empezar">Crear mi QR</ButtonLink>
         </div>
       </Container>
     </section>

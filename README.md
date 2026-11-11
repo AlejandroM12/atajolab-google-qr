@@ -1,6 +1,11 @@
 # AtajoLab QR
 
-Aplicación web para que un comercio o profesional arme un código QR con el enlace de su ubicación en Google Maps o con el enlace para dejar una reseña.
+Aplicación web para que un comercio o profesional arme un código QR con diseño: enlaces, redes sociales, WhatsApp, Google Maps, reseñas de Google, menús, eventos, Wi-Fi, contactos (vCard) o texto.
+
+- `/empezar`: creación guiada (contenido → datos → estilo → formato → propuestas). Las propuestas se arman con reglas fijas en `lib/studio/proposals.ts`, sin servicios externos.
+- `/crear`: editor avanzado (Studio). Recibe la propuesta elegida y permite cambiar todo, incluido el formato.
+- Contenido del QR: `lib/qr-content.ts`. Formatos (A6, A5, A4, tarjeta, etiqueta, post, historia): `lib/studio/formats.ts`.
+- Los códigos son estáticos: no hay enlaces dinámicos ni estadísticas de escaneo.
 
 Valida el enlace, muestra la pieza y guarda el pedido en PostgreSQL. El editor ofrece tres plantillas. Un pedido pagado descarga PNG, SVG y PDF generados en el servidor, también para las plantillas anteriores. No hay cuentas de usuario. El pago usa Mercado Pago Checkout Pro. `MERCADOPAGO_ENV=test` cobra con la cuenta de prueba. `MERCADOPAGO_ENV=production` cobra con la cuenta real. Si el token y la cuenta no coinciden, el cobro queda deshabilitado.
 

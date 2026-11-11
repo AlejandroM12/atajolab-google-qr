@@ -2,7 +2,18 @@
 
 import Link from "next/link";
 import { useState } from "react";
+import { QrContentFields, type QrFieldError } from "@/components/guided/qr-content-fields";
 import { NumberField } from "@/components/studio/number-field";
+import {
+  buildQrContent,
+  decodeQrContent,
+  describeQrPayload,
+  emptyQrContent,
+  qrContentTypes,
+  type QrContentInput,
+  type QrContentType,
+} from "@/lib/qr-content";
+import { fontMaxMm, formatList, qrMaxMm, type FormatId, type Sheet } from "@/lib/studio/formats";
 import { recoverableElements } from "@/lib/studio/canvas-space";
 import { elementLabel } from "@/lib/studio/document";
 import { formatArs, PIECE_CURRENCY, PIECE_PRICE_ARS } from "@/lib/pricing";
@@ -29,6 +40,8 @@ const fieldClass = "mt-1 h-10 w-full rounded-xl border border-line bg-background
 export function StudioToolbar({
   layout,
   templateId,
+  formatId,
+  onFormat,
   canUndo,
   canRedo,
   imageBusy,
@@ -44,6 +57,8 @@ export function StudioToolbar({
 }: {
   layout: "row" | "column";
   templateId: TemplateId;
+  formatId: FormatId;
+  onFormat: (id: FormatId) => void;
   canUndo: boolean;
   canRedo: boolean;
   imageBusy: boolean;
@@ -107,10 +122,28 @@ export function StudioToolbar({
     </>
   );
 
+  const format = (
+    <label className="block text-sm">
+      <span className="text-xs font-semibold text-muted">Formato</span>
+      <select
+        className={fieldClass}
+        value={formatId}
+        onChange={(event) => onFormat(event.target.value as FormatId)}
+      >
+        {formatList.map((item) => (
+          <option key={item.id} value={item.id}>
+            {item.name} · {item.size}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+
   if (layout === "column") {
     return (
       <div className="flex flex-col gap-2">
         <div className="grid grid-cols-2 gap-2">{tools}</div>
+        {format}
         <div className="flex flex-col gap-2">{templates}</div>
       </div>
     );
@@ -121,6 +154,7 @@ export function StudioToolbar({
       <div className="flex w-full min-w-0 gap-2 overflow-x-auto pb-1 [-webkit-overflow-scrolling:touch]">
         <div className="flex min-w-max gap-2">{tools}</div>
       </div>
+      {format}
       <div className="grid w-full min-w-0 grid-cols-1 gap-2 sm:grid-cols-2">{templates}</div>
     </div>
   );
@@ -306,6 +340,7 @@ export function StudioProperties({
         {selected ? (
           <ElementFields
             element={selected}
+            sheet={document.format}
             canForward={index >= 0 && index < document.elements.length - 1}
             canBackward={index > 0}
             onCommit={onCommit}
@@ -317,7 +352,7 @@ export function StudioProperties({
             onReplaceImage={onReplaceImage}
           />
         ) : (
-          <p className="mt-3 text-sm text-muted">Tocá un elemento del cartel para editarlo.</p>
+          <p className="mt-3 text-sm text-muted">Tocá un elemento del diseño para editarlo.</p>
         )}
       </section>
 
@@ -351,6 +386,7 @@ export function StudioProperties({
 
 function ElementFields({
   element,
+  sheet,
   canForward,
   canBackward,
   onCommit,
@@ -362,6 +398,7 @@ function ElementFields({
   onReplaceImage,
 }: {
   element: StudioElement;
+  sheet: Sheet;
   canForward: boolean;
   canBackward: boolean;
   onCommit: (id: string, patch: ElementPatch) => void;
@@ -404,7 +441,7 @@ function ElementFields({
             label="Tamaño (mm)"
             value={element.fontSize}
             min={2}
-            max={24}
+            max={fontMaxMm(sheet)}
             onCommit={(fontSize) => onCommit(element.id, { fontSize })}
           />
           <ColorField label="Color" value={element.fill} onChange={(fill) => onCommit(element.id, { fill })} />
@@ -460,17 +497,23 @@ function ElementFields({
       ) : null}
       {element.type === "qr" ? (
         <>
-          <label className="block text-sm">
-            <span className="text-xs font-semibold text-muted">Enlace o texto del QR</span>
+          <QrContentEditor
+            key={`${element.id}:${element.value}`}
+            value={element.value}
+            onApply={(value) => onCommit(element.id, { value })}
+          />
+          <details>
+            <summary className="cursor-pointer text-xs font-semibold text-muted">Editar el contenido como texto</summary>
             <textarea
-              className="mt-1 min-h-20 w-full rounded-xl border border-line bg-background px-3 py-2 text-sm"
+              aria-label="Contenido del QR como texto"
+              className="mt-2 min-h-20 w-full rounded-xl border border-line bg-background px-3 py-2 text-sm"
               maxLength={MAX_QR_VALUE}
               placeholder="https://"
               value={element.value}
               onChange={(event) => onEdit(element.id, { value: event.target.value })}
               onBlur={onEditEnd}
             />
-          </label>
+          </details>
           <ColorField
             label="Color del código"
             value={element.foreground}
@@ -486,25 +529,25 @@ function ElementFields({
               ? qrIssue.message
               : element.value.trim()
                 ? "El contraste alcanza para escanear. El margen claro es la zona de seguridad."
-                : "Escribí qué tiene que abrir el código."}
+                : "Cargá qué tiene que abrir el código."}
           </p>
         </>
       ) : null}
       <div className="grid grid-cols-2 gap-2">
-        <NumberField label="X (mm)" value={element.x} min={-40} max={105} onCommit={(x) => onCommit(element.id, { x })} />
-        <NumberField label="Y (mm)" value={element.y} min={-40} max={148} onCommit={(y) => onCommit(element.id, { y })} />
+        <NumberField label="X (mm)" value={element.x} min={-40} max={sheet.widthMm} onCommit={(x) => onCommit(element.id, { x })} />
+        <NumberField label="Y (mm)" value={element.y} min={-40} max={sheet.heightMm} onCommit={(y) => onCommit(element.id, { y })} />
         <NumberField
           label="Ancho (mm)"
           value={element.width}
-          min={element.type === "qr" ? QR_MIN_MM : 4}
-          max={105}
+          min={element.type === "qr" ? QR_MIN_MM : element.type === "rect" ? 1 : 4}
+          max={element.type === "qr" ? qrMaxMm(sheet) : sheet.widthMm}
           onCommit={(width) => onCommit(element.id, { width })}
         />
         <NumberField
           label="Alto (mm)"
           value={element.height}
-          min={element.type === "qr" ? QR_MIN_MM : 4}
-          max={148}
+          min={element.type === "qr" ? QR_MIN_MM : element.type === "rect" ? 1 : 4}
+          max={element.type === "qr" ? qrMaxMm(sheet) : sheet.heightMm}
           onCommit={(height) => onCommit(element.id, { height })}
         />
       </div>
@@ -535,9 +578,82 @@ function ElementFields({
         </button>
       </div>
       {element.type === "qr" ? (
-        <p className="text-xs text-muted">El código se queda en el cartel. No se puede estirar ni achicar de menos de 22 mm.</p>
+        <p className="text-xs text-muted">El código se queda en el diseño. No se puede estirar ni achicar de menos de 22 mm.</p>
       ) : null}
     </div>
+  );
+}
+
+/** What the code opens, with the same short forms as the guided flow. */
+function QrContentEditor({ value, onApply }: { value: string; onApply: (value: string) => void }) {
+  const [open, setOpen] = useState(value.trim().length === 0);
+  const [draft, setDraft] = useState<QrContentInput>(() => decodeQrContent(value));
+  const [error, setError] = useState<QrFieldError>(null);
+
+  if (!open) {
+    return (
+      <div className="rounded-xl border border-line bg-background px-3 py-2.5">
+        <p className="text-xs font-semibold text-muted">El código abre</p>
+        <p className="mt-0.5 break-words text-sm font-semibold">{describeQrPayload(value)}</p>
+        <button type="button" className={`${toolButton} mt-2 w-full`} onClick={() => setOpen(true)}>
+          Cambiar contenido
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <form
+      className="flex flex-col gap-3 rounded-xl border border-line bg-background p-3"
+      noValidate
+      onSubmit={(event) => {
+        event.preventDefault();
+        const built = buildQrContent(draft);
+        if (!built.ok) {
+          setError({ field: built.field, message: built.message });
+          return;
+        }
+        setError(null);
+        if (built.value === value) setOpen(false);
+        else onApply(built.value);
+      }}
+    >
+      <label className="block text-sm">
+        <span className="text-xs font-semibold text-muted">¿Qué abre el código?</span>
+        <select
+          className={fieldClass}
+          value={draft.type}
+          onChange={(event) => {
+            setError(null);
+            setDraft(emptyQrContent(event.target.value as QrContentType));
+          }}
+        >
+          {qrContentTypes.map((item) => (
+            <option key={item.id} value={item.id}>
+              {item.name}
+            </option>
+          ))}
+        </select>
+      </label>
+      <QrContentFields
+        value={draft}
+        error={error}
+        onChange={(next) => {
+          setError(null);
+          setDraft(next);
+        }}
+      />
+      <div className="grid grid-cols-2 gap-2">
+        <button type="submit" className={primaryButton}>
+          Aplicar
+        </button>
+        {value.trim() ? (
+          <button type="button" className={`${toolButton} h-11`} onClick={() => setOpen(false)}>
+            Cancelar
+          </button>
+        ) : null}
+      </div>
+    </form>
   );
 }
 

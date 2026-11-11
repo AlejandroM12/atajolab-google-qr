@@ -2,9 +2,8 @@ import { BUSINESS_NAME_MAX } from "@/lib/artwork";
 import { collectStudioAssetIds, documentHasDataUrls } from "@/lib/studio/assets/document";
 import { isDataImageUrl, isStudioAssetRef } from "@/lib/studio/assets/refs";
 import { parseDesign } from "@/lib/studio/serialize";
+import type { DesignFormat } from "@/lib/studio/formats";
 import {
-  A6_HEIGHT_MM,
-  A6_WIDTH_MM,
   STUDIO_VERSION,
   type DesignDocumentV8,
   type QrElement,
@@ -13,18 +12,14 @@ import {
 } from "@/lib/studio/types";
 import { validateForExport } from "@/lib/studio/export/validate";
 
-/** Commercial Order.artwork version for Studio A6 designs. Distinct from legacy STUDIO_ARTWORK_VERSION (2). */
+/** Commercial Order.artwork version for Studio designs. Distinct from legacy STUDIO_ARTWORK_VERSION (2). */
 export const STUDIO_COMMERCIAL_ARTWORK_VERSION = STUDIO_VERSION;
 
 export type StudioCommercialArtworkV8 = {
   version: typeof STUDIO_COMMERCIAL_ARTWORK_VERSION;
   /** QR destination frozen at order time. */
   href: string;
-  format: {
-    id: "a6";
-    widthMm: typeof A6_WIDTH_MM;
-    heightMm: typeof A6_HEIGHT_MM;
-  };
+  format: DesignFormat;
   background: string;
   templateId: TemplateId;
   /** Commercial title derived from the printable design (role titulo). */
@@ -60,7 +55,7 @@ export function buildStudioCommercialArtwork(
   if (documentHasDataUrls(printable)) return { ok: false, error: "studio-embedded-image" };
   if (hasNonAssetImage(printable)) return { ok: false, error: "studio-remote-image" };
 
-  const exportCheck = validateForExport(printable, { requireGoogleLink: true });
+  const exportCheck = validateForExport(printable, { commercial: true });
   if (!exportCheck.ready) return { ok: false, error: "studio-not-ready" };
 
   const qr = printable.elements.find((element): element is QrElement => element.type === "qr");
@@ -74,11 +69,7 @@ export function buildStudioCommercialArtwork(
     artwork: {
       version: STUDIO_COMMERCIAL_ARTWORK_VERSION,
       href: qr.value.trim(),
-      format: {
-        id: "a6",
-        widthMm: A6_WIDTH_MM,
-        heightMm: A6_HEIGHT_MM,
-      },
+      format: { ...printable.format },
       background: printable.background,
       templateId: printable.templateId,
       title,
@@ -100,8 +91,7 @@ export function readStudioCommercialArtwork(value: unknown): StudioCommercialArt
   if (typeof value.background !== "string") return null;
   // Any Studio template; parseDesign validates it and it must match the document below.
   if (typeof value.templateId !== "string") return null;
-  if (!isRecord(value.format) || value.format.id !== "a6") return null;
-  if (value.format.widthMm !== A6_WIDTH_MM || value.format.heightMm !== A6_HEIGHT_MM) return null;
+  if (!isRecord(value.format)) return null;
   if (!Array.isArray(value.assetIds) || !value.assetIds.every((id) => typeof id === "string")) return null;
 
   if (!isRecord(value.document)) return null;
@@ -118,6 +108,15 @@ export function readStudioCommercialArtwork(value: unknown): StudioCommercialArt
 
   if (parsed.document.background !== value.background) return null;
   if (parsed.document.templateId !== value.templateId) return null;
+  // parseDesign accepted the document's format; the snapshot header must name the same one.
+  const format = parsed.document.format;
+  if (
+    value.format.id !== format.id ||
+    value.format.widthMm !== format.widthMm ||
+    value.format.heightMm !== format.heightMm
+  ) {
+    return null;
+  }
 
   const qr = parsed.document.elements.find((element): element is QrElement => element.type === "qr");
   if (!qr || qr.value.trim() !== value.href.trim()) return null;
@@ -125,7 +124,7 @@ export function readStudioCommercialArtwork(value: unknown): StudioCommercialArt
   return {
     version: STUDIO_COMMERCIAL_ARTWORK_VERSION,
     href: value.href.trim(),
-    format: { id: "a6", widthMm: A6_WIDTH_MM, heightMm: A6_HEIGHT_MM },
+    format: { ...format },
     background: parsed.document.background,
     templateId: parsed.document.templateId,
     title: value.title,
@@ -145,7 +144,7 @@ export function isStudioCommercialArtwork(
 export function printableDocument(document: DesignDocumentV8): DesignDocumentV8 {
   return {
     version: STUDIO_VERSION,
-    format: { id: "a6", widthMm: A6_WIDTH_MM, heightMm: A6_HEIGHT_MM },
+    format: { ...document.format },
     background: document.background,
     templateId: document.templateId,
     layouts: {},

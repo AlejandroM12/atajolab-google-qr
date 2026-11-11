@@ -2,9 +2,8 @@ import { isHexColor } from "@/lib/color";
 import { normalizeElement } from "@/lib/studio/document";
 import { imageSrcIssue } from "@/lib/studio/images";
 import { safeQrColors } from "@/lib/studio/qr-rules";
+import { readDesignFormat, type Sheet } from "@/lib/studio/formats";
 import {
-  A6_HEIGHT_MM,
-  A6_WIDTH_MM,
   MAX_ELEMENTS,
   MAX_PARKED,
   STUDIO_VERSION,
@@ -52,10 +51,8 @@ export function parseDesign(raw: string): ParsedDesign | null {
   }
   if (!isRecord(value)) return null;
   if (value.version !== STUDIO_VERSION) return null;
-  if (!isRecord(value.format)) return null;
-  if (value.format.id !== "a6" || value.format.widthMm !== A6_WIDTH_MM || value.format.heightMm !== A6_HEIGHT_MM) {
-    return null;
-  }
+  const format = readDesignFormat(value.format);
+  if (!format) return null;
   if (typeof value.background !== "string" || !isHexColor(value.background)) return null;
   if (typeof value.templateId !== "string" || !TEMPLATES.has(value.templateId as TemplateId)) return null;
   if (!Array.isArray(value.elements) || !Array.isArray(value.parked)) return null;
@@ -66,7 +63,7 @@ export function parseDesign(raw: string): ParsedDesign | null {
   let repairedQr = false;
   const elements: StudioElement[] = [];
   for (const item of value.elements) {
-    const parsed = parseElement(item, seen);
+    const parsed = parseElement(item, seen, format);
     if (parsed.status === "drop-image") {
       droppedImages += 1;
       continue;
@@ -78,7 +75,7 @@ export function parseDesign(raw: string): ParsedDesign | null {
 
   const parked: StudioElement[] = [];
   for (const item of value.parked) {
-    const parsed = parseElement(item, seen);
+    const parsed = parseElement(item, seen, format);
     if (parsed.status === "drop-image") {
       droppedImages += 1;
       continue;
@@ -89,13 +86,13 @@ export function parseDesign(raw: string): ParsedDesign | null {
 
   if (elements.filter((item) => item.type === "qr").length !== 1) return null;
 
-  const layouts = parseLayouts(value.layouts);
+  const layouts = parseLayouts(value.layouts, format);
   if (layouts === null) return null;
 
   return {
     document: {
       version: STUDIO_VERSION,
-      format: { id: "a6", widthMm: A6_WIDTH_MM, heightMm: A6_HEIGHT_MM },
+      format,
       background: value.background.toLowerCase(),
       templateId: value.templateId as TemplateId,
       layouts,
@@ -107,7 +104,7 @@ export function parseDesign(raw: string): ParsedDesign | null {
   };
 }
 
-function parseLayouts(value: unknown): DesignDocumentV8["layouts"] | null {
+function parseLayouts(value: unknown, sheet: Sheet): DesignDocumentV8["layouts"] | null {
   if (value === undefined) return {};
   if (!isRecord(value)) return null;
   const layouts: DesignDocumentV8["layouts"] = {};
@@ -119,14 +116,14 @@ function parseLayouts(value: unknown): DesignDocumentV8["layouts"] | null {
     const localSeen = new Set<string>();
     const elements: StudioElement[] = [];
     for (const item of entry.elements) {
-      const parsed = parseElement(item, localSeen);
+      const parsed = parseElement(item, localSeen, sheet);
       if (parsed.status === "drop-image") continue;
       if (parsed.status === "invalid") return null;
       elements.push(parsed.element);
     }
     const parked: StudioElement[] = [];
     for (const item of entry.parked) {
-      const parsed = parseElement(item, localSeen);
+      const parsed = parseElement(item, localSeen, sheet);
       if (parsed.status === "drop-image") continue;
       if (parsed.status === "invalid" || parsed.element.type === "qr") return null;
       parked.push(parsed.element);
@@ -142,7 +139,7 @@ type ParseResult =
   | { status: "drop-image" }
   | { status: "invalid" };
 
-function parseElement(value: unknown, seen: Set<string>): ParseResult {
+function parseElement(value: unknown, seen: Set<string>, sheet: Sheet): ParseResult {
   if (!isRecord(value) || typeof value.type !== "string" || typeof value.id !== "string" || !ID.test(value.id)) {
     return { status: "invalid" };
   }
@@ -155,14 +152,10 @@ function parseElement(value: unknown, seen: Set<string>): ParseResult {
   if (value.type === "image") {
     if (typeof value.src !== "string" || typeof value.alt !== "string") return { status: "invalid" };
     if (imageSrcIssue(value.src)) return { status: "drop-image" };
-    const image: ImageElement = normalizeElement({
-      ...box,
-      id: value.id,
-      role,
-      type: "image",
-      src: value.src,
-      alt: value.alt,
-    });
+    const image: ImageElement = normalizeElement(
+      { ...box, id: value.id, role, type: "image", src: value.src, alt: value.alt },
+      sheet,
+    );
     seen.add(value.id);
     return { status: "ok", element: image, repaired: false };
   }
@@ -185,7 +178,7 @@ function parseElement(value: unknown, seen: Set<string>): ParseResult {
       fontSize: value.fontSize,
       fill: value.fill,
       align: value.align as TextAlign,
-    });
+    }, sheet);
     seen.add(value.id);
     return { status: "ok", element: text, repaired: false };
   }
@@ -201,7 +194,7 @@ function parseElement(value: unknown, seen: Set<string>): ParseResult {
       type: "rect",
       fill: value.fill,
       cornerRadius: value.cornerRadius,
-    });
+    }, sheet);
     seen.add(value.id);
     return { status: "ok", element: rect, repaired: false };
   }
@@ -219,7 +212,7 @@ function parseElement(value: unknown, seen: Set<string>): ParseResult {
       value: value.value,
       foreground: colors.foreground,
       background: colors.background,
-    });
+    }, sheet);
     seen.add(value.id);
     return { status: "ok", element: qr, repaired: colors.repaired };
   }

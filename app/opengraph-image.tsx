@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { ImageResponse } from "next/og";
 import { PIECE_PRICE_ARS, formatArs } from "@/lib/pricing";
 
-export const alt = "AtajoLab QR: carteles QR para reseñas de Google";
+export const alt = "AtajoLab QR: códigos QR con diseño listo para usar";
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 
@@ -34,14 +34,14 @@ export default function OpenGraphImage() {
         </div>
         <div style={{ display: "flex", flexDirection: "column" }}>
           <div style={{ display: "flex", fontSize: 76, fontWeight: 700, lineHeight: 1.05, maxWidth: 900 }}>
-            Tu cartel QR para reseñas de Google
+            Tu código QR, con diseño listo para usar
           </div>
           <div style={{ display: "flex", marginTop: 28, fontSize: 34, color: "#5b544b" }}>
-            Diseñalo en minutos y descargalo listo para imprimir.
+            Enlaces, redes, WhatsApp, Wi-Fi y reseñas de Google.
           </div>
         </div>
         <div style={{ display: "flex", fontSize: 30, color: "#5b544b" }}>
-          {`A6 · PNG, SVG y PDF · ${formatArs(PIECE_PRICE_ARS)}`}
+          {`PNG, SVG y PDF · ${formatArs(PIECE_PRICE_ARS)}`}
         </div>
       </div>
     ),

@@ -43,6 +43,8 @@ export const ROUTE_LIMITS = {
   recoveryEmail: { limit: 3, windowMs: 15 * MINUTE_MS },
   /** POST /api/studio/export/:format (test export, off in production by default). */
   exportIp: { limit: 30, windowMs: HOUR_MS },
+  /** POST /api/studio/proposals (guided flow). Each call lays out and draws up to six previews. */
+  proposalsIp: { limit: 80, windowMs: HOUR_MS },
 } as const;
 
 export function ipBucket(name: string, clientKey: string, policy: { limit: number; windowMs: number }): Bucket {

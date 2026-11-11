@@ -1,12 +1,12 @@
 import { isGoogleBusinessShareLink, validateGoogleLink } from "@/lib/google-link";
+import { inspectQrPayload } from "@/lib/qr-content";
 import { isStudioAssetRef } from "@/lib/studio/assets/refs";
 import { qrDensity } from "@/lib/studio/qr-density";
 import { imageSrcIssue } from "@/lib/studio/images";
 import { axisAlignedBounds } from "@/lib/studio/geometry";
 import { STUDIO_PRINT_DPI } from "@/lib/studio/export/units";
+import type { Sheet } from "@/lib/studio/formats";
 import {
-  A6_HEIGHT_MM,
-  A6_WIDTH_MM,
   QR_MIN_MM,
   type DesignDocumentV8,
   type ImageElement,
@@ -21,7 +21,7 @@ export type ExportIssue = {
     | "missing-qr"
     | "qr-empty"
     | "qr-url"
-    | "qr-not-google"
+    | "qr-content"
     | "qr-density"
     | "qr-size"
     | "out-of-bounds"
@@ -46,10 +46,11 @@ const MIN_IMAGE_DPI = 150;
 
 export type ExportValidationOptions = {
   /**
-   * Commercial orders and the editor require a Google Maps / Google review link.
+   * Commercial orders and the editor check what the QR carries (a safe link, Wi-Fi,
+   * a contact or plain text) and that it prints large enough to scan.
    * Stored paid snapshots are rendered without it so earlier orders keep downloading.
    */
-  requireGoogleLink?: boolean;
+  commercial?: boolean;
 };
 
 export function isGoogleQrLink(value: string): boolean {
@@ -85,35 +86,31 @@ export function validateForExport(
     if (!value) {
       issues.push({
         code: "qr-empty",
-        message: "Completá el enlace del código QR antes de exportar.",
+        message: "Cargá el contenido del código QR antes de exportar.",
         elementId: qr.id,
         blocking: true,
       });
-    } else if (!isHttpUrl(value)) {
-      issues.push({
-        code: "qr-url",
-        message: "El QR tiene que apuntar a una URL http o https válida.",
-        elementId: qr.id,
-        blocking: true,
-      });
-    } else if (options.requireGoogleLink && !isGoogleQrLink(value)) {
-      issues.push({
-        code: "qr-not-google",
-        message:
-          "El QR tiene que llevar el enlace de tu ficha en Google Maps o el enlace para dejar una reseña en Google.",
-        elementId: qr.id,
-        blocking: true,
-      });
-    }
-    if (value && isHttpUrl(value)) {
+    } else {
+      const payload = inspectQrPayload(value);
+      if (payload.issue) {
+        issues.push({
+          code: payload.kind === "url" ? "qr-url" : "qr-content",
+          message: payload.issue,
+          elementId: qr.id,
+          // Never block re-rendering a stored paid snapshot.
+          blocking: options.commercial === true || payload.kind === "url",
+        });
+      } else if (payload.hint) {
+        issues.push({ code: "qr-content", message: payload.hint, elementId: qr.id, blocking: false });
+      }
       const density = qrDensity(value, Math.min(qr.width, qr.height));
       if (density === "too-dense") {
         issues.push({
           code: "qr-density",
-          message: "El enlace es muy largo para este tamaño de QR. Agrandá el QR o usá el enlace corto de Google Maps.",
+          message: "El contenido es muy largo para este tamaño de QR. Agrandá el QR o acortá el contenido.",
           elementId: qr.id,
           // Never block re-rendering a stored paid snapshot.
-          blocking: options.requireGoogleLink === true,
+          blocking: options.commercial === true,
         });
       } else if (density === "tight") {
         issues.push({
@@ -135,7 +132,7 @@ export function validateForExport(
   }
 
   for (const element of document.elements) {
-    issues.push(...boundsIssues(element));
+    issues.push(...boundsIssues(element, document.format));
     if (element.type === "image") issues.push(...imageIssues(element));
   }
 
@@ -149,18 +146,18 @@ export function validateForExport(
   };
 }
 
-function boundsIssues(element: StudioElement): ExportIssue[] {
+function boundsIssues(element: StudioElement, sheet: Sheet): ExportIssue[] {
   const box = axisAlignedBounds(element);
   const outside =
     box.x < -BOUNDS_SLACK_MM ||
     box.y < -BOUNDS_SLACK_MM ||
-    box.x + box.width > A6_WIDTH_MM + BOUNDS_SLACK_MM ||
-    box.y + box.height > A6_HEIGHT_MM + BOUNDS_SLACK_MM;
+    box.x + box.width > sheet.widthMm + BOUNDS_SLACK_MM ||
+    box.y + box.height > sheet.heightMm + BOUNDS_SLACK_MM;
   if (!outside) return [];
   return [
     {
       code: "out-of-bounds",
-      message: `“${shortElementLabel(element)}” se sale del área imprimible A6.`,
+      message: `“${shortElementLabel(element)}” se sale del área imprimible.`,
       elementId: element.id,
       blocking: true,
     },

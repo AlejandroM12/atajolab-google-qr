@@ -70,7 +70,11 @@ export function resolveStudioBootstrap(input: {
     return {
       ...loaded,
       started: true,
-      saveLabel: "Recuperamos el diseño de esta sesión.",
+      // The guided flow saves the chosen proposal as the session design before coming here.
+      saveLabel:
+        params.get("origen") === "guiado"
+          ? "Tu propuesta está lista. Podés cambiar todo."
+          : "Recuperamos el diseño de esta sesión.",
       source: "session",
     };
   }

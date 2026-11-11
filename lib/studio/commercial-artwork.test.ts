@@ -358,20 +358,49 @@ assert.equal(
   1,
 );
 
-// The product is a Google QR: orders need a Google Maps or review link.
+// Orders take any valid QR content, not only Google links: links, Wi-Fi, contacts and text.
 {
   const base = createDocument("corporativo");
-  const notGoogle = withQr(base, "https://example.com/promo");
-  assert.deepEqual(buildStudioCommercialArtwork(notGoogle), { ok: false, error: "studio-not-ready" });
-  const parsed = parseOrderDraft(v8Body(notGoogle), { studioDraftKey: createStudioDraftKey() });
-  assert.deepEqual(parsed, { ok: false, error: "studio-qr-not-google" });
-  const issues = validateForExport(notGoogle, { requireGoogleLink: true }).errors.map((issue) => issue.code);
-  assert.ok(issues.includes("qr-not-google"));
-  // Stored snapshots are re-rendered without the Google requirement.
-  assert.equal(
-    validateForExport(notGoogle).errors.some((issue) => issue.code === "qr-not-google"),
-    false,
-  );
+  const accepted = [
+    "https://example.com/promo",
+    "https://wa.me/5491123456789?text=Hola",
+    "https://www.instagram.com/atajolab/",
+    "WIFI:T:WPA;S:Cafe Centro;P:cafecito2026;;",
+    "BEGIN:VCARD\nVERSION:3.0\nN:Perez;Ana;;;\nFN:Ana Perez\nTEL;TYPE=CELL:+5491123456789\nEND:VCARD",
+    "Gracias por tu compra. Cupón: VUELVO10",
+  ];
+  for (const value of accepted) {
+    const document = withQr(base, value);
+    assert.equal(validateForExport(document, { commercial: true }).ready, true, value);
+    const built = buildStudioCommercialArtwork(document);
+    assert.equal(built.ok, true, value);
+    if (built.ok) {
+      assert.equal(built.artwork.href, value.trim());
+      // The frozen snapshot reads back and keeps the exact QR content.
+      assert.equal(readStudioCommercialArtwork(JSON.parse(JSON.stringify(built.artwork)))?.href, value.trim());
+    }
+    const parsed = parseOrderDraft(v8Body(document), { studioDraftKey: createStudioDraftKey() });
+    assert.equal(parsed.ok, true, value);
+  }
+
+  // Content that would not work, or that is not safe to print, still blocks the order.
+  const rejected = [
+    "https://user:secreto@example.com/",
+    "https://example.com/con espacio",
+    "javascript:alert(1)",
+    "WIFI:T:WPA;P:sin-nombre-de-red;;",
+    "BEGIN:VCARD\nVERSION:3.0\nFN:Ana Perez",
+  ];
+  for (const value of rejected) {
+    const document = withQr(base, value);
+    assert.equal(validateForExport(document, { commercial: true }).ready, false, value);
+    assert.deepEqual(buildStudioCommercialArtwork(document), { ok: false, error: "studio-not-ready" }, value);
+    const parsed = parseOrderDraft(v8Body(document), { studioDraftKey: createStudioDraftKey() });
+    assert.deepEqual(parsed, { ok: false, error: "studio-not-ready" }, value);
+  }
+  // Stored snapshots are re-rendered without the content checks.
+  assert.equal(validateForExport(withQr(base, "javascript:alert(1)")).ready, true);
+  assert.equal(validateForExport(withQr(base, "   ")).ready, false);
 
   for (const href of [
     REVIEW_URL,
@@ -401,7 +430,7 @@ assert.equal(
   const longQr = withQr(base, veryLongLink);
   const qrId = longQr.elements.find((element) => element.type === "qr")!.id;
   const dense = updateElement(longQr, qrId, { width: 30, height: 30 });
-  const gate = validateForExport(dense, { requireGoogleLink: true });
+  const gate = validateForExport(dense, { commercial: true });
   assert.ok(gate.errors.some((issue) => issue.code === "qr-density"));
   // Paid snapshots only get a warning, never a blocked download.
   const stored = validateForExport(dense);

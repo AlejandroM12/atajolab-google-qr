@@ -3,16 +3,16 @@ import { SectionHeading } from "@/components/section-heading";
 
 const steps = [
   {
-    title: "Creá",
-    detail: "Elegí una plantilla de ejemplo o empezá desde cero en el lienzo.",
+    title: "Contanos qué compartir",
+    detail: "Un enlace, tus redes, WhatsApp, Wi-Fi, un contacto o un texto. Cargás los datos y armamos el código.",
   },
   {
-    title: "Personalizá",
-    detail: "Editá textos, colores, tipografías e imágenes directamente sobre el cartel.",
+    title: "Elegí y personalizá",
+    detail: "Mirá propuestas con tu código, elegí una y cambiá textos, colores e imágenes en el editor.",
   },
   {
-    title: "Pagá y descargá",
-    detail: "Confirmá el pago y bajá PNG, SVG y PDF listos para imprimir.",
+    title: "Descargá",
+    detail: "Bajá PNG, SVG y PDF en tamaño real, listos para imprimir o publicar.",
   },
 ];
 

@@ -103,6 +103,20 @@ assert.ok(cafeteria);
   assert.equal(boot.document.templateId, "vivo");
 }
 
+// A proposal picked in the guided flow arrives as the session design, in its own format.
+{
+  const card = createDocument("corporativo", undefined, "tarjeta");
+  const storage = memoryStorage({ [STUDIO_STORAGE_KEY]: serializeDesign(card) });
+  const boot = resolveStudioBootstrap({ search: "?origen=guiado", storage });
+  assert.equal(boot.source, "session");
+  assert.equal(boot.started, true);
+  assert.deepEqual(boot.document, card);
+  assert.match(boot.saveLabel, /propuesta/);
+  // Without a saved design the editor shows its start screen instead of an empty piece.
+  assert.equal(resolveStudioBootstrap({ search: "?origen=guiado", storage: memoryStorage() }).started, false);
+}
+assert.equal(studioBootKey("?origen=guiado"), "session");
+
 assert.equal(studioBootKey("?inspiracion=taller"), "inspiration:taller");
 assert.equal(studioBootKey("?inspiracion=nope"), "session");
 assert.equal(studioBootKey("?plantilla=vivo"), "template:vivo");

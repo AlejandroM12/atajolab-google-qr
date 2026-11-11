@@ -41,7 +41,7 @@ for (const item of inspirationDesigns) {
   assert.ok(webp.length * 2 < dataUrl.length, `${item.id}: preview not much smaller than the print PNG`);
   assert.match(inspirationPreviewUrl(item.id), /^\/previews\/inspiracion\/[a-z]+\?v=[0-9a-f]{10}$/);
   // The demo QR is a Google review link, so it also passes the commercial gate.
-  assert.equal(validateForExport(item.document, { requireGoogleLink: true }).ready, true, item.id);
+  assert.equal(validateForExport(item.document, { commercial: true }).ready, true, item.id);
 
   for (const element of item.document.elements) {
     assert.ok(element.x >= -0.05, `${item.id}/${element.role}: left of sheet`);

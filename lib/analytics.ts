@@ -6,6 +6,7 @@
 export type FunnelEvent =
   | "editor_opened"
   | "inspiration_picked"
+  | "guided_proposal_picked"
   | "order_created"
   | "checkout_started"
   | "payment_confirmed"

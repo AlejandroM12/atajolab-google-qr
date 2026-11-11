@@ -1,6 +1,6 @@
 import type { StudioFont, TextAlign } from "@/lib/studio/types";
 
-/** Independent draw list for Studio v8. Coordinates are millimeters on the A6 sheet. */
+/** Independent draw list for Studio v8. Coordinates are millimeters on the sheet. */
 export type StudioDrawCommand =
   | {
       type: "rect";

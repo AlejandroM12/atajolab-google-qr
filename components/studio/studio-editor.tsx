@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { InspirationGallery } from "@/components/studio/inspiration-gallery";
 import { StudioCanvas } from "@/components/studio/studio-canvas";
@@ -30,6 +31,7 @@ import {
 } from "@/lib/studio/document";
 import { recoverAll, recoverElement } from "@/lib/studio/canvas-space";
 import { commitDraft, flushDraft, historyFrom, redo, replacePresent, undo, type HistoryState } from "@/lib/studio/history";
+import { formatSpec, type FormatId } from "@/lib/studio/formats";
 import { createId } from "@/lib/studio/ids";
 import { prepareStudioImage } from "@/lib/studio/images.browser";
 import { writeDesign } from "@/lib/studio/persistence";
@@ -42,6 +44,7 @@ import { serializeDesign } from "@/lib/studio/serialize";
 import {
   applySuggestedColors,
   applyTemplate,
+  changeFormat,
   createBlankDocument,
   createDocument,
   hiddenEditedTexts,
@@ -61,8 +64,8 @@ import {
 import { elementsCoveringQr, validateDesign } from "@/lib/studio/validation";
 import { trackEvent } from "@/lib/analytics";
 
-/** The editor sells Google QR signs: require a Google Maps or review link. */
-const COMMERCIAL_VALIDATION = { requireGoogleLink: true } as const;
+/** What gets ordered must carry valid QR content (link, Wi-Fi, contact or text) at a scannable size. */
+const COMMERCIAL_VALIDATION = { commercial: true } as const;
 
 export function StudioEditor({
   exportEnabled = true,
@@ -264,7 +267,7 @@ export function StudioEditor({
     const current = historyRef.current?.present;
     const element = current?.elements.find((item) => item.id === id);
     if (!current || !element) return raw;
-    const nextElement = withGeometry(element, raw);
+    const nextElement = withGeometry(element, raw, current.format);
     if (element.type === "qr" && nextElement.type === "qr" && qrWasClamped(element, raw, nextElement)) {
       setNotice("El QR se mantiene cuadrado, dentro del cartel y con al menos 22 mm de lado.");
     }
@@ -296,6 +299,20 @@ export function StudioEditor({
     } else {
       setNotice("Cambiamos la composición. Tu fondo, tus textos y tus elementos se conservaron.");
     }
+  }
+
+  function onFormat(formatId: FormatId) {
+    const current = historyRef.current?.present;
+    if (!current || current.format.id === formatId) return;
+    const next = changeFormat(current, formatId);
+    commitDocument(next);
+    setSelectedId(null);
+    setError(null);
+    setNotice(
+      elementsCoveringQr(next).length > 0
+        ? `Pasamos el diseño a ${formatSpec(formatId).name}. Quedó algo sobre el QR: acomodalo antes de descargar.`
+        : `Pasamos el diseño a ${formatSpec(formatId).name} sin quitar nada. Revisá que los textos entren bien; con Deshacer volvés al formato anterior.`,
+    );
   }
 
   function onApplyPalette() {
@@ -694,6 +711,8 @@ export function StudioEditor({
   const exportValidation = useMemo(() => validateForExport(history.present, COMMERCIAL_VALIDATION), [history.present]);
   const toolbar = {
     templateId: history.present.templateId,
+    formatId: history.present.format.id,
+    onFormat,
     canUndo: history.past.length > 0 || drafting,
     canRedo: history.future.length > 0,
     imageBusy,
@@ -761,7 +780,7 @@ export function StudioEditor({
       <div className="studio-shell mx-auto w-full max-w-3xl overflow-x-hidden px-4 py-10 sm:py-14">
         <header className="max-w-2xl">
           <p className="text-sm font-semibold text-accent">AtajoLab</p>
-          <h1 className="mt-1 text-3xl text-foreground sm:text-4xl">Creá tu cartel QR</h1>
+          <h1 className="mt-1 text-3xl text-foreground sm:text-4xl">Editor avanzado</h1>
           <p className="mt-3 text-sm leading-6 text-muted">
             Elegí un ejemplo o empezá desde cero. Después podés cambiar todo sobre el lienzo
             {freeAvailable
@@ -771,6 +790,17 @@ export function StudioEditor({
                 : "."}
           </p>
         </header>
+        <Link
+          href="/empezar"
+          className="mt-6 flex flex-col items-start rounded-3xl border border-accent/30 bg-ok-bg px-5 py-5 hover:border-accent"
+        >
+          <span className="text-lg font-semibold">Creación guiada</span>
+          <span className="mt-2 text-sm text-muted">
+            Contanos qué querés compartir (un enlace, tus redes, WhatsApp, Wi-Fi, un contacto) y te mostramos
+            diseños listos con tu código.
+          </span>
+          <span className="mt-3 text-sm font-semibold text-accent">Empezar paso a paso →</span>
+        </Link>
         <div className="mt-6">
           <button
             type="button"
@@ -848,7 +878,7 @@ export function StudioEditor({
     <div className="studio-shell mx-auto w-full max-w-7xl overflow-x-hidden px-4 py-6">
       <header className="mb-4 flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="text-2xl text-foreground sm:text-3xl">Tu cartel</h1>
+          <h1 className="text-2xl text-foreground sm:text-3xl">Tu diseño</h1>
           <p className="mt-1 text-sm text-muted">
             Editá directo en el lienzo
             {freeAvailable
@@ -857,13 +887,18 @@ export function StudioEditor({
                 ? ` · ${formatArs(PIECE_PRICE_ARS)} ${PIECE_CURRENCY}`
                 : ""}
           </p>
-          <button
-            type="button"
-            className="mt-2 text-sm font-semibold text-accent hover:text-accent-strong"
-            onClick={() => setShowInspiration(true)}
-          >
-            Inspiración
-          </button>
+          <div className="mt-2 flex flex-wrap gap-x-5 gap-y-1">
+            <button
+              type="button"
+              className="text-sm font-semibold text-accent hover:text-accent-strong"
+              onClick={() => setShowInspiration(true)}
+            >
+              Inspiración
+            </button>
+            <Link href="/empezar" className="text-sm font-semibold text-accent hover:text-accent-strong">
+              Creación guiada
+            </Link>
+          </div>
         </div>
         <p className="text-xs text-muted" role="status">
           {saveLabel}
@@ -1009,11 +1044,11 @@ function contextualTips(exportValidation: ExportValidation, fromBlank: boolean):
     tips.push("¿No sabés cómo empezar? Explorá diseños listos para personalizar.");
   }
   const codes = new Set(exportValidation.issues.map((issue) => issue.code));
-  if (codes.has("qr-empty") || codes.has("qr-url") || codes.has("qr-not-google")) {
-    tips.push("Pegá el enlace de tu ficha de Google Maps o el de reseñas de Google.");
+  if (codes.has("qr-empty")) {
+    tips.push("Tocá el código QR y cargá qué tiene que abrir: un enlace, WhatsApp, Wi-Fi, un contacto o un texto.");
   }
   if (codes.has("qr-density")) {
-    tips.push("Si el QR queda muy denso, agrandalo o usá el enlace corto de Google Maps.");
+    tips.push("Si el QR queda muy denso, agrandalo o acortá su contenido.");
   }
   if (codes.has("qr-covered")) {
     tips.push("Evitá tapar el QR con otros elementos.");
@@ -1072,9 +1107,6 @@ function studioOrderErrorMessage(code: string): string {
   }
   if (code === "invalid-email") return "Revisá el correo antes de continuar.";
   if (code === "terms-required") return "Para comprar tenés que aceptar los términos y la política de privacidad.";
-  if (code === "studio-qr-not-google") {
-    return "El QR tiene que llevar el enlace de tu ficha de Google Maps o el de reseñas de Google.";
-  }
   if (code === "studio-not-ready") return "Revisá los avisos del diseño antes de continuar.";
   if (code === "rate-limited") return "Llegaste al límite de pedidos. Esperá un rato y reintentá.";
   if (code === "database-unavailable" || code === "order-failed") {

@@ -67,12 +67,30 @@ function renderStudioPng(scene: StudioScene): Buffer {
   return png;
 }
 
+/** Small PNG of a scene for on-screen previews. Same drawing code as the print PNG. */
+export function renderStudioPreviewPng(scene: StudioScene, widthPx: number): Buffer {
+  const fonts = usedFonts(scene);
+  return new Resvg(renderStudioSvg(scene, "px"), {
+    font: {
+      fontFiles: studioFontFiles(fonts),
+      loadSystemFonts: false,
+      defaultFontFamily: printFonts.body.family,
+      sansSerifFamily: printFonts.body.family,
+    },
+    shapeRendering: 1,
+    textRendering: 1,
+    fitTo: { mode: "width", value: Math.max(1, Math.round(widthPx)) },
+  })
+    .render()
+    .asPng();
+}
+
 function renderStudioPdf(scene: StudioScene): Promise<Buffer> {
   return new Promise((resolve, reject) => {
     const doc = new PDFDocument({
       size: [mmToPt(scene.widthMm), mmToPt(scene.heightMm)],
       margin: 0,
-      info: { Creator: "AtajoLab Studio", Title: "Cartel A6" },
+      info: { Creator: "AtajoLab Studio", Title: "Diseño QR" },
     });
     const chunks: Buffer[] = [];
     doc.on("data", (chunk: Buffer) => chunks.push(chunk));

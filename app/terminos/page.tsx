@@ -33,9 +33,11 @@ export default function TermsPage() {
 
       <LegalSection title="2. Qué se compra">
         <p>
-          Una pieza digital: un cartel de tamaño A6 (105 × 148 mm) con un código QR que apunta al enlace de Google
-          que vos cargás (tu ficha en Google Maps o el formulario de reseñas). Se entrega en archivos PNG, SVG y PDF
-          para que lo imprimas por tu cuenta. No incluye impresión ni envío físico.
+          Una pieza digital: un diseño en el formato que elijas (por ejemplo, un cartel A6 de 105 × 148 mm) con un
+          código QR que lleva el contenido que vos cargás: un enlace, los datos de una red Wi-Fi, un contacto o un
+          texto. El código es estático: guarda ese contenido tal cual y no se puede cambiar después de la compra. Se
+          entrega en archivos PNG, SVG y PDF para que lo imprimas o publiques por tu cuenta. No incluye impresión ni
+          envío físico.
         </p>
         <p>
           El pedido guarda una copia del diseño al momento de crearlo. Los cambios que hagas después en el editor no

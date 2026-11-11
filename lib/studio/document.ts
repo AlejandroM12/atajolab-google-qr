@@ -2,9 +2,8 @@ import { isDarkColor, isHexColor } from "@/lib/color";
 import { clamp, mm, normalizeRotation } from "@/lib/studio/geometry";
 import { imageSrcIssue } from "@/lib/studio/images";
 import { clampQrGeometry, qrContrastIssue } from "@/lib/studio/qr-rules";
+import { A6_SHEET, fontMaxMm, type Sheet } from "@/lib/studio/formats";
 import {
-  A6_HEIGHT_MM,
-  A6_WIDTH_MM,
   MAX_ALT,
   MAX_ELEMENTS,
   MAX_PARKED,
@@ -43,8 +42,8 @@ export function elementLabel(element: StudioElement): string {
   return text ? text.slice(0, 28) : "Texto";
 }
 
-export function withGeometry(element: StudioElement, box: ElementBox): StudioElement {
-  return normalizeElement({ ...element, ...box });
+export function withGeometry(element: StudioElement, box: ElementBox, sheet: Sheet = A6_SHEET): StudioElement {
+  return normalizeElement({ ...element, ...box }, sheet);
 }
 
 export function replaceElement(document: DesignDocumentV8, element: StudioElement): DesignDocumentV8 {
@@ -62,7 +61,7 @@ export function updateElement(
 ): DesignDocumentV8 {
   const current = document.elements.find((item) => item.id === id);
   if (!current) return document;
-  const next = applyPatch(current, patch);
+  const next = applyPatch(current, patch, document.format);
   if (!next) return document;
   return replaceElement(document, next);
 }
@@ -74,38 +73,46 @@ export function setBackground(document: DesignDocumentV8, color: string): Design
 
 export function addText(document: DesignDocumentV8, id: string): DesignDocumentV8 {
   if (!canAdd(document, id)) return document;
-  const element: TextElement = normalizeElement({
-    id,
-    role: null,
-    type: "text",
-    x: 12,
-    y: 86,
-    width: 80,
-    height: 14,
-    rotation: 0,
-    text: "Nuevo texto",
-    font: "sora",
-    fontSize: 6,
-    fill: isDarkColor(document.background) ? "#f4f0e6" : "#14221f",
-    align: "left",
-  });
+  const place = sheetScale(document.format);
+  const element: TextElement = normalizeElement(
+    {
+      id,
+      role: null,
+      type: "text",
+      x: 12 * place.x,
+      y: 86 * place.y,
+      width: 80 * place.x,
+      height: Math.max(14 * place.size, 6),
+      rotation: 0,
+      text: "Nuevo texto",
+      font: "sora",
+      fontSize: Math.max(6 * place.size, 2.6),
+      fill: isDarkColor(document.background) ? "#f4f0e6" : "#14221f",
+      align: "left",
+    },
+    document.format,
+  );
   return insertBelowQr(document, element);
 }
 
 export function addRect(document: DesignDocumentV8, id: string): DesignDocumentV8 {
   if (!canAdd(document, id)) return document;
-  const element: RectElement = normalizeElement({
-    id,
-    role: null,
-    type: "rect",
-    x: 16,
-    y: 78,
-    width: 40,
-    height: 16,
-    rotation: 0,
-    fill: "#0f6e62",
-    cornerRadius: 2,
-  });
+  const place = sheetScale(document.format);
+  const element: RectElement = normalizeElement(
+    {
+      id,
+      role: null,
+      type: "rect",
+      x: 16 * place.x,
+      y: 78 * place.y,
+      width: 40 * place.size,
+      height: 16 * place.size,
+      rotation: 0,
+      fill: "#0f6e62",
+      cornerRadius: 2 * place.size,
+    },
+    document.format,
+  );
   return insertBelowQr(document, element);
 }
 
@@ -122,21 +129,25 @@ export function addImage(
     return null;
   }
   const aspect = pixelWidth / pixelHeight;
-  const maxSide = 36;
+  const place = sheetScale(document.format);
+  const maxSide = 36 * place.size;
   const width = aspect >= 1 ? maxSide : maxSide * aspect;
   const height = aspect >= 1 ? maxSide / aspect : maxSide;
-  const element: ImageElement = normalizeElement({
-    id,
-    role: null,
-    type: "image",
-    x: 16,
-    y: 48,
-    width,
-    height,
-    rotation: 0,
-    src,
-    alt,
-  });
+  const element: ImageElement = normalizeElement(
+    {
+      id,
+      role: null,
+      type: "image",
+      x: 16 * place.x,
+      y: 48 * place.y,
+      width,
+      height,
+      rotation: 0,
+      src,
+      alt,
+    },
+    document.format,
+  );
   return insertBelowQr(document, element);
 }
 
@@ -148,7 +159,7 @@ export function replaceImage(
 ): DesignDocumentV8 | null {
   const current = document.elements.find((item) => item.id === id);
   if (!current || current.type !== "image" || imageSrcIssue(src)) return null;
-  return replaceElement(document, normalizeElement({ ...current, src, alt }));
+  return replaceElement(document, normalizeElement({ ...current, src, alt }, document.format));
 }
 
 export function removeElement(document: DesignDocumentV8, id: string): DesignDocumentV8 {
@@ -160,13 +171,16 @@ export function removeElement(document: DesignDocumentV8, id: string): DesignDoc
 export function duplicateElement(document: DesignDocumentV8, id: string, newId: string): DesignDocumentV8 {
   const current = document.elements.find((item) => item.id === id);
   if (!current || current.type === "qr" || !canAdd(document, newId)) return document;
-  const copy = normalizeElement({
-    ...current,
-    id: newId,
-    role: null,
-    x: current.x + 4,
-    y: current.y + 4,
-  });
+  const copy = normalizeElement(
+    {
+      ...current,
+      id: newId,
+      role: null,
+      x: current.x + 4,
+      y: current.y + 4,
+    },
+    document.format,
+  );
   return insertBelowQr(document, copy);
 }
 
@@ -202,7 +216,7 @@ export function restoreParked(document: DesignDocumentV8, id: string): DesignDoc
   const parked = document.parked.find((item) => item.id === id);
   if (!parked || parked.type === "qr" || document.elements.length >= MAX_ELEMENTS) return document;
   const without = { ...document, parked: document.parked.filter((item) => item.id !== id) };
-  return insertBelowQr(without, normalizeElement(parked));
+  return insertBelowQr(without, normalizeElement(parked, document.format));
 }
 
 export function restoreAllParked(document: DesignDocumentV8): DesignDocumentV8 {
@@ -215,23 +229,30 @@ export function discardParked(document: DesignDocumentV8, id: string): DesignDoc
   return { ...document, parked: document.parked.filter((item) => item.id !== id) };
 }
 
-export function normalizeElement<T extends StudioElement>(element: T): T {
+export function normalizeElement<T extends StudioElement>(element: T, sheet: Sheet = A6_SHEET): T {
   if (element.type === "text") {
-    const text = normalizeText(element);
-    return clampBox(text) as T;
+    const text = normalizeText(element, sheet);
+    return clampBox(text, sheet) as T;
   }
   if (element.type === "rect") {
     const rect = normalizeRect(element);
-    return clampBox(rect) as T;
+    return clampBox(rect, sheet) as T;
   }
   if (element.type === "image") {
     const image = normalizeImage(element);
-    return clampBox(image) as T;
+    return clampBox(image, sheet) as T;
   }
-  return clampQrGeometry(normalizeQr(element)) as T;
+  return clampQrGeometry(normalizeQr(element), sheet) as T;
 }
 
-function applyPatch(element: StudioElement, patch: ElementPatch): StudioElement | null {
+/** How the A6 defaults for new elements translate to another sheet. */
+function sheetScale(sheet: Sheet): { x: number; y: number; size: number } {
+  const x = sheet.widthMm / A6_SHEET.widthMm;
+  const y = sheet.heightMm / A6_SHEET.heightMm;
+  return { x, y, size: Math.min(x, y) };
+}
+
+function applyPatch(element: StudioElement, patch: ElementPatch, sheet: Sheet): StudioElement | null {
   if (element.type === "qr") {
     const foreground = patch.foreground ?? element.foreground;
     const background = patch.background ?? element.background;
@@ -263,7 +284,7 @@ function applyPatch(element: StudioElement, patch: ElementPatch): StudioElement 
     if (patch.foreground !== undefined) next.foreground = patch.foreground;
     if (patch.background !== undefined) next.background = patch.background;
   }
-  return normalizeElement(next);
+  return normalizeElement(next, sheet);
 }
 
 function assignBox(element: StudioElement, patch: ElementPatch) {
@@ -274,12 +295,12 @@ function assignBox(element: StudioElement, patch: ElementPatch) {
   if (patch.rotation !== undefined) element.rotation = patch.rotation;
 }
 
-function normalizeText(element: TextElement): TextElement {
+function normalizeText(element: TextElement, sheet: Sheet): TextElement {
   return {
     ...element,
     text: element.text.slice(0, MAX_TEXT),
     font: FONTS.has(element.font) ? element.font : "source",
-    fontSize: mm(clamp(element.fontSize, 2, 24)),
+    fontSize: mm(clamp(element.fontSize, 2, fontMaxMm(sheet))),
     fill: isHexColor(element.fill) ? element.fill.toLowerCase() : "#14221f",
     align: ALIGNS.has(element.align) ? element.align : "left",
   };
@@ -309,17 +330,18 @@ function normalizeQr(element: QrElement): QrElement {
   };
 }
 
-function clampBox<T extends TextElement | RectElement | ImageElement>(element: T): T {
-  const minWidth = element.type === "text" ? 8 : 4;
-  const minHeight = 4;
-  const width = mm(clamp(finite(element.width, minWidth), minWidth, A6_WIDTH_MM));
-  const height = mm(clamp(finite(element.height, minHeight), minHeight, A6_HEIGHT_MM));
+function clampBox<T extends TextElement | RectElement | ImageElement>(element: T, sheet: Sheet): T {
+  // Thin rules and stripes are legitimate rectangles on small sheets.
+  const minWidth = element.type === "text" ? 8 : element.type === "rect" ? 1 : 4;
+  const minHeight = element.type === "rect" ? 1 : 4;
+  const width = mm(clamp(finite(element.width, minWidth), minWidth, sheet.widthMm));
+  const height = mm(clamp(finite(element.height, minHeight), minHeight, sheet.heightMm));
   return {
     ...element,
     width,
     height,
-    x: mm(clamp(finite(element.x, 0), -width + 4, A6_WIDTH_MM - 4)),
-    y: mm(clamp(finite(element.y, 0), -height + 4, A6_HEIGHT_MM - 4)),
+    x: mm(clamp(finite(element.x, 0), Math.min(0, -width + 4), sheet.widthMm - 4)),
+    y: mm(clamp(finite(element.y, 0), Math.min(0, -height + 4), sheet.heightMm - 4)),
     rotation: normalizeRotation(element.rotation),
   };
 }

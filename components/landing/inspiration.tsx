@@ -11,7 +11,7 @@ export function Inspiration() {
     <section id="inspiracion" className="scroll-mt-24 border-t border-line py-16 sm:py-20">
       <Container>
         <SectionHeading eyebrow="Inspiración" title="Mirá lo que podés crear">
-          Diseños listos para personalizar. Elegí uno, cambiá textos y colores, y comprá tu cartel.
+          Diseños listos para personalizar. Elegí uno, cambiá textos, colores y el contenido del código.
         </SectionHeading>
         <ul className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {inspirationDesigns.map((item) => (

@@ -15,7 +15,7 @@ export default function RefundsPage() {
     <LegalPage
       eyebrow="Legal"
       title="Política de reembolsos"
-      intro={<p>Queremos que el cartel te sirva. Si hay un problema, escribinos con tu número de pedido.</p>}
+      intro={<p>Queremos que tu diseño te sirva. Si hay un problema, escribinos con tu número de pedido.</p>}
     >
       <LegalSection title="Revocación de la compra (arrepentimiento)">
         <p>
