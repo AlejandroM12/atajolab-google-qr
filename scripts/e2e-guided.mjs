@@ -1,13 +1,13 @@
 /**
  * Browser test of the guided flow and the editor, on a phone and on a desktop.
  *
- * Needs the built app running and a Chromium for playwright-core:
+ * Needs the built app running and a Chrome or Chromium:
  *   pnpm build && pnpm start            (in another terminal)
- *   pnpm exec playwright-core install chromium
- *   E2E_BASE_URL=http://localhost:3000 pnpm test:e2e
+ *   E2E_CHROME=<path to chrome> E2E_BASE_URL=http://localhost:3000 pnpm test:e2e
+ *
+ * Without E2E_CHROME it uses the browser of `pnpm exec playwright-core install chromium`.
  *
  * Optional:
- *   E2E_CHROME=<path to chrome>   use an installed browser instead
  *   E2E_SHOTS=<folder>            save screenshots of each step
  *   E2E_ORDER=1                   also place a free order and download the files
  *                                 (local only: needs FREE_FIRST_QR_ENABLED=true)

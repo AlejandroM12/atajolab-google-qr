@@ -75,13 +75,14 @@ jobs:
       - name: Browser test (guided flow and editor, phone and desktop)
         run: |
           set -e
-          pnpm exec playwright-core install --with-deps chromium
+          # The runner image ships Chrome; playwright-core drives it without downloading a browser.
+          CHROME="$(command -v google-chrome || command -v chromium-browser || command -v chromium)"
           pnpm start > /tmp/app.log 2>&1 &
           for attempt in $(seq 1 30); do
             curl -fsS http://localhost:3000/empezar > /dev/null && break
             sleep 1
           done
-          E2E_BASE_URL=http://localhost:3000 pnpm test:e2e || { cat /tmp/app.log; exit 1; }
+          E2E_CHROME="$CHROME" E2E_BASE_URL=http://localhost:3000 pnpm test:e2e || { cat /tmp/app.log; exit 1; }
 
       - name: Dependency audit (report only)
         run: pnpm audit --prod --audit-level high
