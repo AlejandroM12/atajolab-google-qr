@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useImperativeHandle, useRef, useState, type Ref } from "react";
 import type Konva from "konva";
 import { Group, Image as KonvaImage, Layer, Rect, Stage, Text, Transformer } from "react-konva";
 import QRCode from "qrcode";
@@ -19,21 +19,41 @@ import {
   type TextElement,
 } from "@/lib/studio/types";
 
+/** What the editor can ask the canvas for. */
+export type StudioCanvasHandle = {
+  /** PNG data URL of the design as drawn, without selection handles. Null while the canvas is not ready. */
+  snapshot(): string | null;
+};
+
 type StudioCanvasProps = {
+  handle?: Ref<StudioCanvasHandle>;
   document: DesignDocumentV8;
   selectedId: string | null;
   onSelect: (id: string | null) => void;
   onGeometry: (id: string, box: ElementBox) => ElementBox;
 };
 
-const FALLBACK_FONTS: Record<StudioFont, string> = {
+type FontFamilyKey = "source" | "sora" | "fraunces";
+
+const FALLBACK_FONTS: Record<FontFamilyKey, string> = {
   source: "Source Sans 3, sans-serif",
   sora: "Sora, sans-serif",
   fraunces: "Fraunces, Georgia, serif",
 };
 
-export function StudioCanvas({ document, selectedId, onSelect, onGeometry }: StudioCanvasProps) {
+/** Family and weight of each Studio font. Weights match the files the export uses (lib/print/fonts.ts). */
+const FONT_FACE: Record<StudioFont, { family: FontFamilyKey; weight: string }> = {
+  source: { family: "source", weight: "400" },
+  sora: { family: "sora", weight: "500" },
+  fraunces: { family: "fraunces", weight: "500" },
+  "source-bold": { family: "source", weight: "600" },
+  "sora-bold": { family: "sora", weight: "600" },
+  "fraunces-bold": { family: "fraunces", weight: "600" },
+};
+
+export function StudioCanvas({ handle, document, selectedId, onSelect, onGeometry }: StudioCanvasProps) {
   const shellRef = useRef<HTMLDivElement>(null);
+  const stageRef = useRef<Konva.Stage>(null);
   const transformerRef = useRef<Konva.Transformer>(null);
   const nodes = useRef(new Map<string, Konva.Node>());
   const [size, setSize] = useState({ width: 0, height: 0 });
@@ -50,7 +70,9 @@ export function StudioCanvas({ document, selectedId, onSelect, onGeometry }: Stu
     if (!shell) return;
     const measure = () => {
       const bounds = shell.getBoundingClientRect();
-      const maxHeight = Math.min(window.innerHeight * 0.68, 860);
+      // On phones the tools sit under the canvas: leave room so they show without scrolling far.
+      const share = window.innerWidth < 1024 ? 0.5 : 0.68;
+      const maxHeight = Math.min(window.innerHeight * share, 860);
       const ratio = sheetHeight / sheetWidth;
       let width = bounds.width;
       let height = width * ratio;
@@ -79,6 +101,27 @@ export function StudioCanvas({ document, selectedId, onSelect, onGeometry }: Stu
     transformer.getLayer()?.batchDraw();
   }, [selectedId, document.elements, size.width, size.height]);
 
+  useImperativeHandle(
+    handle,
+    () => ({
+      snapshot() {
+        const stage = stageRef.current;
+        if (!stage || size.width === 0) return null;
+        const transformer = transformerRef.current;
+        const shown = transformer?.visible() ?? false;
+        transformer?.hide();
+        try {
+          return stage.toDataURL({ pixelRatio: Math.min(3, Math.max(1, 1400 / size.width)) });
+        } catch {
+          return null;
+        } finally {
+          if (shown) transformer?.show();
+        }
+      },
+    }),
+    [size.width],
+  );
+
   function commitNode(id: string) {
     const node = nodes.current.get(id);
     if (!node || px <= 0) return;
@@ -99,6 +142,7 @@ export function StudioCanvas({ document, selectedId, onSelect, onGeometry }: Stu
             style={{ width: size.width, height: size.height }}
           >
             <Stage
+              ref={stageRef}
               width={size.width}
               height={size.height}
               onMouseDown={(event) => {
@@ -184,14 +228,16 @@ function TextNode({
   register,
   onSelect,
   onCommit,
-}: NodeProps & { element: TextElement; fonts: Record<StudioFont, string> }) {
+}: NodeProps & { element: TextElement; fonts: Record<FontFamilyKey, string> }) {
+  const face = FONT_FACE[element.font];
   return (
     <Text
       ref={register}
       {...placement(element, px)}
       text={element.text}
       fontSize={element.fontSize * px}
-      fontFamily={fonts[element.font]}
+      fontFamily={fonts[face.family]}
+      fontStyle={face.weight}
       fill={element.fill}
       align={element.align}
       lineHeight={1.25}
@@ -420,7 +466,7 @@ function anchorsFor(type: StudioElement["type"] | undefined): string[] {
   ];
 }
 
-function readFonts(): Record<StudioFont, string> {
+function readFonts(): Record<FontFamilyKey, string> {
   if (typeof document === "undefined") return FALLBACK_FONTS;
   const styles = getComputedStyle(document.documentElement);
   const read = (name: string, fallback: string) => {

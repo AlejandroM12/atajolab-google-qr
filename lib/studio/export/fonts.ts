@@ -5,6 +5,9 @@ const FONT_ROLE: Record<StudioFont, PrintFontRole> = {
   source: "body",
   sora: "sora",
   fraunces: "fraunces",
+  "source-bold": "label",
+  "sora-bold": "display",
+  "fraunces-bold": "frauncesBold",
 };
 
 export function studioFontRole(font: StudioFont): PrintFontRole {

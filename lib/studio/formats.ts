@@ -132,6 +132,11 @@ export function fontMaxMm(sheet: Sheet): number {
   return Math.max(24, Math.floor(Math.min(sheet.widthMm, sheet.heightMm) * 0.23));
 }
 
+/** Largest corner radius: enough to turn a square as wide as the sheet into a circle. */
+export function cornerMaxMm(sheet: Sheet): number {
+  return Math.max(20, Math.ceil(Math.min(sheet.widthMm, sheet.heightMm) / 2));
+}
+
 /** "Cartel A6 · 105 × 148 mm" */
 export function formatLabel(id: FormatId): string {
   const spec = formatSpec(id);

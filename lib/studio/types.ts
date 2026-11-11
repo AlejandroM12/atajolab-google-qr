@@ -8,6 +8,8 @@ export const A6_HEIGHT_MM = 148;
 export const QR_MIN_MM = 22;
 export const QR_MAX_MM = 90;
 export const QR_MIN_CONTRAST = 4.5;
+/** Thinnest rectangle side: hairlines and rules are legitimate shapes. */
+export const RECT_MIN_MM = 0.4;
 export const MAX_ELEMENTS = 40;
 export const MAX_PARKED = 40;
 export const MAX_TEXT = 180;
@@ -18,7 +20,17 @@ export const MAX_IMAGE_CHARS = 1_800_000;
 export const QR_INK = "#14221f";
 export const QR_PAPER = "#ffffff";
 
-export type StudioFont = "source" | "sora" | "fraunces";
+export type StudioFont = "source" | "sora" | "fraunces" | "source-bold" | "sora-bold" | "fraunces-bold";
+
+/** Every typeface the editor offers, in menu order. The bold ones are the same families at weight 600. */
+export const studioFontList: { id: StudioFont; name: string }[] = [
+  { id: "source", name: "Source Sans 3" },
+  { id: "source-bold", name: "Source Sans 3 · negrita" },
+  { id: "sora", name: "Sora" },
+  { id: "sora-bold", name: "Sora · negrita" },
+  { id: "fraunces", name: "Fraunces" },
+  { id: "fraunces-bold", name: "Fraunces · negrita" },
+];
 export type TextAlign = "left" | "center" | "right";
 export type TemplateId =
   | "clasico"

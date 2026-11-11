@@ -39,6 +39,17 @@ export function shopStripeReadable(accent: string, paper = "#f7f1e8"): boolean {
   return isHexColor(accent) && contrastRatio("#ffffff", accent) >= 4.5 && contrastRatio(accent, paper) >= 3;
 }
 
+/** Blend of two colors: 0 gives the first one, 1 the second. */
+export function mixColors(from: string, to: string, share: number): string {
+  if (!isHexColor(from) || !isHexColor(to)) return from;
+  const a = hexToRgb(from);
+  const b = hexToRgb(to);
+  const t = Math.min(1, Math.max(0, share));
+  return `#${a
+    .map((channel, index) => Math.round(channel + (b[index]! - channel) * t).toString(16).padStart(2, "0"))
+    .join("")}`;
+}
+
 export function isDarkColor(hex: string): boolean {
   if (!isHexColor(hex)) return true;
   return relativeLuminance(hex) < 0.45;

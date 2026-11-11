@@ -1,5 +1,6 @@
 import { isGoogleBusinessShareLink, validateGoogleLink } from "@/lib/google-link";
 import { inspectQrPayload } from "@/lib/qr-content";
+import { isDemoQr } from "@/lib/studio/demo-qr";
 import { isStudioAssetRef } from "@/lib/studio/assets/refs";
 import { qrDensity } from "@/lib/studio/qr-density";
 import { imageSrcIssue } from "@/lib/studio/images";
@@ -22,6 +23,7 @@ export type ExportIssue = {
     | "qr-empty"
     | "qr-url"
     | "qr-content"
+    | "qr-demo"
     | "qr-density"
     | "qr-size"
     | "out-of-bounds"
@@ -87,6 +89,13 @@ export function validateForExport(
       issues.push({
         code: "qr-empty",
         message: "Cargá el contenido del código QR antes de exportar.",
+        elementId: qr.id,
+        blocking: true,
+      });
+    } else if (options.commercial && isDemoQr(value)) {
+      issues.push({
+        code: "qr-demo",
+        message: "El código todavía tiene el contenido de ejemplo. Tocalo y cargá el tuyo.",
         elementId: qr.id,
         blocking: true,
       });

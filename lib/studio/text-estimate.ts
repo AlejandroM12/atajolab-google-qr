@@ -9,7 +9,9 @@ const LINE_HEIGHT = 1.25;
  * need more lines than this.
  */
 export function estimateTextLines(input: { text: string; font: StudioFont; fontSize: number; width: number }): number {
-  const average = input.fontSize * (input.font === "fraunces" ? 0.52 : input.font === "sora" ? 0.56 : 0.47);
+  const family = input.font.replace("-bold", "");
+  const bold = input.font.endsWith("-bold") ? 1.07 : 1;
+  const average = input.fontSize * bold * (family === "fraunces" ? 0.53 : family === "sora" ? 0.6 : 0.48);
   const maxChars = Math.max(1, Math.floor((input.width - 0.35) / average));
   let lines = 0;
   for (const paragraph of input.text.replace(/\r\n/g, "\n").split("\n")) {
@@ -43,16 +45,12 @@ export function estimateFittingSize(input: {
   height: number;
   floor: number;
 }): number {
-  let size = input.fontSize;
-  const floor = Math.min(input.floor, input.fontSize);
-  while (size > floor) {
+  // Whole tenths, never rounded up: the answer has to fit as it is.
+  const floor = Math.floor(Math.min(input.floor, input.fontSize) * 10);
+  for (let tenths = Math.floor(input.fontSize * 10); tenths > floor; tenths -= 1) {
+    const size = tenths / 10;
     const lines = estimateTextLines({ text: input.text, font: input.font, fontSize: size, width: input.width });
-    if (lines * size * LINE_HEIGHT <= input.height) return round(size);
-    size -= 0.2;
+    if (lines * size * LINE_HEIGHT <= input.height) return size;
   }
-  return round(floor);
-}
-
-function round(value: number): number {
-  return Math.round(value * 10) / 10;
+  return floor / 10;
 }

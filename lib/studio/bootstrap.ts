@@ -2,6 +2,7 @@ import {
   cloneInspirationDocument,
   getInspiration,
 } from "@/lib/studio/inspiration";
+import { takePreviousDesign } from "@/lib/studio/guided";
 import {
   loadSessionDesign,
   writeDesign,
@@ -18,6 +19,8 @@ export type StudioBootstrap = {
   started: boolean;
   saveLabel: string;
   source: "inspiration" | "template" | "session" | "blank";
+  /** The design a guided proposal just replaced: the editor puts it one Undo away. */
+  previous: DesignDocumentV8 | null;
 };
 
 /**
@@ -42,6 +45,7 @@ export function resolveStudioBootstrap(input: {
       started: true,
       saveLabel: `Empezamos con «${inspiration.name}». Podés cambiar todo.`,
       source: "inspiration",
+      previous: null,
     };
   }
 
@@ -58,6 +62,7 @@ export function resolveStudioBootstrap(input: {
       started: true,
       saveLabel: "El diseño se guarda en esta sesión.",
       source: "template",
+      previous: null,
     };
   }
 
@@ -67,15 +72,19 @@ export function resolveStudioBootstrap(input: {
   const loaded = cleaned === stored.document ? stored : { ...stored, document: cleaned, persist: true };
   if (loaded.persist) writeDesign(input.storage, loaded.document);
   if (loaded.recovered) {
+    // The guided flow saves the chosen proposal as the session design before coming here.
+    const guided = params.get("origen") === "guiado";
+    const previous = guided ? takePreviousDesign(input.storage) : null;
     return {
       ...loaded,
       started: true,
-      // The guided flow saves the chosen proposal as the session design before coming here.
-      saveLabel:
-        params.get("origen") === "guiado"
-          ? "Tu propuesta está lista. Podés cambiar todo."
-          : "Recuperamos el diseño de esta sesión.",
+      saveLabel: !guided
+        ? "Recuperamos el diseño de esta sesión."
+        : previous
+          ? "Tu diseño está listo. Con Deshacer volvés al que tenías antes."
+          : "Tu diseño está listo. Podés cambiar todo.",
       source: "session",
+      previous,
     };
   }
 
@@ -84,6 +93,7 @@ export function resolveStudioBootstrap(input: {
     started: false,
     saveLabel: "El diseño se guarda en esta sesión.",
     source: "blank",
+    previous: null,
   };
 }
 

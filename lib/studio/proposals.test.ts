@@ -15,7 +15,8 @@ import { designFormat, formatList } from "@/lib/studio/formats";
 import type { IdFactory } from "@/lib/studio/ids";
 import { createStudioOrderIdempotencyKey } from "@/lib/studio/order-idempotency";
 import { recommendedStyle, styleList } from "@/lib/studio/proposal-options";
-import { buildProposals, proposalColors } from "@/lib/studio/proposals";
+import { buildProposals } from "@/lib/studio/proposals";
+import { templateColors } from "@/lib/studio/template-colors";
 import { parseDesign, serializeDesign } from "@/lib/studio/serialize";
 import { applyTemplate, templateList } from "@/lib/studio/templates";
 import type { DesignDocumentV8 } from "@/lib/studio/types";
@@ -108,7 +109,9 @@ for (const content of contents) {
           // The name the user typed is on the piece.
           if (name && content.type !== "vcard") {
             assert.ok(
-              document.elements.some((element) => element.type === "text" && element.text.includes(name)),
+              document.elements.some(
+                (element) => element.type === "text" && element.text.toLowerCase().includes(name.toLowerCase()),
+              ),
               `${at}: name missing`,
             );
           }
@@ -131,7 +134,7 @@ assert.ok(built > 5000);
 for (const template of templateList) {
   const seen = new Set<string>();
   for (const style of styleList) {
-    for (const tone of style.tones) seen.add(JSON.stringify(proposalColors(template.id, tone)));
+    for (const tone of style.tones) seen.add(JSON.stringify(templateColors(template.id, tone)));
   }
   assert.equal(seen.size, styleList.length * 2, template.id);
 }
@@ -226,7 +229,7 @@ for (const [content, formatId] of [
     assert.equal(document.parked.length, 0);
     assert.equal(offCanvasElements(document).length, 0);
     assert.equal(new Set(document.elements.map((element) => element.id)).size, document.elements.length);
-    assert.ok(document.elements.length <= 7);
+    assert.ok(document.elements.length <= 13);
   }
 }
 

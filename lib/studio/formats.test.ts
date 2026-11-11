@@ -143,8 +143,8 @@ for (const format of formatList) {
   const a6 = createDocument("corporativo", ids());
   const title = a6.elements.find((element) => element.role === "titulo");
   assert.ok(title && title.type === "text");
-  assert.deepEqual([title.x, title.y, title.width, title.height, title.fontSize], [10, 38, 85, 22, 9]);
-  assert.deepEqual([qrOf(a6).x, qrOf(a6).y, qrOf(a6).width], [64, 100, 32]);
+  assert.deepEqual([title.x, title.y, title.width, title.height, title.fontSize], [10, 32, 85, 22, 8.6]);
+  assert.deepEqual([qrOf(a6).x, qrOf(a6).y, qrOf(a6).width], [51, 96, 44]);
   const blank = createBlankDocument(ids());
   assert.deepEqual([qrOf(blank).x, qrOf(blank).y, qrOf(blank).width], [28.5, 52, 48]);
 }
@@ -165,7 +165,7 @@ for (const format of formatList) {
   assert.equal(qrOf(bigQr).width, qrMaxMm(designFormat("tarjeta")));
   assert.ok(inside(qrOf(bigQr), bigQr));
   // Big sheets allow a bigger code than A6 does.
-  const poster = createDocument("negocio", ids(), "a4");
+  const poster = createDocument("clasico", ids(), "a4");
   assert.ok(qrOf(poster).width > 90);
 }
 

@@ -92,15 +92,15 @@ for (const design of inspirationDesigns) {
 
 // 3b. An edited text the new style has no place for is reported, and comes back on return.
 {
-  let document = createDocument("clasico", ids());
-  const sub = document.elements.find((item) => item.type === "text" && item.role === "rubro");
+  let document = createDocument("corporativo", ids());
+  const sub = document.elements.find((item) => item.type === "text" && item.role === "bajada");
   assert.ok(sub);
   document = updateElement(document, sub.id, { text: "Gomería y lubricentro" });
-  const target = templateIds.find((id) => !createDocument(id, ids()).elements.some((item) => item.role === "rubro"));
-  assert.ok(target, "some template has no rubro slot");
+  const target = templateIds.find((id) => !createDocument(id, ids()).elements.some((item) => item.role === "bajada"));
+  assert.ok(target, "some template has no bajada slot");
   const next = applyTemplate(document, target, ids());
   assert.deepEqual(hiddenEditedTexts(document, next).map((item) => item.text), ["Gomería y lubricentro"]);
-  const back = applyTemplate(next, "clasico", ids());
+  const back = applyTemplate(next, "corporativo", ids());
   assert.ok(back.elements.some((item) => item.type === "text" && item.text === "Gomería y lubricentro"));
   // Untouched template text is not reported.
   assert.equal(hiddenEditedTexts(createDocument("clasico", ids()), applyTemplate(createDocument("clasico", ids()), target, ids())).length, 0);
@@ -110,7 +110,7 @@ for (const design of inspirationDesigns) {
 {
   let document = createDocument("clasico", ids());
   document = addRect(document, "moved");
-  document = updateElement(document, "moved", { x: -25, y: 60, width: 28, height: 12 });
+  document = updateElement(document, "moved", { x: -12, y: 60, width: 14, height: 8 });
   assert.deepEqual(recoverableElements(document).map((item) => item.id), ["moved"]);
   const result = recoverElement(document, "moved");
   assert.ok(result);
@@ -129,13 +129,13 @@ for (const design of inspirationDesigns) {
   let document = createDocument("clasico", ids());
   const qr = document.elements.find((item) => item.type === "qr")!;
   document = updateElement(document, qr.id, { value: "https://search.google.com/local/writereview?placeid=ChIJabc" });
-  // Small enough to fit in the free margins of Clásico (its free bands are 10–12 mm tall).
+  // Small enough to fit in the free margins of Clásico (about 16 mm wide beside the code).
   for (const [id, x, y] of [["a", -200, 10], ["b", 200, 40]] as const) {
     document = addText(document, id);
-    document = updateElement(document, id, { text: `Nota ${id}`, width: 18, fontSize: 4, x, y });
+    document = updateElement(document, id, { text: `Nota ${id}`, width: 14, fontSize: 4, x, y });
   }
   document = addRect(document, "c");
-  document = updateElement(document, "c", { x: 30, y: 200, width: 16, height: 9 });
+  document = updateElement(document, "c", { x: 30, y: 200, width: 14, height: 9 });
   assert.equal(recoverableElements(document).length, 3);
   const all = recoverAll(document);
   assert.equal(all.recovered, 3);

@@ -1,11 +1,19 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ChangeEvent, type ReactNode } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { InspirationGallery } from "@/components/studio/inspiration-gallery";
-import { StudioCanvas } from "@/components/studio/studio-canvas";
-import { StudioProperties, StudioToolbar } from "@/components/studio/studio-panels";
+import { DesignThumb } from "@/components/studio/design-thumb";
+import { StudioCanvas, type StudioCanvasHandle } from "@/components/studio/studio-canvas";
+import {
+  AddPanel,
+  FormatPanel,
+  HistoryButtons,
+  StudioDownloadPanel,
+  StudioProperties,
+  TemplatePanel,
+} from "@/components/studio/studio-panels";
 import { parseBuyerEmail } from "@/lib/buyer-email";
 import { resolveStudioBootstrap } from "@/lib/studio/bootstrap";
 import {
@@ -31,7 +39,7 @@ import {
 } from "@/lib/studio/document";
 import { recoverAll, recoverElement } from "@/lib/studio/canvas-space";
 import { commitDraft, flushDraft, historyFrom, redo, replacePresent, undo, type HistoryState } from "@/lib/studio/history";
-import { formatSpec, type FormatId } from "@/lib/studio/formats";
+import { formatLabel, formatSpec, type FormatId } from "@/lib/studio/formats";
 import { createId } from "@/lib/studio/ids";
 import { prepareStudioImage } from "@/lib/studio/images.browser";
 import { writeDesign } from "@/lib/studio/persistence";
@@ -48,7 +56,6 @@ import {
   createBlankDocument,
   createDocument,
   hiddenEditedTexts,
-  suggestedTemplates,
   templateList,
 } from "@/lib/studio/templates";
 import {
@@ -86,7 +93,15 @@ export function StudioEditor({
   const [started, setStarted] = useState(session.started);
   const [fromBlank, setFromBlank] = useState(false);
   const [showInspiration, setShowInspiration] = useState(false);
-  const [history, setHistory] = useState<HistoryState>(() => historyFrom(session.document));
+  const [tab, setTab] = useState<EditorTab>("editar");
+  const [showDownload, setShowDownload] = useState(false);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const canvasRef = useRef<StudioCanvasHandle>(null);
+  const [history, setHistory] = useState<HistoryState>(() =>
+    session.previous
+      ? { past: [session.previous], present: session.document, future: [] }
+      : historyFrom(session.document),
+  );
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(session.notice);
@@ -709,29 +724,39 @@ export function StudioEditor({
   const selected = history.present.elements.find((element) => element.id === selectedId) ?? null;
   const validation = useMemo(() => validateDesign(history.present), [history.present]);
   const exportValidation = useMemo(() => validateForExport(history.present, COMMERCIAL_VALIDATION), [history.present]);
-  const toolbar = {
-    templateId: history.present.templateId,
-    formatId: history.present.format.id,
-    onFormat,
-    canUndo: history.past.length > 0 || drafting,
-    canRedo: history.future.length > 0,
-    imageBusy,
-    background: history.present.background,
-    onUndo,
-    onRedo,
-    onTemplate,
-    onApplyPalette,
-    onAddText,
-    onAddRect,
-    onAddImage: () => {
-      replaceId.current = null;
-      fileRef.current?.click();
-    },
-    onBackground: (color: string) => {
-      const current = historyRef.current?.present;
-      if (current) commitDocument(setBackground(current, color));
-    },
-  };
+  const templatePreviews = useMemo(
+    () =>
+      Object.fromEntries(
+        templateList.map((template) => [
+          template.id,
+          template.id === history.present.templateId
+            ? history.present
+            : applyTemplate(history.present, template.id, { applyPalette: false }),
+        ]),
+      ) as Record<TemplateId, DesignDocumentV8>,
+    [history.present],
+  );
+
+  function select(id: string | null) {
+    setSelectedId(id);
+    if (id) setTab("editar");
+  }
+
+  function openPreview() {
+    const url = canvasRef.current?.snapshot() ?? null;
+    if (!url) {
+      setNotice("Todavía estamos preparando el lienzo. Probá de nuevo en un momento.");
+      return;
+    }
+    setShowDownload(false);
+    setPreviewUrl(url);
+  }
+
+  function openDownload() {
+    finishDraft();
+    setPreviewUrl(null);
+    setShowDownload(true);
+  }
 
   function startFrom(document: DesignDocumentV8, options?: { blank?: boolean; label?: string }) {
     const nextHistory = historyFrom(document);
@@ -781,81 +806,57 @@ export function StudioEditor({
         <header className="max-w-2xl">
           <p className="text-sm font-semibold text-accent">AtajoLab</p>
           <h1 className="mt-1 text-3xl text-foreground sm:text-4xl">Editor avanzado</h1>
-          <p className="mt-3 text-sm leading-6 text-muted">
-            Elegí un ejemplo o empezá desde cero. Después podés cambiar todo sobre el lienzo
+          <p className="mt-3 text-base leading-relaxed text-muted">
+            Empezá con una plantilla y cambiá todo sobre el lienzo
             {freeAvailable
               ? ". Tu primer QR es gratis."
               : checkoutEnabled
-                ? ` y comprar por ${formatArs(PIECE_PRICE_ARS)} ${PIECE_CURRENCY}.`
+                ? `. Cada diseño cuesta ${formatArs(PIECE_PRICE_ARS)} ${PIECE_CURRENCY}.`
                 : "."}
           </p>
         </header>
         <Link
           href="/empezar"
-          className="mt-6 flex flex-col items-start rounded-3xl border border-accent/30 bg-ok-bg px-5 py-5 hover:border-accent"
+          className="mt-6 flex flex-col items-start rounded-3xl border-2 border-accent/40 bg-ok-bg px-5 py-5 hover:border-accent"
         >
-          <span className="text-lg font-semibold">Creación guiada</span>
-          <span className="mt-2 text-sm text-muted">
-            Contanos qué querés compartir (un enlace, tus redes, WhatsApp, Wi-Fi, un contacto) y te mostramos
-            diseños listos con tu código.
-          </span>
+          <span className="text-lg font-semibold">¿Primera vez? Probá la creación guiada</span>
+          <span className="mt-1 text-sm text-muted">Elegís qué compartir y te mostramos diseños listos con tu código.</span>
           <span className="mt-3 text-sm font-semibold text-accent">Empezar paso a paso →</span>
         </Link>
-        <div className="mt-6">
-          <button
-            type="button"
-            className="text-sm font-semibold text-accent hover:text-accent-strong"
-            onClick={() => setShowInspiration(true)}
-          >
-            Inspiración
-          </button>
-          <p className="mt-1 text-sm text-muted">Mirá diseños listos y usalos como punto de partida.</p>
-        </div>
-        <ul className="mt-8 grid gap-3 sm:grid-cols-2">
-          {suggestedTemplates.map((template) => (
+        <h2 className="mt-8 text-sm font-semibold uppercase tracking-[0.14em] text-muted">Elegí una plantilla</h2>
+        <ul className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3">
+          {templateList.map((template) => (
             <li key={template.id}>
               <button
                 type="button"
-                className="flex h-full w-full flex-col items-start rounded-3xl border border-line bg-card px-5 py-5 text-left hover:border-accent"
+                className="flex h-full w-full flex-col rounded-3xl border-2 border-line bg-card p-3 text-left hover:border-accent"
                 onClick={() => startFrom(createDocument(template.id))}
               >
-                <span className="text-lg font-semibold">{template.name}</span>
-                <span className="mt-2 text-sm text-muted">{template.description}</span>
+                <DesignThumb document={starterDocuments[template.id]} />
+                <span className="mt-3 text-base font-semibold">{template.name}</span>
+                <span className="mt-0.5 text-sm leading-5 text-muted">{template.description}</span>
               </button>
             </li>
           ))}
-          <li className="sm:col-span-2">
-            <button
-              type="button"
-              className="flex w-full flex-col items-start rounded-3xl border border-dashed border-line bg-card px-5 py-5 text-left hover:border-accent"
-              onClick={() => startFrom(createBlankDocument(), { blank: true })}
-            >
-              <span className="text-lg font-semibold">Desde cero</span>
-              <span className="mt-2 text-sm text-muted">
-                Lienzo blanco con un título y el código QR. Agregá y reorganizá lo que quieras.
-              </span>
-            </button>
-          </li>
         </ul>
-        <details className="mt-6">
-          <summary className="cursor-pointer text-sm font-semibold text-muted">Más estilos</summary>
-          <ul className="mt-3 grid gap-3 sm:grid-cols-2">
-            {templateList
-              .filter((template) => !suggestedTemplates.some((item) => item.id === template.id))
-              .map((template) => (
-                <li key={template.id}>
-                  <button
-                    type="button"
-                    className="flex h-full w-full flex-col items-start rounded-3xl border border-line bg-card px-5 py-4 text-left hover:border-accent"
-                    onClick={() => startFrom(createDocument(template.id))}
-                  >
-                    <span className="font-semibold">{template.name}</span>
-                    <span className="mt-1 text-sm text-muted">{template.description}</span>
-                  </button>
-                </li>
-              ))}
-          </ul>
-        </details>
+        <div className="mt-4 grid gap-3 sm:grid-cols-2">
+          <button
+            type="button"
+            className="flex w-full flex-col items-start rounded-3xl border-2 border-dashed border-line bg-card px-5 py-4 text-left hover:border-accent"
+            onClick={() => startFrom(createBlankDocument(), { blank: true })}
+          >
+            <span className="text-base font-semibold">Desde cero</span>
+            <span className="mt-0.5 text-sm text-muted">Un título y el código sobre fondo blanco.</span>
+          </button>
+          <button
+            type="button"
+            className="flex w-full flex-col items-start rounded-3xl border-2 border-line bg-card px-5 py-4 text-left hover:border-accent"
+            onClick={() => setShowInspiration(true)}
+          >
+            <span className="text-base font-semibold">Ver ejemplos</span>
+            <span className="mt-0.5 text-sm text-muted">Instagram, WhatsApp, menú, evento, Wi-Fi y reseñas.</span>
+          </button>
+        </div>
       </div>
     );
   }
@@ -874,39 +875,38 @@ export function StudioEditor({
     );
   }
 
+  const downloadLabel = freeAvailable ? "Descargar gratis" : "Descargar";
+  const pending = exportValidation.errors.length;
+  const tabs: { id: EditorTab; label: string }[] = [
+    { id: "editar", label: "Editar" },
+    { id: "plantilla", label: "Plantilla" },
+    { id: "formato", label: "Formato" },
+    { id: "agregar", label: "Agregar" },
+  ];
+  const panelClass = (id: EditorTab) => (tab === id ? "" : "max-lg:hidden");
+
   return (
-    <div className="studio-shell mx-auto w-full max-w-7xl overflow-x-hidden px-4 py-6">
-      <header className="mb-4 flex flex-wrap items-end justify-between gap-3">
-        <div>
+    <div className="studio-shell mx-auto w-full max-w-7xl overflow-x-hidden px-4 pb-28 pt-5 lg:pb-10">
+      <header className="mb-4 flex flex-wrap items-center justify-between gap-x-4 gap-y-3">
+        <div className="min-w-0">
           <h1 className="text-2xl text-foreground sm:text-3xl">Tu diseño</h1>
-          <p className="mt-1 text-sm text-muted">
-            Editá directo en el lienzo
-            {freeAvailable
-              ? " · Tu primer QR es gratis"
-              : checkoutEnabled
-                ? ` · ${formatArs(PIECE_PRICE_ARS)} ${PIECE_CURRENCY}`
-                : ""}
+          <p className="mt-1 text-xs text-muted" role="status">
+            {saveLabel}
+            {imageBusy ? " Preparando imagen…" : ""}
           </p>
-          <div className="mt-2 flex flex-wrap gap-x-5 gap-y-1">
-            <button
-              type="button"
-              className="text-sm font-semibold text-accent hover:text-accent-strong"
-              onClick={() => setShowInspiration(true)}
-            >
-              Inspiración
-            </button>
-            <Link href="/empezar" className="text-sm font-semibold text-accent hover:text-accent-strong">
-              Creación guiada
-            </Link>
-          </div>
         </div>
-        <p className="text-xs text-muted" role="status">
-          {saveLabel}
-          {imageBusy ? " Preparando imagen…" : ""}
-        </p>
+        <div className="flex flex-wrap items-center gap-2">
+          <HistoryButtons canUndo={history.past.length > 0 || drafting} canRedo={history.future.length > 0} onUndo={onUndo} onRedo={onRedo} />
+          <button type="button" className={`${secondaryAction} max-lg:hidden`} onClick={openPreview}>
+            Vista previa
+          </button>
+          <button type="button" className={`${primaryAction} max-lg:hidden`} data-testid="descargar" onClick={openDownload}>
+            {downloadLabel}
+          </button>
+        </div>
       </header>
       {tips.length > 0 ? (
-        <ul className="mb-4 space-y-1 text-sm text-muted" role="status">
+        <ul className="mb-4 space-y-1 rounded-2xl border border-line bg-card px-4 py-3 text-sm text-foreground/80" role="status">
           {tips.map((tip) => (
             <li key={tip}>{tip}</li>
           ))}
@@ -928,37 +928,89 @@ export function StudioEditor({
           </button>
         </div>
       ) : null}
-      <div className="grid min-w-0 items-start gap-4 lg:grid-cols-[13rem_minmax(0,1fr)_17rem]">
-        <aside className="hidden min-w-0 lg:block">
-          <StudioToolbar layout="column" {...toolbar} />
-        </aside>
-        <div className="min-w-0">
-          <div className="mb-3 min-w-0 lg:hidden">
-            <StudioToolbar layout="row" {...toolbar} />
-          </div>
+      <div className="grid min-w-0 items-start gap-4 lg:grid-cols-[14.5rem_minmax(0,1fr)_18rem]">
+        <div className="order-1 min-w-0 lg:order-2">
           <StudioCanvas
+            handle={canvasRef}
             document={history.present}
             selectedId={selectedId}
-            onSelect={setSelectedId}
+            onSelect={select}
             onGeometry={onGeometry}
           />
+          <div
+            role="tablist"
+            aria-label="Herramientas"
+            className="mt-4 grid grid-cols-4 gap-1 rounded-2xl border border-line bg-card p-1 lg:hidden"
+          >
+            {tabs.map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                role="tab"
+                aria-selected={tab === item.id}
+                className={`h-11 rounded-xl text-sm font-semibold transition-colors ${
+                  tab === item.id ? "bg-accent text-white" : "text-foreground hover:bg-background"
+                }`}
+                onClick={(event) => {
+                  setTab(item.id);
+                  const bar = event.currentTarget.parentElement;
+                  // Bring the tools into view; the canvas stays partly visible above them.
+                  window.requestAnimationFrame(() => bar?.scrollIntoView({ behavior: "smooth", block: "center" }));
+                }}
+              >
+                {item.label}
+              </button>
+            ))}
+          </div>
         </div>
-        <aside className="min-w-0 lg:sticky lg:top-24 lg:max-h-[calc(100dvh-7rem)] lg:overflow-auto">
+        <aside className="order-3 flex min-w-0 flex-col gap-5 lg:order-1">
+          <div className={panelClass("plantilla")}>
+            <TemplatePanel
+              templateId={history.present.templateId}
+              previews={templatePreviews}
+              onTemplate={onTemplate}
+              onApplyPalette={onApplyPalette}
+            />
+          </div>
+          <div className={panelClass("formato")}>
+            <FormatPanel formatId={history.present.format.id} onFormat={onFormat} />
+          </div>
+          <div className={panelClass("agregar")}>
+            <AddPanel
+              imageBusy={imageBusy}
+              background={history.present.background}
+              onAddText={onAddText}
+              onAddRect={onAddRect}
+              onAddImage={() => {
+                replaceId.current = null;
+                fileRef.current?.click();
+              }}
+              onBackground={(color: string) => {
+                const current = historyRef.current?.present;
+                if (current) commitDocument(setBackground(current, color));
+              }}
+            />
+          </div>
+          <div className="flex flex-wrap gap-x-5 gap-y-1">
+            <button
+              type="button"
+              className="text-sm font-semibold text-accent hover:text-accent-strong"
+              onClick={() => setShowInspiration(true)}
+            >
+              Ver ejemplos
+            </button>
+            <Link href="/empezar" className="text-sm font-semibold text-accent hover:text-accent-strong">
+              Creación guiada
+            </Link>
+          </div>
+        </aside>
+        <aside
+          className={`order-2 min-w-0 lg:sticky lg:top-24 lg:order-3 lg:max-h-[calc(100dvh-7rem)] lg:overflow-auto ${panelClass("editar")}`}
+        >
           <StudioProperties
             document={history.present}
             selected={selected}
-            validation={validation}
-            exportValidation={exportValidation}
-            exportBusy={exportBusy}
-            exportEnabled={exportEnabled}
-            checkoutEnabled={checkoutEnabled}
-            freeAvailable={freeAvailable}
-            prepareBusy={prepareBusy}
-            prepareProgress={prepareProgress}
-            orderBusy={orderBusy}
-            buyerEmail={buyerEmail}
-            onBuyerEmailChange={setBuyerEmail}
-            onSelect={setSelectedId}
+            onSelect={select}
             onCommit={onCommit}
             onEdit={editLive}
             onEditEnd={finishDraft}
@@ -967,7 +1019,7 @@ export function StudioEditor({
               if (!current) return;
               const next = moveLayer(current, id, direction);
               if (elementsCoveringQr(next).length > 0) {
-                setNotice("Ese cambio deja algo sobre el QR. El diseño no está listo para exportar.");
+                setNotice("Ese cambio deja algo sobre el QR. El diseño no está listo para descargar.");
               }
               commitDocument(next);
             }}
@@ -985,14 +1037,75 @@ export function StudioEditor({
               replaceId.current = id;
               fileRef.current?.click();
             }}
+          />
+        </aside>
+      </div>
+
+      <div className="fixed inset-x-0 bottom-0 z-30 border-t border-line bg-card/95 px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 backdrop-blur lg:hidden">
+        <div className="mx-auto flex max-w-xl items-center gap-3">
+          <button type="button" className={`${secondaryAction} h-13 shrink-0`} onClick={openPreview}>
+            Vista previa
+          </button>
+          <button type="button" className={`${primaryAction} h-13 min-w-0 flex-1`} data-testid="descargar-movil" onClick={openDownload}>
+            {downloadLabel}
+          </button>
+        </div>
+      </div>
+
+      {previewUrl ? (
+        <EditorDialog title="Vista previa" wide onClose={() => setPreviewUrl(null)}>
+          <div className="flex items-center justify-center rounded-2xl bg-card p-4">
+            {/* eslint-disable-next-line @next/next/no-img-element -- snapshot of the canvas, a data: URL */}
+            <img
+              src={previewUrl}
+              alt="Tu diseño tal como está ahora"
+              className="block h-auto max-h-[62dvh] w-auto max-w-full rounded-md shadow-[0_16px_36px_rgba(20,34,31,0.2)]"
+            />
+          </div>
+          <p className="mt-3 text-center text-sm text-muted">
+            {formatLabel(history.present.format.id)} · Los archivos se descargan en tamaño real, sin marcas.
+          </p>
+          <div className="mt-4 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+            <button type="button" className={secondaryAction} onClick={() => setPreviewUrl(null)}>
+              Seguir editando
+            </button>
+            <button type="button" className={primaryAction} onClick={openDownload}>
+              {downloadLabel}
+            </button>
+          </div>
+        </EditorDialog>
+      ) : null}
+
+      {showDownload ? (
+        <EditorDialog
+          title={pending > 0 ? "Antes de descargar" : "Descargar tu diseño"}
+          onClose={() => setShowDownload(false)}
+        >
+          <StudioDownloadPanel
+            validation={validation}
+            exportValidation={exportValidation}
+            exportBusy={exportBusy}
+            exportEnabled={exportEnabled}
+            checkoutEnabled={checkoutEnabled}
+            freeAvailable={freeAvailable}
+            prepareBusy={prepareBusy}
+            prepareProgress={prepareProgress}
+            orderBusy={orderBusy}
+            buyerEmail={buyerEmail}
+            onBuyerEmailChange={setBuyerEmail}
+            onSelect={(id) => {
+              setShowDownload(false);
+              select(id);
+            }}
             onBringQrForward={onBringQrForward}
             onExport={onExport}
             onCreateOrder={(acceptedTerms) => {
               void onCreateOrder(acceptedTerms);
             }}
           />
-        </aside>
-      </div>
+        </EditorDialog>
+      ) : null}
+
       <input
         ref={fileRef}
         className="sr-only"
@@ -1005,6 +1118,69 @@ export function StudioEditor({
   );
 }
 
+type EditorTab = "editar" | "plantilla" | "formato" | "agregar";
+
+const primaryAction =
+  "inline-flex h-11 items-center justify-center rounded-full bg-accent px-6 text-sm font-semibold text-white shadow-[0_6px_16px_rgba(15,110,98,0.25)] transition-colors hover:bg-accent-strong";
+const secondaryAction =
+  "inline-flex h-11 items-center justify-center rounded-full border border-line bg-card px-5 text-sm font-semibold text-foreground transition-colors hover:border-accent";
+
+/** One fresh document per template, for the start screen thumbnails. */
+const starterDocuments = Object.fromEntries(
+  templateList.map((template) => [template.id, createDocument(template.id)]),
+) as Record<TemplateId, DesignDocumentV8>;
+
+/** A sheet from the bottom on phones, a centered panel on larger screens. Esc and the backdrop close it. */
+function EditorDialog({
+  title,
+  wide = false,
+  onClose,
+  children,
+}: {
+  title: string;
+  wide?: boolean;
+  onClose: () => void;
+  children: ReactNode;
+}) {
+  useEffect(() => {
+    function onKey(event: KeyboardEvent) {
+      if (event.key === "Escape") onClose();
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-end justify-center bg-foreground/55 sm:items-center sm:p-6"
+      role="dialog"
+      aria-modal="true"
+      aria-label={title}
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) onClose();
+      }}
+    >
+      <div
+        className={`guided-step max-h-[92dvh] w-full overflow-auto rounded-t-3xl bg-background p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] sm:rounded-3xl sm:p-6 ${
+          wide ? "sm:max-w-2xl" : "sm:max-w-md"
+        }`}
+      >
+        <div className="mb-4 flex items-center justify-between gap-3">
+          <h2 className="text-xl font-semibold">{title}</h2>
+          <button
+            type="button"
+            className="inline-flex h-10 items-center rounded-full border border-line bg-card px-4 text-sm font-semibold hover:border-accent"
+            onClick={onClose}
+          >
+            Cerrar
+          </button>
+        </div>
+        {children}
+      </div>
+    </div>
+  );
+}
+
 function loadInitial(): {
   document: DesignDocumentV8;
   notice: string | null;
@@ -1012,6 +1188,7 @@ function loadInitial(): {
   recovered: boolean;
   started: boolean;
   saveLabel: string;
+  previous: DesignDocumentV8 | null;
 } {
   if (typeof window === "undefined") {
     return {
@@ -1021,6 +1198,7 @@ function loadInitial(): {
       recovered: false,
       started: false,
       saveLabel: "El diseño se guarda en esta sesión.",
+      previous: null,
     };
   }
 
@@ -1035,6 +1213,7 @@ function loadInitial(): {
     recovered: boot.recovered,
     started: boot.started,
     saveLabel: boot.saveLabel,
+    previous: boot.previous,
   };
 }
 

@@ -6,6 +6,8 @@ Aplicación web para que un comercio o profesional arme un código QR con diseñ
 - `/crear`: editor avanzado (Studio). Recibe la propuesta elegida y permite cambiar todo, incluido el formato.
 - Contenido del QR: `lib/qr-content.ts`. Formatos (A6, A5, A4, tarjeta, etiqueta, post, historia): `lib/studio/formats.ts`.
 - Los códigos son estáticos: no hay enlaces dinámicos ni estadísticas de escaneo.
+- El contenido del QR que no es un enlace (Wi-Fi, contacto, texto) se guarda cifrado en `Order.artwork` (`lib/studio/artwork-seal.ts`, clave derivada de `ORDER_ACCESS_SECRET`). Si se rota ese secreto, esos pedidos ya no se pueden volver a generar.
+- Prueba de navegador: `pnpm test:e2e` (ver `scripts/e2e-guided.mjs`).
 
 Valida el enlace, muestra la pieza y guarda el pedido en PostgreSQL. El editor ofrece tres plantillas. Un pedido pagado descarga PNG, SVG y PDF generados en el servidor, también para las plantillas anteriores. No hay cuentas de usuario. El pago usa Mercado Pago Checkout Pro. `MERCADOPAGO_ENV=test` cobra con la cuenta de prueba. `MERCADOPAGO_ENV=production` cobra con la cuenta real. Si el token y la cuenta no coinciden, el cobro queda deshabilitado.
 

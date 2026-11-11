@@ -32,7 +32,9 @@ export default function PrivacyPage() {
           <li>
             <strong>Tu diseño</strong>: textos, colores, las imágenes que subas y el contenido del código QR (el
             enlace, los datos de la red Wi-Fi con su contraseña, los datos de contacto o el texto que cargues). Se
-            guarda con el pedido para poder generar tus archivos cada vez que los descargues.
+            guarda con el pedido para poder generar tus archivos cada vez que los descargues. Lo que no es un enlace
+            (Wi-Fi, contacto o texto) se guarda cifrado. Mientras armás el diseño, queda solo en tu navegador hasta
+            que cerrás la pestaña.
           </li>
           <li>
             <strong>Datos del pago</strong> que informa Mercado Pago: número de operación, estado y monto. No

@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import { Designs } from "@/components/landing/designs";
 import { Formats } from "@/components/landing/formats";
 import { Hero } from "@/components/landing/hero";
 import { HowItWorks } from "@/components/landing/how-it-works";
@@ -27,7 +26,6 @@ export default function HomePage() {
     <main>
       <Hero />
       <HowItWorks />
-      <Designs />
       <Inspiration />
       <Formats />
       <Includes />

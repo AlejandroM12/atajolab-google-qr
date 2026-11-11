@@ -1,4 +1,5 @@
 import { isHexColor } from "@/lib/color";
+import { templateColors, templateTones, type TemplateColors } from "@/lib/studio/template-colors";
 import { isUserContent } from "@/lib/studio/canvas-space";
 import { normalizeElement } from "@/lib/studio/document";
 import {
@@ -21,6 +22,7 @@ import {
   QR_INK,
   QR_MIN_MM,
   QR_PAPER,
+  RECT_MIN_MM,
   STUDIO_VERSION,
   type DesignDocumentV8,
   type QrElement,
@@ -49,12 +51,16 @@ type TextFrame = FrameBase & {
   fontSize: number;
   fill: string;
   align: TextAlign;
+  /** Role of the shape this single line sits on (a pill): the text stays centered in it. */
+  centerIn?: string;
 };
 
 type RectFrame = FrameBase & {
   type: "rect";
   fill: string;
   cornerRadius: number;
+  /** Keeps its proportions on other sheets (circles, squares around the code). */
+  even?: boolean;
 };
 
 type QrFrame = FrameBase & {
@@ -73,32 +79,32 @@ export const templateList: { id: TemplateId; name: string; description: string }
   {
     id: "clasico",
     name: "Clásico",
-    description: "Papel claro y un marco alrededor del código.",
+    description: "Marco fino, serif y el código enmarcado.",
   },
   {
     id: "vivo",
     name: "Vivo",
-    description: "Riel verde y franja naranja.",
+    description: "Bloque de color, tarjeta blanca y botón.",
   },
   {
     id: "nocturno",
     name: "Nocturno",
-    description: "Fondo oscuro y el código sobre una placa clara.",
+    description: "Fondo oscuro y el código con borde luminoso.",
   },
   {
     id: "negocio",
     name: "Mi negocio",
-    description: "El nombre grande y una franja de color.",
+    description: "Tu nombre bien grande y el código en un sello.",
   },
   {
     id: "corporativo",
     name: "Corporativo",
-    description: "Franja institucional, datos en orden y el código al pie.",
+    description: "Encabezado, datos en orden y el código al pie.",
   },
   {
     id: "creativo",
     name: "Creativo",
-    description: "Color pleno y el código como protagonista.",
+    description: "Color pleno, título inclinado y sombra dura.",
   },
 ];
 
@@ -107,432 +113,180 @@ export const suggestedTemplates = templateList.filter((template) =>
 );
 
 /** Suggested palette for each template. Applied only when the user asks. */
-export const templatePalettes: Record<
-  TemplateId,
-  { background: string; fills: Record<string, string> }
-> = {
-  clasico: {
-    background: "#fffcf8",
-    fills: {
-      rubro: "#1c1915",
-      titulo: "#1c1915",
-      ayuda: "#1c1915",
-      marco: "#1c1915",
-      acento: "#a16207",
-    },
-  },
-  vivo: {
-    background: "#f3ecdf",
-    fills: {
-      riel: "#0c3b32",
-      banda: "#ff4d00",
-      titulo: "#ffffff",
-      placa: "#ffffff",
-      ayuda: "#1c1915",
-    },
-  },
-  nocturno: {
-    background: "#121417",
-    fills: {
-      franja: "#ffb000",
-      rubro: "#f7f4ee",
-      titulo: "#f7f4ee",
-      placa: "#ffffff",
-      ayuda: "#f7f4ee",
-    },
-  },
-  negocio: {
-    background: "#f7f1e8",
-    fills: {
-      rubro: "#1c1915",
-      banda: "#1c1915",
-      titulo: "#ffffff",
-      ayuda: "#ffffff",
-    },
-  },
-  corporativo: {
-    background: "#f4f0e6",
-    fills: {
-      banda: "#14352f",
-      rubro: "#d7efe8",
-      titulo: "#14221f",
-      bajada: "#3d4a45",
-      ayuda: "#3d4a45",
-      acento: "#0f6e62",
-    },
-  },
-  creativo: {
-    background: "#0b5348",
-    fills: {
-      mancha: "#ff4d00",
-      titulo: "#1c1915",
-      bajada: "#e7f3ef",
-      ayuda: "#d7efe8",
-      acento: "#94d2bd",
-    },
-  },
+export const templatePalettes: Record<TemplateId, TemplateColors> = {
+  clasico: templateColors("clasico", templateTones.clasico),
+  vivo: templateColors("vivo", templateTones.vivo),
+  nocturno: templateColors("nocturno", templateTones.nocturno),
+  negocio: templateColors("negocio", templateTones.negocio),
+  corporativo: templateColors("corporativo", templateTones.corporativo),
+  creativo: templateColors("creativo", templateTones.creativo),
 };
 
+/* Frame builders. Colors come from templatePalettes by role, so they are not repeated here. */
+
+function text(
+  role: string,
+  box: [x: number, y: number, width: number, height: number],
+  content: string,
+  font: StudioFont,
+  fontSize: number,
+  align: TextAlign = "left",
+  extra: { rotation?: number; centerIn?: string } = {},
+): TextFrame {
+  return {
+    type: "text",
+    role,
+    x: box[0],
+    y: box[1],
+    width: box[2],
+    height: box[3],
+    rotation: extra.rotation ?? 0,
+    text: content,
+    font,
+    fontSize,
+    fill: "#1c1915",
+    align,
+    centerIn: extra.centerIn,
+  };
+}
+
+function rect(
+  role: string,
+  box: [x: number, y: number, width: number, height: number],
+  extra: { radius?: number; rotation?: number; even?: boolean } = {},
+): RectFrame {
+  return {
+    type: "rect",
+    role,
+    x: box[0],
+    y: box[1],
+    width: box[2],
+    height: box[3],
+    rotation: extra.rotation ?? 0,
+    fill: "#1c1915",
+    cornerRadius: extra.radius ?? 0,
+    even: extra.even,
+  };
+}
+
+function qr(x: number, y: number, size: number, foreground: string = QR_INK): QrFrame {
+  return {
+    type: "qr",
+    role: "qr",
+    x,
+    y,
+    width: size,
+    height: size,
+    rotation: 0,
+    value: "",
+    foreground,
+    background: QR_PAPER,
+  };
+}
+
+/** Editorial: a hairline frame, a serif headline, an ornament and the code in a dark frame. */
 const clasico: Frame[] = [
-  {
-    type: "text",
-    role: "rubro",
-    x: 10,
-    y: 10,
-    width: 85,
-    height: 10,
-    rotation: 0,
-    text: "Tu negocio",
-    font: "fraunces",
-    fontSize: 5,
-    fill: "#1c1915",
-    align: "center",
-  },
-  {
-    type: "text",
-    role: "titulo",
-    x: 10,
-    y: 24,
-    width: 85,
-    height: 18,
-    rotation: 0,
-    text: "Tu opinión nos importa",
-    font: "fraunces",
-    fontSize: 7,
-    fill: "#1c1915",
-    align: "center",
-  },
-  { type: "rect", role: "acento", x: 36, y: 44, width: 33, height: 3, rotation: 0, fill: "#a16207", cornerRadius: 1 },
-  { type: "rect", role: "marco", x: 22, y: 52, width: 61, height: 61, rotation: 0, fill: "#ffffff", cornerRadius: 0 },
-  {
-    type: "qr",
-    role: "qr",
-    x: 26.5,
-    y: 56.5,
-    width: 52,
-    height: 52,
-    rotation: 0,
-    value: "",
-    foreground: QR_INK,
-    background: QR_PAPER,
-  },
-  {
-    type: "text",
-    role: "ayuda",
-    x: 10,
-    y: 120,
-    width: 85,
-    height: 16,
-    rotation: 0,
-    text: "Escaneá y dejanos tu reseña en Google",
-    font: "source",
-    fontSize: 4,
-    fill: "#1c1915",
-    align: "center",
-  },
+  rect("linea-sup", [5, 5, 95, 0.5]),
+  rect("linea-inf", [5, 142.5, 95, 0.5]),
+  rect("linea-izq", [5, 5, 0.5, 138]),
+  rect("linea-der", [99.5, 5, 0.5, 138]),
+  text("rubro", [12, 13, 81, 5], "TU NEGOCIO", "source-bold", 3.4, "center"),
+  text("titulo", [12, 21, 81, 24], "Tu opinión nos importa", "fraunces-bold", 9.2, "center"),
+  rect("regla-izq", [33, 50.25, 15, 0.5]),
+  rect("rombo", [51, 49, 3, 3], { rotation: 45, even: true }),
+  rect("regla-der", [57, 50.25, 15, 0.5]),
+  rect("marco", [25, 57.5, 55, 55], { even: true }),
+  qr(26.5, 59, 52),
+  text("cta", [12, 118.5, 81, 5], "ESCANEÁ ACÁ", "source-bold", 3.4, "center"),
+  text("ayuda", [12, 125.5, 81, 12], "Dejanos tu reseña en Google", "fraunces", 4.6, "center"),
 ];
 
+/** Poster: a block of color with a big headline, the code on a white card and a button. */
 const vivo: Frame[] = [
-  { type: "rect", role: "riel", x: 0, y: 0, width: 17, height: 148, rotation: 0, fill: "#0c3b32", cornerRadius: 0 },
-  { type: "rect", role: "banda", x: 17, y: 0, width: 88, height: 48, rotation: 0, fill: "#ff4d00", cornerRadius: 0 },
-  {
-    type: "text",
-    role: "titulo",
-    x: 22,
-    y: 12,
-    width: 76,
-    height: 28,
-    rotation: 0,
-    text: "Dejanos tu reseña",
-    font: "sora",
-    fontSize: 8,
-    fill: "#ffffff",
-    align: "left",
-  },
-  { type: "rect", role: "placa", x: 12, y: 54, width: 86, height: 58, rotation: 0, fill: "#ffffff", cornerRadius: 2 },
-  {
-    type: "qr",
-    role: "qr",
-    x: 28,
-    y: 58,
-    width: 48,
-    height: 48,
-    rotation: 0,
-    value: "",
-    foreground: QR_INK,
-    background: QR_PAPER,
-  },
-  {
-    type: "text",
-    role: "ayuda",
-    x: 22,
-    y: 120,
-    width: 76,
-    height: 16,
-    rotation: 0,
-    text: "Escaneá acá, en Google",
-    font: "source",
-    fontSize: 4.2,
-    fill: "#1c1915",
-    align: "left",
-  },
+  rect("banda", [0, 0, 105, 66]),
+  rect("circulo", [77, 6, 20, 20], { radius: 10, even: true }),
+  rect("punto", [66, 8, 6, 6], { radius: 3, even: true }),
+  text("rubro", [9, 10.5, 56, 5], "TU NEGOCIO", "source-bold", 3.4),
+  text("titulo", [9, 28, 87, 26.5], "Seguinos en Instagram", "sora-bold", 10),
+  rect("placa", [22.5, 56, 60, 60], { radius: 5, even: true }),
+  qr(27.5, 61, 50),
+  rect("pildora", [25, 121, 55, 10.5], { radius: 5.25 }),
+  text("cta", [28, 123.5, 49, 5.5], "Escaneá y seguinos", "sora-bold", 4.2, "center", { centerIn: "pildora" }),
+  text("ayuda", [9, 135, 87, 9.5], "@tunegocio", "source", 3.7, "center"),
 ];
 
+/** Dark and quiet: an accent bar by the headline and the code inside a glowing border. */
 const nocturno: Frame[] = [
-  { type: "rect", role: "franja", x: 0, y: 0, width: 105, height: 5, rotation: 0, fill: "#ffb000", cornerRadius: 0 },
-  {
-    type: "text",
-    role: "rubro",
-    x: 10,
-    y: 14,
-    width: 85,
-    height: 10,
-    rotation: 0,
-    text: "Tu negocio",
-    font: "source",
-    fontSize: 4,
-    fill: "#f7f4ee",
-    align: "left",
-  },
-  {
-    type: "text",
-    role: "titulo",
-    x: 10,
-    y: 28,
-    width: 85,
-    height: 22,
-    rotation: 0,
-    text: "Tu experiencia cuenta",
-    font: "sora",
-    fontSize: 8,
-    fill: "#f7f4ee",
-    align: "left",
-  },
-  { type: "rect", role: "placa", x: 22, y: 58, width: 61, height: 61, rotation: 0, fill: "#ffffff", cornerRadius: 2 },
-  {
-    type: "qr",
-    role: "qr",
-    x: 26.5,
-    y: 62.5,
-    width: 52,
-    height: 52,
-    rotation: 0,
-    value: "",
-    foreground: "#121417",
-    background: QR_PAPER,
-  },
-  {
-    type: "text",
-    role: "ayuda",
-    x: 10,
-    y: 126,
-    width: 85,
-    height: 14,
-    rotation: 0,
-    text: "Escaneá acá, en Google",
-    font: "source",
-    fontSize: 4.2,
-    fill: "#f7f4ee",
-    align: "center",
-  },
+  rect("barra", [10, 15, 1.6, 34]),
+  text("rubro", [16, 15, 79, 5], "TU NEGOCIO", "source-bold", 3.4),
+  text("titulo", [16, 22.5, 79, 23], "Mirá nuestra carta", "sora", 9),
+  rect("brillo", [21.5, 58, 62, 62], { radius: 6, even: true }),
+  rect("placa", [23.5, 60, 58, 58], { radius: 4.5, even: true }),
+  qr(27.5, 64, 50, "#121417"),
+  text("cta", [10, 126, 85, 6], "Escaneá y mirá", "sora-bold", 4.6, "center"),
+  text("ayuda", [10, 134, 85, 10], "Menú siempre actualizado", "source", 3.8, "center"),
 ];
 
+/** Brand first: the name as the headline and the code inside a round seal. */
 const negocio: Frame[] = [
-  {
-    type: "text",
-    role: "rubro",
-    x: 10,
-    y: 10,
-    width: 85,
-    height: 16,
-    rotation: 0,
-    text: "Tu negocio",
-    font: "sora",
-    fontSize: 9,
-    fill: "#1c1915",
-    align: "left",
-  },
-  { type: "rect", role: "banda", x: 0, y: 32, width: 105, height: 28, rotation: 0, fill: "#1c1915", cornerRadius: 0 },
-  {
-    type: "text",
-    role: "titulo",
-    x: 8,
-    y: 36,
-    width: 89,
-    height: 12,
-    rotation: 0,
-    text: "Tu opinión nos importa",
-    font: "sora",
-    fontSize: 5.5,
-    fill: "#ffffff",
-    align: "center",
-  },
-  {
-    type: "text",
-    role: "ayuda",
-    x: 8,
-    y: 48,
-    width: 89,
-    height: 8,
-    rotation: 0,
-    text: "Escaneá acá, en Google",
-    font: "source",
-    fontSize: 3.8,
-    fill: "#ffffff",
-    align: "center",
-  },
-  {
-    type: "qr",
-    role: "qr",
-    x: 20.5,
-    y: 70,
-    width: 64,
-    height: 64,
-    rotation: 0,
-    value: "",
-    foreground: QR_INK,
-    background: QR_PAPER,
-  },
+  text("rubro", [10, 9, 85, 14], "Tu negocio", "sora-bold", 11),
+  rect("acento", [10, 26.5, 16, 2], { radius: 1 }),
+  text("titulo", [10, 33, 85, 16], "Escribinos por WhatsApp", "sora", 6.2),
+  rect("sello", [15.5, 52, 74, 74], { radius: 37, even: true }),
+  rect("placa", [29.5, 66, 46, 46], { radius: 3, even: true }),
+  qr(32.5, 69, 40),
+  text("cta", [10, 129.5, 85, 6], "Escaneá y chateá", "sora-bold", 4.6, "center"),
+  text("ayuda", [10, 137, 85, 9.5], "Te respondemos por chat", "source", 3.8, "center"),
 ];
 
+/** Structured: a header band, information in order and the code on a tinted footer. */
 const corporativo: Frame[] = [
-  { type: "rect", role: "banda", x: 0, y: 0, width: 105, height: 28, rotation: 0, fill: "#14352f", cornerRadius: 0 },
-  {
-    type: "text",
-    role: "rubro",
-    x: 10,
-    y: 8,
-    width: 70,
-    height: 12,
-    rotation: 0,
-    text: "Tu negocio",
-    font: "source",
-    fontSize: 3.6,
-    fill: "#d7efe8",
-    align: "left",
-  },
-  {
-    type: "text",
-    role: "titulo",
-    x: 10,
-    y: 38,
-    width: 85,
-    height: 22,
-    rotation: 0,
-    text: "Dejá tu reseña",
-    font: "sora",
-    fontSize: 9,
-    fill: "#14221f",
-    align: "left",
-  },
-  {
-    type: "text",
-    role: "bajada",
-    x: 10,
-    y: 62,
-    width: 85,
-    height: 16,
-    rotation: 0,
-    text: "Contá en una frase para qué sirve el código.",
-    font: "source",
-    fontSize: 4,
-    fill: "#3d4a45",
-    align: "left",
-  },
-  { type: "rect", role: "acento", x: 10, y: 82, width: 28, height: 4, rotation: 0, fill: "#0f6e62", cornerRadius: 1 },
-  {
-    type: "text",
-    role: "ayuda",
-    x: 10,
-    y: 118,
-    width: 48,
-    height: 16,
-    rotation: 0,
-    text: "Escaneá el código",
-    font: "source",
-    fontSize: 3.5,
-    fill: "#3d4a45",
-    align: "left",
-  },
-  {
-    type: "qr",
-    role: "qr",
-    x: 64,
-    y: 100,
-    width: 32,
-    height: 32,
-    rotation: 0,
-    value: "",
-    foreground: QR_INK,
-    background: QR_PAPER,
-  },
+  rect("banda", [0, 0, 105, 22]),
+  text("rubro", [10, 8.5, 85, 5], "TU NEGOCIO", "source-bold", 3.6),
+  text("titulo", [10, 32, 85, 22], "Wi-Fi para clientes", "sora-bold", 8.6),
+  rect("acento", [10, 57.5, 18, 1.6], { radius: 0.8 }),
+  text("bajada", [10, 64, 85, 16], "Conectate sin escribir la contraseña.", "source", 4.2),
+  rect("panel", [0, 88, 105, 60]),
+  rect("placa", [48, 93, 50, 50], { radius: 3, even: true }),
+  text("cta", [10, 98, 34, 13], "Escaneá el código", "sora-bold", 5),
+  text("ayuda", [10, 114, 34, 23], "Abrí la cámara de tu celular y apuntá al código.", "source", 3.6),
+  qr(51, 96, 44),
 ];
 
+/** Playful: full color, a tilted sticker for the headline and the code with a hard shadow. */
 const creativo: Frame[] = [
-  { type: "rect", role: "mancha", x: 8, y: 10, width: 89, height: 48, rotation: 0, fill: "#ff4d00", cornerRadius: 5 },
-  {
-    type: "text",
-    role: "titulo",
-    x: 14,
-    y: 20,
-    width: 77,
-    height: 28,
-    rotation: 0,
-    text: "Que se vea de lejos",
-    font: "sora",
-    fontSize: 9,
-    fill: "#1c1915",
-    align: "left",
-  },
-  {
-    type: "text",
-    role: "bajada",
-    x: 10,
-    y: 68,
-    width: 85,
-    height: 14,
-    rotation: 0,
-    text: "Un mensaje corto y un código fácil de encontrar.",
-    font: "source",
-    fontSize: 4.2,
-    fill: "#e7f3ef",
-    align: "left",
-  },
-  {
-    type: "text",
-    role: "ayuda",
-    x: 10,
-    y: 84,
-    width: 85,
-    height: 10,
-    rotation: 0,
-    text: "tu-sitio.example",
-    font: "source",
-    fontSize: 3.5,
-    fill: "#d7efe8",
-    align: "left",
-  },
-  {
-    type: "qr",
-    role: "qr",
-    x: 27.5,
-    y: 96,
-    width: 50,
-    height: 50,
-    rotation: 0,
-    value: "",
-    foreground: QR_INK,
-    background: QR_PAPER,
-  },
+  text("rubro", [10, 6, 85, 5], "TU NEGOCIO", "source-bold", 3.4),
+  rect("mancha", [9, 16, 84, 40], { radius: 4, rotation: -4 }),
+  text("titulo", [15, 22, 72, 24], "Te esperamos en el evento", "sora-bold", 9.4, "left", { rotation: -4 }),
+  text("bajada", [10, 64, 85, 11.5], "Fecha, lugar y entradas en un escaneo.", "source", 4.4),
+  rect("sombra", [12.5, 84.5, 54, 54], { radius: 3, even: true }),
+  rect("placa", [10, 82, 54, 54], { radius: 3, even: true }),
+  qr(13, 85, 48),
+  text("cta", [70, 85, 27, 20], "Escaneá y sumate", "sora-bold", 5.2),
+  text("ayuda", [70, 108, 27, 26], "Abrí la cámara y apuntá al código.", "source", 3.4),
+  rect("punto-a", [70, 138, 4, 4], { radius: 2, even: true }),
+  rect("punto-b", [77, 138, 4, 4], { radius: 2, even: true }),
+  rect("punto-c", [84, 138, 4, 4], { radius: 2, even: true }),
 ];
+
+function painted(templateId: TemplateId, frames: Frame[]): { background: string; frames: Frame[] } {
+  const palette = templatePalettes[templateId];
+  return {
+    background: palette.background,
+    frames: frames.map((frame) => {
+      const fill = palette.fills[frame.role];
+      return frame.type === "qr" || !fill ? frame : { ...frame, fill };
+    }),
+  };
+}
 
 const templates: Record<TemplateId, { background: string; frames: Frame[] }> = {
-  clasico: { background: templatePalettes.clasico.background, frames: clasico },
-  vivo: { background: templatePalettes.vivo.background, frames: vivo },
-  nocturno: { background: templatePalettes.nocturno.background, frames: nocturno },
-  negocio: { background: templatePalettes.negocio.background, frames: negocio },
-  corporativo: { background: templatePalettes.corporativo.background, frames: corporativo },
-  creativo: { background: templatePalettes.creativo.background, frames: creativo },
+  clasico: painted("clasico", clasico),
+  vivo: painted("vivo", vivo),
+  nocturno: painted("nocturno", nocturno),
+  negocio: painted("negocio", negocio),
+  corporativo: painted("corporativo", corporativo),
+  creativo: painted("creativo", creativo),
 };
 
 /**
@@ -540,58 +294,103 @@ const templates: Record<TemplateId, { background: string; frames: Frame[] }> = {
  * frames above, so texts, colors and palettes carry over between formats.
  * `size` is the type size for texts and the corner radius for rectangles.
  */
-type Placement = { x: number; y: number; width: number; height: number; size?: number; align?: TextAlign };
+type Placement = {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  size?: number;
+  align?: TextAlign;
+  rotation?: number;
+};
 type ShapeLayout = Record<TemplateId, Record<string, Placement>>;
+
+function at(
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  size?: number,
+  extra: { align?: TextAlign; rotation?: number } = {},
+): Placement {
+  return { x, y, width, height, size, ...extra };
+}
 
 /** Square pieces (labels, posts), drawn on a 100 × 100 mm base. */
 const SQUARE_BASE: Sheet = { widthMm: 100, heightMm: 100 };
 const squareLayouts: ShapeLayout = {
   clasico: {
-    rubro: { x: 8, y: 6, width: 84, height: 7, size: 4.6 },
-    titulo: { x: 8, y: 14, width: 84, height: 17.5, size: 6.5 },
-    acento: { x: 38, y: 33.5, width: 24, height: 1.6, size: 0.8 },
-    marco: { x: 27, y: 38, width: 46, height: 46 },
-    qr: { x: 30, y: 41, width: 40, height: 40 },
-    ayuda: { x: 8, y: 87.5, width: 84, height: 10, size: 3.6 },
+    "linea-sup": at(4, 4, 92, 0.5),
+    "linea-inf": at(4, 95.5, 92, 0.5),
+    "linea-izq": at(4, 4, 0.5, 92),
+    "linea-der": at(95.5, 4, 0.5, 92),
+    rubro: at(10, 9, 80, 5, 3.4),
+    titulo: at(10, 15, 80, 17.5, 6.8),
+    "regla-izq": at(33, 34.5, 13, 0.5),
+    rombo: at(48.6, 33.35, 2.8, 2.8),
+    "regla-der": at(54, 34.5, 13, 0.5),
+    marco: at(30, 38, 40, 40),
+    qr: at(31.5, 39.5, 37, 37),
+    cta: at(10, 80, 80, 4.5, 3),
+    ayuda: at(10, 85, 80, 5, 3),
   },
   vivo: {
-    riel: { x: 0, y: 0, width: 14, height: 100 },
-    banda: { x: 14, y: 0, width: 86, height: 34 },
-    titulo: { x: 19, y: 6.5, width: 75, height: 21, size: 7.5 },
-    placa: { x: 9, y: 39, width: 84, height: 43, size: 2 },
-    qr: { x: 31, y: 40.5, width: 40, height: 40 },
-    ayuda: { x: 19, y: 86, width: 75, height: 10, size: 3.8 },
+    banda: at(0, 0, 100, 44),
+    circulo: at(81, 4, 13, 13, 6.5),
+    punto: at(73, 5.5, 4.5, 4.5, 2.25),
+    rubro: at(8, 6.5, 60, 9, 3.4),
+    titulo: at(8, 17.5, 84, 19.5, 7.6),
+    placa: at(29, 38, 42, 42, 4),
+    qr: at(31.5, 40.5, 37, 37),
+    pildora: at(26, 83, 48, 8, 4),
+    cta: at(29, 84.9, 42, 4.3, 3.4),
+    ayuda: at(8, 92.5, 84, 5, 3),
   },
   nocturno: {
-    franja: { x: 0, y: 0, width: 100, height: 3.5 },
-    rubro: { x: 8, y: 8, width: 84, height: 6, size: 3.6 },
-    titulo: { x: 8, y: 15.5, width: 84, height: 19, size: 7 },
-    placa: { x: 28, y: 38.5, width: 44, height: 44, size: 2 },
-    qr: { x: 30, y: 40.5, width: 40, height: 40 },
-    ayuda: { x: 8, y: 87, width: 84, height: 10, size: 3.8 },
+    barra: at(8, 9, 1.4, 24),
+    rubro: at(13, 9, 79, 5, 3.4),
+    titulo: at(13, 15, 79, 18, 7),
+    brillo: at(29, 37, 42, 42, 4.5),
+    placa: at(30.5, 38.5, 39, 39, 3.5),
+    qr: at(31.5, 39.5, 37, 37),
+    cta: at(8, 82, 84, 5.5, 4.2),
+    ayuda: at(8, 89, 84, 8, 3.2),
   },
   negocio: {
-    rubro: { x: 8, y: 6, width: 84, height: 11, size: 8 },
-    banda: { x: 0, y: 20, width: 100, height: 22 },
-    titulo: { x: 6, y: 23, width: 88, height: 8, size: 5 },
-    ayuda: { x: 6, y: 33, width: 88, height: 6, size: 3.6 },
-    qr: { x: 28, y: 48, width: 44, height: 44 },
+    rubro: at(8, 6, 84, 10.5, 8.2),
+    acento: at(8, 18.5, 13, 1.6, 0.8),
+    titulo: at(8, 22.5, 84, 7, 5),
+    sello: at(21.5, 30, 57, 57, 28.5),
+    placa: at(30.5, 39, 39, 39, 2.5),
+    qr: at(31.5, 40, 37, 37),
+    cta: at(8, 88, 84, 4.6, 3.6),
+    ayuda: at(8, 93, 84, 4.5, 3),
   },
   corporativo: {
-    banda: { x: 0, y: 0, width: 100, height: 18 },
-    rubro: { x: 8, y: 6, width: 84, height: 7, size: 3.8 },
-    titulo: { x: 8, y: 24, width: 84, height: 20, size: 7.5 },
-    bajada: { x: 8, y: 47, width: 43, height: 21, size: 3.6 },
-    acento: { x: 8, y: 71.5, width: 20, height: 2.4, size: 1 },
-    ayuda: { x: 8, y: 78, width: 43, height: 14, size: 3.4 },
-    qr: { x: 56, y: 50, width: 38, height: 38 },
+    banda: at(0, 0, 100, 15),
+    rubro: at(8, 5.2, 84, 5, 3.6),
+    titulo: at(8, 21, 84, 19, 7.4),
+    acento: at(8, 42.5, 15, 1.4, 0.7),
+    bajada: at(8, 46.5, 84, 8.5, 3.3),
+    panel: at(0, 56, 100, 44),
+    placa: at(54, 58, 40, 40, 2.5),
+    cta: at(8, 62, 42, 11.5, 4.6),
+    ayuda: at(8, 76, 42, 17, 3.3),
+    qr: at(55.5, 59.5, 37, 37),
   },
   creativo: {
-    mancha: { x: 6, y: 6, width: 88, height: 34, size: 4 },
-    titulo: { x: 11, y: 11.5, width: 78, height: 24, size: 7.5 },
-    bajada: { x: 8, y: 45, width: 42, height: 22, size: 3.8 },
-    ayuda: { x: 8, y: 71, width: 42, height: 14, size: 3.4 },
-    qr: { x: 54, y: 46, width: 40, height: 40 },
+    rubro: at(8, 5, 84, 5, 3.4),
+    mancha: at(8, 13, 84, 27, 3.5, { rotation: -3 }),
+    titulo: at(13, 17.5, 74, 18, 7, { rotation: -3 }),
+    bajada: at(8, 45.5, 84, 5, 3.6),
+    sombra: at(11, 56, 41, 41, 2.5),
+    placa: at(8.5, 53.5, 41, 41, 2.5),
+    qr: at(10.5, 55.5, 37, 37),
+    cta: at(56, 56, 36, 13, 5),
+    ayuda: at(56, 71, 36, 17, 3.2),
+    "punto-a": at(56, 91, 3.5, 3.5, 1.75),
+    "punto-b": at(62, 91, 3.5, 3.5, 1.75),
+    "punto-c": at(68, 91, 3.5, 3.5, 1.75),
   },
 };
 
@@ -599,51 +398,77 @@ const squareLayouts: ShapeLayout = {
 const LANDSCAPE_BASE: Sheet = { widthMm: 85, heightMm: 55 };
 const landscapeLayouts: ShapeLayout = {
   clasico: {
-    rubro: { x: 5, y: 6, width: 42, height: 5, size: 3, align: "left" },
-    titulo: { x: 5, y: 13, width: 42, height: 17, size: 4.4, align: "left" },
-    acento: { x: 5, y: 32.5, width: 14, height: 1.2, size: 0.6 },
-    marco: { x: 50.5, y: 11.5, width: 32, height: 32 },
-    qr: { x: 52.5, y: 13.5, width: 28, height: 28 },
-    ayuda: { x: 5, y: 37, width: 42, height: 12, size: 2.6, align: "left" },
+    "linea-sup": at(3, 3, 79, 0.4),
+    "linea-inf": at(3, 51.6, 79, 0.4),
+    "linea-izq": at(3, 3, 0.4, 49),
+    "linea-der": at(81.6, 3, 0.4, 49),
+    rubro: at(7, 7, 37, 6, 2.6, { align: "left" }),
+    titulo: at(7, 14, 37, 17, 4.5, { align: "left" }),
+    "regla-izq": at(7, 33.9, 8, 0.4),
+    rombo: at(16.6, 33, 2.2, 2.2),
+    "regla-der": at(20.4, 33.9, 8, 0.4),
+    marco: at(47.5, 11, 32, 32),
+    qr: at(49, 12.5, 29, 29),
+    cta: at(7, 37.5, 37, 4.2, 2.6, { align: "left" }),
+    ayuda: at(7, 42, 37, 7.5, 2.6, { align: "left" }),
   },
   vivo: {
-    riel: { x: 0, y: 0, width: 6, height: 55 },
-    banda: { x: 6, y: 0, width: 79, height: 19 },
-    titulo: { x: 10, y: 3.5, width: 71, height: 12, size: 4.4 },
-    placa: { x: 48.5, y: 22, width: 32, height: 30, size: 1.2 },
-    qr: { x: 51, y: 23.5, width: 27, height: 27 },
-    ayuda: { x: 10, y: 26, width: 35, height: 22, size: 2.8 },
+    banda: at(0, 0, 46, 55),
+    circulo: at(33.5, 4, 8.5, 8.5, 4.25),
+    punto: at(28.5, 10, 3.4, 3.4, 1.7),
+    rubro: at(5, 5.5, 22.5, 9, 2.6),
+    titulo: at(5, 16, 38, 22.5, 4.5),
+    placa: at(51.5, 5, 29, 29, 2.5),
+    qr: at(53, 6.5, 26, 26),
+    pildora: at(51, 37, 30, 6.5, 3.25),
+    cta: at(52.5, 38.3, 27, 4, 2.8),
+    ayuda: at(49, 45.5, 34, 6.5, 2.4),
   },
   nocturno: {
-    franja: { x: 0, y: 0, width: 85, height: 2.2 },
-    rubro: { x: 5, y: 7, width: 42, height: 5, size: 2.6 },
-    titulo: { x: 5, y: 13.5, width: 42, height: 22.5, size: 4.4 },
-    placa: { x: 50.5, y: 11.5, width: 32, height: 32, size: 1.2 },
-    qr: { x: 52.5, y: 13.5, width: 28, height: 28 },
-    ayuda: { x: 5, y: 40, width: 42, height: 10, size: 2.6, align: "left" },
+    barra: at(5, 8, 1, 24),
+    rubro: at(9, 7.5, 36, 6, 2.6),
+    titulo: at(9, 14, 37, 17, 4.4),
+    brillo: at(49, 10.5, 33, 33, 3),
+    placa: at(50.25, 11.75, 30.5, 30.5, 2.2),
+    qr: at(51.5, 13, 28, 28),
+    cta: at(5, 37.5, 40, 5, 3.1, { align: "left" }),
+    ayuda: at(5, 43.5, 40, 7, 2.5, { align: "left" }),
   },
   negocio: {
-    rubro: { x: 5, y: 5, width: 44, height: 8, size: 5 },
-    banda: { x: 0, y: 17, width: 50, height: 30 },
-    titulo: { x: 5, y: 20.5, width: 41, height: 13, size: 4, align: "left" },
-    ayuda: { x: 5, y: 35.5, width: 41, height: 9, size: 2.6, align: "left" },
-    qr: { x: 53, y: 12.5, width: 30, height: 30 },
+    rubro: at(5, 5, 36, 7.5, 5.2),
+    acento: at(5, 14.5, 10, 1.2, 0.6),
+    titulo: at(5, 18.5, 34, 16, 4),
+    sello: at(40.5, 3, 43, 43, 21.5),
+    placa: at(48, 10.5, 28, 28, 2),
+    qr: at(49, 11.5, 26, 26),
+    cta: at(40.5, 47, 43, 4.5, 2.9),
+    ayuda: at(5, 40, 34, 10, 2.6, { align: "left" }),
   },
   corporativo: {
-    banda: { x: 0, y: 0, width: 85, height: 11 },
-    rubro: { x: 5, y: 3.4, width: 75, height: 5, size: 2.8 },
-    titulo: { x: 5, y: 15, width: 45, height: 12, size: 4.6 },
-    bajada: { x: 5, y: 28.5, width: 45, height: 9.5, size: 2.4 },
-    acento: { x: 5, y: 40.5, width: 12, height: 1.4, size: 0.6 },
-    ayuda: { x: 5, y: 44.5, width: 45, height: 7, size: 2.4 },
-    qr: { x: 54.5, y: 18, width: 27, height: 27 },
+    banda: at(0, 0, 85, 9.5),
+    rubro: at(5, 2.6, 75, 4.5, 2.8),
+    titulo: at(5, 13.5, 44, 11.5, 4.5),
+    acento: at(5, 26.5, 10, 1.1, 0.55),
+    bajada: at(5, 29.5, 44, 6.5, 2.5),
+    panel: at(52, 9.5, 33, 45.5),
+    placa: at(54, 12.5, 29, 29, 2),
+    cta: at(54, 44, 29, 4.5, 2.9, { align: "center" }),
+    ayuda: at(5, 39.5, 44, 10, 2.5),
+    qr: at(55.5, 14, 26, 26),
   },
   creativo: {
-    mancha: { x: 4, y: 4, width: 46, height: 27, size: 2.5 },
-    titulo: { x: 7, y: 7.5, width: 40, height: 20, size: 4.6 },
-    bajada: { x: 5, y: 34, width: 45, height: 10, size: 2.5 },
-    ayuda: { x: 5, y: 45.5, width: 45, height: 6.5, size: 2.3 },
-    qr: { x: 54, y: 13.5, width: 28, height: 28 },
+    rubro: at(5, 3, 46, 5.5, 2.6),
+    mancha: at(4.5, 10, 42, 23, 2.5, { rotation: -4 }),
+    titulo: at(8, 13.5, 35, 16, 4.2, { rotation: -4 }),
+    bajada: at(5, 37, 42, 6.5, 2.5),
+    sombra: at(54, 8.5, 29, 29, 2),
+    placa: at(52.5, 7, 29, 29, 2),
+    qr: at(54, 8.5, 26, 26),
+    cta: at(5, 44.5, 30, 4.5, 3.2),
+    ayuda: at(50, 40, 31, 9.5, 2.4),
+    "punto-a": at(37, 45.5, 2.5, 2.5, 1.25),
+    "punto-b": at(40.5, 45.5, 2.5, 2.5, 1.25),
+    "punto-c": at(44, 45.5, 2.5, 2.5, 1.25),
   },
 };
 
@@ -653,10 +478,11 @@ function shapeFrames(templateId: TemplateId, layout: ShapeLayout): Frame[] {
     const spot = placements[frame.role];
     if (!spot) return [];
     const box = { x: spot.x, y: spot.y, width: spot.width, height: spot.height };
+    const rotation = spot.rotation ?? frame.rotation;
     if (frame.type === "text") {
-      return [{ ...frame, ...box, fontSize: spot.size ?? frame.fontSize, align: spot.align ?? frame.align }];
+      return [{ ...frame, ...box, rotation, fontSize: spot.size ?? frame.fontSize, align: spot.align ?? frame.align }];
     }
-    if (frame.type === "rect") return [{ ...frame, ...box, cornerRadius: spot.size ?? 0 }];
+    if (frame.type === "rect") return [{ ...frame, ...box, rotation, cornerRadius: spot.size ?? 0 }];
     return [{ ...frame, ...box }];
   });
 }
@@ -667,7 +493,19 @@ function fitFrames(frames: Frame[], base: Sheet, sheet: Sheet): Frame[] {
   const sy = sheet.heightMm / base.heightMm;
   if (sx === 1 && sy === 1) return frames;
   const scale = Math.min(sx, sy);
-  return frames.map((frame): Frame => {
+  const fitted = frames.map((frame): Frame => {
+    if (frame.type === "rect" && frame.even) {
+      const width = mm(Math.max(RECT_MIN_MM, frame.width * scale));
+      const height = mm(Math.max(RECT_MIN_MM, frame.height * scale));
+      return {
+        ...frame,
+        x: mm((frame.x + frame.width / 2) * sx - width / 2),
+        y: mm((frame.y + frame.height / 2) * sy - height / 2),
+        width,
+        height,
+        cornerRadius: mm(frame.cornerRadius * scale),
+      };
+    }
     if (frame.type === "qr") {
       const size = mm(clamp(frame.width * scale, QR_MIN_MM, qrMaxMm(sheet)));
       return {
@@ -682,12 +520,42 @@ function fitFrames(frames: Frame[], base: Sheet, sheet: Sheet): Frame[] {
     const box = {
       x: mm(frame.x * sx),
       y: mm(frame.y * sy),
-      width: mm(Math.max(frame.type === "text" ? 8 : 1, frame.width * sx)),
-      height: mm(Math.max(frame.type === "text" ? 4 : 1, frame.height * sy)),
+      width: mm(Math.max(frame.type === "text" ? 8 : RECT_MIN_MM, frame.width * sx)),
+      height: mm(Math.max(frame.type === "text" ? 4 : RECT_MIN_MM, frame.height * sy)),
     };
     if (frame.type === "text") return { ...frame, ...box, fontSize: mm(Math.max(2, frame.fontSize * scale)) };
     return { ...frame, ...box, cornerRadius: mm(frame.cornerRadius * scale) };
   });
+  return fitted.map((frame) => {
+    if (frame.type !== "text" || !frame.centerIn) return frame;
+    const host = fitted.find((item) => item.type === "rect" && item.role === frame.centerIn);
+    return host ? { ...frame, ...centeredLine(frame.fontSize, host) } : frame;
+  });
+}
+
+/** Box of one line of text vertically centered on a shape (the type sits a little high in its line). */
+function centeredLine(fontSize: number, host: { y: number; height: number }): { y: number; height: number } {
+  const line = fontSize * 1.25;
+  return { y: mm(host.y + (host.height - line) / 2 + fontSize * 0.1), height: mm(Math.max(4, line)) };
+}
+
+/**
+ * Puts single-line texts back in the middle of the shape they sit on, after their
+ * size changed. Only texts still on their template shape are touched.
+ */
+export function recenterHostedTexts(document: DesignDocumentV8): DesignDocumentV8 {
+  const frames = templateFrames(document.templateId, document.format);
+  let changed = false;
+  const elements = document.elements.map((element) => {
+    if (element.type !== "text" || !element.role) return element;
+    const frame = frames.find((item) => item.type === "text" && item.role === element.role);
+    if (!frame || frame.type !== "text" || !frame.centerIn) return element;
+    const host = document.elements.find((item) => item.type === "rect" && item.role === frame.centerIn);
+    if (!host) return element;
+    changed = true;
+    return normalizeElement({ ...element, ...centeredLine(element.fontSize, host) }, document.format);
+  });
+  return changed ? { ...document, elements } : document;
 }
 
 /** The composition of a template on a given sheet. A6 gets the original frames untouched. */
@@ -776,7 +644,13 @@ export function changeFormat(document: DesignDocumentV8, formatId: FormatId): De
     const slot = element.role && !taken.has(element.role) ? slotFor(element, oldFrames, newFrames) : null;
     if (slot && element.role) {
       taken.add(element.role);
-      const box = { x: slot.next.x, y: slot.next.y, width: slot.next.width, height: slot.next.height, rotation: 0 };
+      const box = {
+        x: slot.next.x,
+        y: slot.next.y,
+        width: slot.next.width,
+        height: slot.next.height,
+        rotation: slot.next.rotation,
+      };
       if (element.type === "text" && slot.next.type === "text" && slot.previous.type === "text") {
         const wanted = slot.next.fontSize * (element.fontSize / slot.previous.fontSize);
         const fontSize = estimateFittingSize({
@@ -832,7 +706,7 @@ function slotFor(
 ): { previous: Frame; next: Frame } | null {
   const previous = oldFrames.find((frame) => frame.role === element.role && frame.type === element.type);
   const next = newFrames.find((frame) => frame.role === element.role && frame.type === element.type);
-  if (!previous || !next || element.rotation !== 0) return null;
+  if (!previous || !next || Math.abs(element.rotation - previous.rotation) > 0.5) return null;
   const near = (a: number, b: number) => Math.abs(a - b) <= 1;
   const inPlace =
     near(element.x, previous.x) &&

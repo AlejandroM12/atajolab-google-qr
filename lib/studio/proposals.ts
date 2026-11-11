@@ -7,7 +7,6 @@
  * the same proposals, and each one is a normal Studio document the editor can
  * change completely.
  */
-import { contrastRatio, isDarkColor } from "@/lib/color";
 import { measureText } from "@/lib/print/fonts";
 import {
   buildQrContent,
@@ -21,13 +20,9 @@ import { validateForExport } from "@/lib/studio/export/validate";
 import { wrapStudioText } from "@/lib/studio/export/wrap";
 import { formatSpec, type FormatId } from "@/lib/studio/formats";
 import { createId, type IdFactory } from "@/lib/studio/ids";
-import {
-  PROPOSAL_NAME_MAX,
-  styleSpec,
-  type StyleId,
-  type StyleTone,
-} from "@/lib/studio/proposal-options";
-import { createDocument, templateList } from "@/lib/studio/templates";
+import { PROPOSAL_NAME_MAX, styleSpec, type StyleId } from "@/lib/studio/proposal-options";
+import { paintDocument, templateColors } from "@/lib/studio/template-colors";
+import { createDocument, recenterHostedTexts, templateList } from "@/lib/studio/templates";
 import type { DesignDocumentV8, TemplateId, TextElement } from "@/lib/studio/types";
 
 export type ProposalRequest = {
@@ -54,23 +49,30 @@ type Copy = {
   /** Short label used where a business name would go. */
   kicker: string;
   titles: [string, string, string];
-  helps: [string, string];
+  /** The action, short enough for a button. */
+  cta: string;
   /** One supporting sentence. */
   sub: string;
 };
+
+/** Shown where there is no better detail to give (a handle, a network name, a site). */
+const HOW_TO = "Abrí la cámara de tu celular y apuntá al código.";
 
 const TEMPLATE_ORDER: Record<QrContentType, TemplateId[]> = {
   review: ["clasico", "negocio", "nocturno", "vivo", "corporativo", "creativo"],
   maps: ["corporativo", "clasico", "vivo", "negocio", "nocturno", "creativo"],
   url: ["creativo", "corporativo", "vivo", "clasico", "negocio", "nocturno"],
-  social: ["creativo", "vivo", "nocturno", "negocio", "clasico", "corporativo"],
-  whatsapp: ["vivo", "negocio", "creativo", "clasico", "corporativo", "nocturno"],
-  menu: ["clasico", "nocturno", "vivo", "negocio", "creativo", "corporativo"],
+  social: ["vivo", "creativo", "nocturno", "negocio", "clasico", "corporativo"],
+  whatsapp: ["negocio", "vivo", "creativo", "clasico", "corporativo", "nocturno"],
+  menu: ["nocturno", "clasico", "vivo", "negocio", "creativo", "corporativo"],
   event: ["creativo", "nocturno", "vivo", "clasico", "negocio", "corporativo"],
   wifi: ["corporativo", "negocio", "clasico", "vivo", "nocturno", "creativo"],
   vcard: ["corporativo", "clasico", "negocio", "nocturno", "vivo", "creativo"],
   text: ["clasico", "creativo", "corporativo", "vivo", "negocio", "nocturno"],
 };
+
+/** Templates where the name line is a small label, set in capitals. */
+const SMALL_CAPS_NAME = new Set<TemplateId>(["clasico", "vivo", "nocturno", "corporativo", "creativo"]);
 
 function copyFor(content: QrContentInput): Copy {
   switch (content.type) {
@@ -78,14 +80,14 @@ function copyFor(content: QrContentInput): Copy {
       return {
         kicker: "Reseñas",
         titles: ["Tu opinión nos importa", "Dejanos tu reseña", "¿Te gustó? Contalo en Google"],
-        helps: ["Escaneá y dejanos tu reseña en Google", "Escaneá acá, en Google"],
-        sub: "Tu reseña nos ayuda a crecer.",
+        cta: "Escaneá y opiná",
+        sub: "Tu reseña en Google nos ayuda a crecer.",
       };
     case "maps":
       return {
         kicker: "Cómo llegar",
         titles: ["Encontranos en Google Maps", "Te esperamos", "Llegá sin vueltas"],
-        helps: ["Escaneá y abrí la ubicación", "Escaneá para ver el mapa"],
+        cta: "Escaneá y llegá",
         sub: "Abrí el mapa y seguí el camino.",
       };
     case "social": {
@@ -93,7 +95,7 @@ function copyFor(content: QrContentInput): Copy {
       return {
         kicker: content.network === "otra" ? "Redes" : network,
         titles: [`Seguinos en ${network}`, `Estamos en ${network}`, "Sumate a la comunidad"],
-        helps: ["Escaneá y seguinos", "Escaneá para ver el perfil"],
+        cta: "Escaneá y seguinos",
         sub: "Novedades, fotos y promos.",
       };
     }
@@ -101,7 +103,7 @@ function copyFor(content: QrContentInput): Copy {
       return {
         kicker: "WhatsApp",
         titles: ["Escribinos por WhatsApp", "Hablemos por WhatsApp", "Pedidos y consultas"],
-        helps: ["Escaneá y chateá con nosotros", "Escaneá para abrir el chat"],
+        cta: "Escaneá y chateá",
         sub: "Te respondemos por chat.",
       };
     case "menu":
@@ -109,48 +111,48 @@ function copyFor(content: QrContentInput): Copy {
         ? {
             kicker: "Catálogo",
             titles: ["Mirá nuestro catálogo", "Catálogo digital", "Conocé nuestros productos"],
-            helps: ["Escaneá para ver el catálogo", "Escaneá y mirá los productos"],
+            cta: "Escaneá y mirá",
             sub: "Productos y precios al día.",
           }
         : {
             kicker: "Menú",
             titles: ["Mirá nuestra carta", "Menú digital", "Elegí lo que más te guste"],
-            helps: ["Escaneá para ver el menú", "Escaneá y mirá la carta"],
+            cta: "Escaneá y mirá",
             sub: "Carta siempre actualizada.",
           };
     case "event":
       return {
         kicker: "Evento",
         titles: ["Te esperamos", "Sumate al evento", "Reservá tu lugar"],
-        helps: ["Escaneá para ver los detalles", "Escaneá y anotate"],
+        cta: "Escaneá y sumate",
         sub: "Fecha, lugar y entradas.",
       };
     case "wifi":
       return {
         kicker: "Wi-Fi",
         titles: ["Wi-Fi gratis", "Conectate al Wi-Fi", "Wi-Fi para clientes"],
-        helps: ["Escaneá para conectarte", "Escaneá con la cámara y conectate"],
+        cta: "Escaneá y conectate",
         sub: "Sin escribir la contraseña.",
       };
     case "vcard":
       return {
         kicker: "Contacto",
         titles: ["Guardá mi contacto", "Agendame", "Sigamos en contacto"],
-        helps: ["Escaneá para guardar el contacto", "Escaneá y agendame"],
-        sub: "Mis datos, en tu agenda.",
+        cta: "Escaneá y agendame",
+        sub: "Mis datos, directo a tu agenda.",
       };
     case "text":
       return {
         kicker: "Mensaje",
-        titles: ["Escaneá el código", "Tenemos un mensaje para vos", "Leé el mensaje"],
-        helps: ["Escaneá con la cámara de tu celular", "Escaneá para leerlo"],
+        titles: ["Tenemos un mensaje para vos", "Escaneá el código", "Leé el mensaje"],
+        cta: "Escaneá acá",
         sub: "Un mensaje pensado para vos.",
       };
     default:
       return {
         kicker: "Sitio web",
         titles: ["Visitá nuestro sitio", "Conocé más", "Todo en un escaneo"],
-        helps: ["Escaneá el código con tu cámara", "Escaneá para entrar"],
+        cta: "Escaneá y entrá",
         sub: "Toda la información en un lugar.",
       };
   }
@@ -166,105 +168,33 @@ function textsFor(
 ): Record<string, string> {
   const copy = copyFor(content);
   let title = copy.titles[index % copy.titles.length]!;
-  let kicker = name || copy.kicker;
-  const help = copy.helps[index % copy.helps.length]!;
+  let label = name || copy.kicker;
 
   if (content.type === "vcard") {
     // A contact card is about the person: their name is the headline.
     const person = content.name.replace(/\s+/g, " ").trim();
     const org = content.org.replace(/\s+/g, " ").trim();
-    kicker = org || copy.kicker;
+    label = org || copy.kicker;
     if (index % 2 === 0) title = person;
-    else if (!org) kicker = person;
+    else if (!org) label = person;
   }
 
-  if (templateId === "vivo") {
-    return { titulo: title, ayuda: name ? `${help}\n${name}` : help };
+  const rubro = SMALL_CAPS_NAME.has(templateId) ? label.toLocaleUpperCase("es") : label;
+  const cta = templateId === "clasico" ? copy.cta.toLocaleUpperCase("es") : copy.cta;
+
+  if (templateId === "corporativo") {
+    return { rubro, titulo: title, bajada: detail ? `${copy.sub}\n${detail}` : copy.sub, cta, ayuda: HOW_TO };
   }
   if (templateId === "creativo") {
-    return { titulo: title, bajada: help, ayuda: name || detail || copy.sub };
+    return { rubro, titulo: title, bajada: copy.sub, cta, ayuda: detail || HOW_TO };
   }
-  if (templateId === "corporativo") {
-    return { rubro: kicker, titulo: title, bajada: detail && detail !== kicker ? `${copy.sub}\n${detail}` : copy.sub, ayuda: help };
-  }
-  return { rubro: kicker, titulo: title, ayuda: help };
-}
-
-const WHITE = "#ffffff";
-const INK = "#1c1915";
-const SOFT_PAPER = "#f4f0e6";
-
-function on(background: string): string {
-  return contrastRatio(WHITE, background) >= contrastRatio(INK, background) ? WHITE : INK;
-}
-
-/** Background and role colors of a template painted with a style tone. */
-export function proposalColors(
-  templateId: TemplateId,
-  tone: StyleTone,
-): { background: string; fills: Record<string, string> } {
-  const darkPaper = isDarkColor(tone.paper);
-  // A band needs to stand out from the paper; fall back to the accent when it does not.
-  const band = contrastRatio(tone.primary, tone.paper) >= 1.6 ? tone.primary : tone.accent;
-
-  if (templateId === "clasico") {
-    return {
-      background: tone.paper,
-      fills: { rubro: tone.ink, titulo: tone.ink, ayuda: tone.ink, marco: tone.ink, acento: tone.accent },
-    };
-  }
-  if (templateId === "vivo") {
-    return {
-      background: tone.paper,
-      fills: { riel: tone.primary, banda: tone.accent, titulo: on(tone.accent), placa: WHITE, ayuda: tone.ink },
-    };
-  }
-  if (templateId === "nocturno") {
-    const background = darkPaper ? tone.paper : tone.primary;
-    const text = on(background);
-    return { background, fills: { franja: tone.accent, rubro: text, titulo: text, placa: WHITE, ayuda: text } };
-  }
-  if (templateId === "negocio") {
-    return {
-      background: tone.paper,
-      fills: { rubro: tone.ink, banda: band, titulo: on(band), ayuda: on(band) },
-    };
-  }
-  if (templateId === "corporativo") {
-    return {
-      background: tone.paper,
-      fills: {
-        banda: band,
-        rubro: on(band),
-        titulo: tone.ink,
-        bajada: tone.ink,
-        ayuda: tone.ink,
-        acento: tone.accent,
-      },
-    };
-  }
-  const background = darkPaper ? tone.paper : tone.primary;
-  const blob = contrastRatio(tone.accent, background) >= 2.2 ? tone.accent : SOFT_PAPER;
-  const text = on(background);
-  return { background, fills: { mancha: blob, titulo: on(blob), bajada: text, ayuda: text, acento: tone.accent } };
-}
-
-function paint(document: DesignDocumentV8, colors: { background: string; fills: Record<string, string> }): DesignDocumentV8 {
-  return {
-    ...document,
-    background: colors.background,
-    elements: document.elements.map((element) => {
-      const fill = element.role ? colors.fills[element.role] : undefined;
-      if (!fill || element.type === "qr" || element.type === "image") return element;
-      return { ...element, fill };
-    }),
-  };
+  return { rubro, titulo: title, cta, ayuda: detail || copy.sub };
 }
 
 /** Share of the box width a line may use, so browser metrics never add a line the export did not. */
 const FIT_WIDTH = 0.96;
 /** Smallest size relative to the template's own, before a proposal is dropped as unreadable. */
-const FIT_FLOOR = 0.55;
+const FIT_FLOOR = 0.5;
 
 /** Largest size at which the text fits its box with the real font. Null when it cannot fit. */
 export function fittedFontSize(element: TextElement): number | null {
@@ -294,7 +224,7 @@ function buildOne(input: {
   let document = createDocument(templateId, input.idFor, request.formatId);
   const texts = textsFor(templateId, request.content, input.name, input.detail, index);
   const style = styleSpec(request.styleId);
-  document = paint(document, proposalColors(templateId, style.tones[index % style.tones.length]!));
+  document = paintDocument(document, templateColors(templateId, style.tones[index % style.tones.length]!));
 
   for (const element of document.elements) {
     if (element.type === "qr") {
@@ -308,6 +238,8 @@ function buildOne(input: {
     if (fontSize === null) return null;
     document = updateElement(document, element.id, { text, fontSize });
   }
+  // Button labels may have shrunk: keep them in the middle of their button.
+  document = recenterHostedTexts(document);
 
   return validateForExport(document, { commercial: true }).ready ? document : null;
 }

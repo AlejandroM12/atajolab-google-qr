@@ -2,13 +2,15 @@ import { isDarkColor, isHexColor } from "@/lib/color";
 import { clamp, mm, normalizeRotation } from "@/lib/studio/geometry";
 import { imageSrcIssue } from "@/lib/studio/images";
 import { clampQrGeometry, qrContrastIssue } from "@/lib/studio/qr-rules";
-import { A6_SHEET, fontMaxMm, type Sheet } from "@/lib/studio/formats";
+import { A6_SHEET, cornerMaxMm, fontMaxMm, type Sheet } from "@/lib/studio/formats";
 import {
   MAX_ALT,
   MAX_ELEMENTS,
   MAX_PARKED,
   MAX_QR_VALUE,
   MAX_TEXT,
+  RECT_MIN_MM,
+  studioFontList,
   type DesignDocumentV8,
   type ElementBox,
   type ElementPatch,
@@ -21,7 +23,7 @@ import {
   type TextElement,
 } from "@/lib/studio/types";
 
-const FONTS = new Set<StudioFont>(["source", "sora", "fraunces"]);
+const FONTS = new Set<StudioFont>(studioFontList.map((font) => font.id));
 const ALIGNS = new Set<TextAlign>(["left", "center", "right"]);
 
 export function elementBox(element: StudioElement): ElementBox {
@@ -235,7 +237,7 @@ export function normalizeElement<T extends StudioElement>(element: T, sheet: She
     return clampBox(text, sheet) as T;
   }
   if (element.type === "rect") {
-    const rect = normalizeRect(element);
+    const rect = normalizeRect(element, sheet);
     return clampBox(rect, sheet) as T;
   }
   if (element.type === "image") {
@@ -306,11 +308,11 @@ function normalizeText(element: TextElement, sheet: Sheet): TextElement {
   };
 }
 
-function normalizeRect(element: RectElement): RectElement {
+function normalizeRect(element: RectElement, sheet: Sheet): RectElement {
   return {
     ...element,
     fill: isHexColor(element.fill) ? element.fill.toLowerCase() : "#0f6e62",
-    cornerRadius: mm(clamp(element.cornerRadius, 0, 20)),
+    cornerRadius: mm(clamp(element.cornerRadius, 0, cornerMaxMm(sheet))),
   };
 }
 
@@ -332,16 +334,16 @@ function normalizeQr(element: QrElement): QrElement {
 
 function clampBox<T extends TextElement | RectElement | ImageElement>(element: T, sheet: Sheet): T {
   // Thin rules and stripes are legitimate rectangles on small sheets.
-  const minWidth = element.type === "text" ? 8 : element.type === "rect" ? 1 : 4;
-  const minHeight = element.type === "rect" ? 1 : 4;
+  const minWidth = element.type === "text" ? 8 : element.type === "rect" ? RECT_MIN_MM : 4;
+  const minHeight = element.type === "rect" ? RECT_MIN_MM : 4;
   const width = mm(clamp(finite(element.width, minWidth), minWidth, sheet.widthMm));
   const height = mm(clamp(finite(element.height, minHeight), minHeight, sheet.heightMm));
   return {
     ...element,
     width,
     height,
-    x: mm(clamp(finite(element.x, 0), Math.min(0, -width + 4), sheet.widthMm - 4)),
-    y: mm(clamp(finite(element.y, 0), Math.min(0, -height + 4), sheet.heightMm - 4)),
+    x: mm(clamp(finite(element.x, 0), Math.min(0, -width + 4), sheet.widthMm - Math.min(4, width))),
+    y: mm(clamp(finite(element.y, 0), Math.min(0, -height + 4), sheet.heightMm - Math.min(4, height))),
     rotation: normalizeRotation(element.rotation),
   };
 }

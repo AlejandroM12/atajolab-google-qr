@@ -2,47 +2,41 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import QRCode from "qrcode";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { QrContentFields, type QrFieldError } from "@/components/guided/qr-content-fields";
 import { trackEvent } from "@/lib/analytics";
 import {
   buildQrContent,
+  describeQrPayload,
   emptyQrContent,
   qrContentTypes,
-  readQrContentInput,
   type QrContentInput,
   type QrContentType,
 } from "@/lib/qr-content";
-import { DEFAULT_FORMAT_ID, formatList, formatSpec, isFormatId, type FormatId } from "@/lib/studio/formats";
-import { readDesign, writeDesign } from "@/lib/studio/persistence";
+import { formatList, formatSpec, type FormatId, type FormatSpec } from "@/lib/studio/formats";
+import {
+  GUIDED_STEPS,
+  GUIDED_STORAGE_KEY,
+  handoffProposal,
+  reachableStep,
+  readGuidedState,
+  selectedProposal,
+  serializeGuidedState,
+  type GuidedState,
+  type GuidedStep,
+} from "@/lib/studio/guided";
 import {
   PROPOSAL_NAME_MAX,
-  isStyleId,
   recommendedStyle,
   styleList,
   styleSpec,
   type StyleId,
   type StyleSpec,
+  type StyleTone,
 } from "@/lib/studio/proposal-options";
-import { parseDesign } from "@/lib/studio/serialize";
-import type { DesignDocumentV8 } from "@/lib/studio/types";
 
-const STORAGE_KEY = "atajolab.guiado.v1";
-const STEPS = ["Contenido", "Datos", "Estilo", "Formato", "Propuestas"] as const;
-
-type Step = 0 | 1 | 2 | 3 | 4;
-
-type FlowState = {
-  step: Step;
-  content: QrContentInput | null;
-  name: string;
-  styleId: StyleId;
-  /** True once the user picked a style, so a new content type stops changing it. */
-  stylePicked: boolean;
-  formatId: FormatId;
-};
-
-type ProposalCard = { id: string; name: string; preview: string; document: DesignDocumentV8 };
+type ProposalCard = { id: string; name: string; preview: string; document: unknown };
 
 /** The answer for one request key. Anything with another key is stale and counts as loading. */
 type ProposalsState =
@@ -50,10 +44,29 @@ type ProposalsState =
   | { status: "ready"; key: string; proposals: ProposalCard[] }
   | { status: "error"; key: string; message: string };
 
+type StylePreviews = { key: string; previews: Partial<Record<StyleId, string>> };
+
 const primaryButton =
-  "inline-flex h-12 items-center justify-center rounded-full bg-accent px-6 text-sm font-semibold text-white transition-colors hover:bg-accent-strong disabled:cursor-not-allowed disabled:opacity-50";
-const tileClass =
-  "flex h-full w-full flex-col items-start rounded-3xl border bg-card p-4 text-left transition-colors hover:border-accent";
+  "inline-flex h-14 items-center justify-center rounded-full bg-accent px-7 text-base font-semibold text-white shadow-[0_8px_20px_rgba(15,110,98,0.28)] transition-colors hover:bg-accent-strong disabled:cursor-not-allowed disabled:bg-accent/50 disabled:shadow-none";
+const backButton =
+  "inline-flex h-14 shrink-0 items-center justify-center rounded-full border border-line bg-card px-5 text-base font-semibold text-foreground transition-colors hover:border-accent";
+const cardBase =
+  "relative flex h-full w-full flex-col rounded-3xl border-2 bg-card text-left transition-[border-color,box-shadow,transform] duration-150 active:scale-[0.98]";
+const cardIdle = "border-line hover:border-accent/60";
+const cardSelected = "border-accent shadow-[0_10px_24px_rgba(15,110,98,0.16)]";
+
+const TYPE_EXAMPLES: Record<QrContentType, string> = {
+  url: "tusitio.com",
+  social: "@tunegocio",
+  whatsapp: "Chat con mensaje listo",
+  review: "Que opinen de vos",
+  maps: "Cómo llegar",
+  menu: "Tu carta, siempre al día",
+  event: "Invitación o entradas",
+  wifi: "Conectarse sin clave",
+  vcard: "Guardar tu contacto",
+  text: "Un mensaje corto",
+};
 
 const DATA_TITLES: Record<QrContentType, string> = {
   url: "¿A dónde lleva el código?",
@@ -70,17 +83,19 @@ const DATA_TITLES: Record<QrContentType, string> = {
 
 export function GuidedFlow({ priceNote }: { priceNote: string | null }) {
   const router = useRouter();
-  const [state, setState] = useState<FlowState>(loadState);
+  const [state, setState] = useState<GuidedState>(loadState);
   const [error, setError] = useState<QrFieldError>(null);
   const [proposals, setProposals] = useState<ProposalsState>({ status: "idle" });
+  const [stylePreviews, setStylePreviews] = useState<StylePreviews>({ key: "", previews: {} });
   const [attempt, setAttempt] = useState(0);
+  const [opening, setOpening] = useState(false);
   const headingRef = useRef<HTMLHeadingElement>(null);
   const firstRender = useRef(true);
   const request = useRef(0);
 
   useEffect(() => {
     try {
-      window.sessionStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+      window.sessionStorage.setItem(GUIDED_STORAGE_KEY, serializeGuidedState(state));
     } catch {
       /* The flow still works without storage; it just does not survive a reload. */
     }
@@ -91,14 +106,34 @@ export function GuidedFlow({ priceNote }: { priceNote: string | null }) {
       firstRender.current = false;
       return;
     }
-    headingRef.current?.focus();
+    headingRef.current?.focus({ preventScroll: true });
     window.scrollTo({ top: 0 });
   }, [state.step]);
 
-  const proposalsKey = state.content
-    ? JSON.stringify([state.content, state.name, state.styleId, state.formatId, attempt])
-    : "";
+  const built = state.content ? buildQrContent(state.content) : null;
+  const contentKey = state.content ? JSON.stringify([state.content, state.name]) : "";
+  const proposalsKey = state.content ? JSON.stringify([contentKey, state.styleId, state.formatId, attempt]) : "";
   const answered = proposals.status !== "idle" && proposals.key === proposalsKey;
+
+  // Samples of each style with the user's own content, for the style step.
+  useEffect(() => {
+    if (state.step !== 2 || !state.content || stylePreviews.key === contentKey) return;
+    const controller = new AbortController();
+    void postProposals(
+      { content: state.content, name: state.name, styleId: state.styleId, formatId: state.formatId, preview: "styles" },
+      controller.signal,
+    ).then((result) => {
+      if (!result.ok || !Array.isArray(result.payload.styles)) return;
+      const previews: Partial<Record<StyleId, string>> = {};
+      for (const item of result.payload.styles as { styleId?: StyleId; preview?: unknown }[]) {
+        if (item.styleId && isPreview(item.preview)) previews[item.styleId] = item.preview;
+      }
+      setStylePreviews({ key: contentKey, previews });
+    });
+    return () => controller.abort();
+    // contentKey covers the content and the name.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state.step, contentKey, stylePreviews.key]);
 
   useEffect(() => {
     if (state.step !== 4 || !state.content || answered) return;
@@ -126,373 +161,430 @@ export function GuidedFlow({ priceNote }: { priceNote: string | null }) {
   }, [state.step, proposalsKey, answered]);
 
   const loading = state.step === 4 && !answered;
-  const failure = (message: string) => setProposals({ status: "error", key: proposalsKey, message });
+  const ready = !loading && proposals.status === "ready" ? proposals.proposals : [];
+  const selected = selectedProposal(ready, state.proposalId);
+  const type = state.content?.type ?? null;
+  const reached = reachableStep(state);
 
-  function go(step: Step) {
+  function go(step: GuidedStep) {
     setError(null);
     setState((value) => ({ ...value, step }));
   }
 
-  function pickType(type: QrContentType) {
+  function pickType(next: QrContentType) {
     setError(null);
     setState((value) => ({
       ...value,
       step: 1,
-      content: value.content?.type === type ? value.content : emptyQrContent(type),
-      styleId: value.stylePicked ? value.styleId : recommendedStyle(type),
+      content: value.content?.type === next ? value.content : emptyQrContent(next),
+      styleId: value.stylePicked ? value.styleId : recommendedStyle(next),
     }));
   }
 
   function submitData() {
     if (!state.content) return;
-    const built = buildQrContent(state.content);
-    if (!built.ok) {
-      setError({ field: built.field, message: built.message });
+    const result = buildQrContent(state.content);
+    if (!result.ok) {
+      setError({ field: result.field, message: result.message });
       return;
     }
     go(2);
   }
 
-  function retry() {
-    setAttempt((value) => value + 1);
-  }
-
-  function customize(card: ProposalCard) {
-    const parsed = parseDesign(JSON.stringify(card.document));
-    if (!parsed) {
-      failure("No pudimos abrir esa propuesta. Probá de nuevo.");
-      return;
-    }
-    const existing = readDesign(window.sessionStorage);
-    if (existing && !sameQr(existing.document, parsed.document)) {
-      const ok = window.confirm("Ya tenés un diseño en el editor. Esta propuesta lo reemplaza. ¿Querés continuar?");
-      if (!ok) return;
-    }
-    const saved = writeDesign(window.sessionStorage, parsed.document);
+  function openDesign() {
+    if (!selected || opening) return;
+    const saved = handoffProposal(window.sessionStorage, selected.document);
     if (!saved.ok) {
-      failure("Tu navegador no nos deja guardar el diseño. Revisá que no estés en modo privado y probá de nuevo.");
+      setProposals({
+        status: "error",
+        key: proposalsKey,
+        message:
+          saved.reason === "storage"
+            ? "Tu navegador no nos deja guardar el diseño. Salí del modo privado y probá de nuevo."
+            : "No pudimos abrir ese diseño. Probá de nuevo.",
+      });
       return;
     }
+    setOpening(true);
     trackEvent("guided_proposal_picked", {
-      content: state.content?.type ?? "",
+      content: type ?? "",
       format: state.formatId,
       style: state.styleId,
-      design: card.id.split("-").pop() ?? "",
+      design: selected.id.split("-").pop() ?? "",
     });
     router.push("/crear?origen=guiado");
   }
 
-  const type = state.content?.type ?? null;
-  const reached = state.content ? (buildQrContent(state.content).ok ? 4 : 1) : 0;
+  let primary: { label: string; onClick?: () => void; submit?: boolean; disabled?: boolean } | null = null;
+  if (state.step === 0) primary = state.content ? { label: "Continuar", onClick: () => go(1) } : null;
+  else if (state.step === 1) primary = { label: "Continuar", submit: true };
+  else if (state.step === 2) primary = { label: "Continuar", onClick: () => go(3) };
+  else if (state.step === 3) primary = { label: "Ver mis diseños", onClick: () => go(4) };
+  else {
+    primary = {
+      label: opening ? "Abriendo el editor…" : "Usar este diseño",
+      onClick: openDesign,
+      disabled: !selected || opening,
+    };
+  }
 
   return (
-    <div className="mx-auto w-full max-w-5xl px-4 py-8 sm:py-12">
-      <nav aria-label="Pasos" className="mb-8">
-        <ol className="flex items-center gap-1.5 sm:gap-2">
-          {STEPS.map((label, index) => {
-            const current = index === state.step;
+    <div className="mx-auto w-full max-w-5xl px-4 pb-36 pt-6 sm:pt-10 lg:pb-16">
+      <nav aria-label="Pasos" className="mb-7 sm:mb-10">
+        <ol className="flex items-center gap-1.5">
+          {GUIDED_STEPS.map((label, index) => {
             const available = index <= reached && index !== state.step;
             return (
               <li key={label} className="min-w-0 flex-1">
                 <button
                   type="button"
                   disabled={!available}
-                  aria-current={current ? "step" : undefined}
-                  onClick={() => go(index as Step)}
-                  className="group block w-full text-left disabled:cursor-default"
+                  aria-current={index === state.step ? "step" : undefined}
+                  aria-label={`Paso ${index + 1}: ${label}`}
+                  onClick={() => go(index as GuidedStep)}
+                  className="group block w-full py-2 disabled:cursor-default"
                 >
                   <span
-                    className={`block h-1.5 rounded-full transition-colors ${
+                    className={`block h-1.5 rounded-full transition-colors duration-300 ${
                       index <= state.step ? "bg-accent" : "bg-line"
                     } ${available ? "group-hover:bg-accent-strong" : ""}`}
                   />
-                  <span
-                    className={`mt-2 block truncate text-xs font-semibold max-sm:sr-only ${
-                      current ? "text-foreground" : "text-muted"
-                    }`}
-                  >
-                    {index + 1}. {label}
-                  </span>
                 </button>
               </li>
             );
           })}
         </ol>
-        <p className="mt-2 text-xs font-semibold text-muted sm:hidden" aria-hidden="true">
-          Paso {state.step + 1} de {STEPS.length} · <span className="text-foreground">{STEPS[state.step]}</span>
+        <p className="mt-1 text-xs font-semibold text-muted" aria-hidden="true">
+          Paso {state.step + 1} de {GUIDED_STEPS.length} · <span className="text-foreground">{GUIDED_STEPS[state.step]}</span>
         </p>
       </nav>
 
-      {state.step === 0 ? (
-        <section aria-labelledby="paso-titulo">
-          <StepHeading ref={headingRef} title="¿Qué querés compartir?">
-            Elegí una opción y armamos el código y el diseño por vos.{priceNote ? ` ${priceNote}` : ""}
-          </StepHeading>
-          <ul className="mt-8 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
-            {qrContentTypes.map((item) => (
-              <li key={item.id}>
-                <button
-                  type="button"
-                  className={`${tileClass} ${type === item.id ? "border-accent" : "border-line"}`}
-                  onClick={() => pickType(item.id)}
-                >
-                  <span className="flex size-10 items-center justify-center rounded-2xl bg-ok-bg text-accent-strong">
-                    <TypeIcon type={item.id} />
-                  </span>
-                  <span className="mt-3 text-sm font-semibold leading-snug">{item.name}</span>
-                  <span className="mt-1 text-xs leading-5 text-muted">{item.hint}</span>
-                </button>
-              </li>
-            ))}
-          </ul>
-          <p className="mt-8 text-sm text-muted">
-            ¿Preferís diseñar desde cero?{" "}
-            <Link href="/crear" className="font-semibold text-accent underline-offset-4 hover:underline">
-              Abrir el editor avanzado
-            </Link>
-          </p>
-        </section>
-      ) : null}
-
-      {state.step === 1 && state.content ? (
-        <section aria-labelledby="paso-titulo" className="mx-auto max-w-xl">
-          <StepHeading ref={headingRef} title={DATA_TITLES[state.content.type]} />
-          <form
-            className="mt-6 flex flex-col gap-5 rounded-3xl border border-line bg-card p-5 sm:p-6"
-            noValidate
-            onSubmit={(event) => {
-              event.preventDefault();
-              submitData();
-            }}
-          >
-            <QrContentFields
-              value={state.content}
-              error={error}
-              onChange={(content) => {
-                setError(null);
-                setState((value) => ({ ...value, content }));
-              }}
-            />
-            {state.content.type !== "vcard" ? (
-              <div className="border-t border-line pt-5">
-                <label htmlFor="guiado-nombre" className="text-sm font-semibold">
-                  {state.content.type === "event" ? "Nombre del evento (opcional)" : "Nombre de tu negocio o marca (opcional)"}
-                </label>
-                <input
-                  id="guiado-nombre"
-                  className="mt-1.5 h-12 w-full rounded-xl border border-line bg-background px-3 text-base"
-                  type="text"
-                  autoComplete="organization"
-                  maxLength={PROPOSAL_NAME_MAX}
-                  value={state.name}
-                  onChange={(event) => setState((value) => ({ ...value, name: event.target.value }))}
-                />
-                <p className="mt-1.5 text-sm text-muted">Aparece en el diseño. Después lo podés cambiar.</p>
-              </div>
-            ) : null}
-            <div className="flex flex-col-reverse gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <BackButton onClick={() => go(0)} />
-              <button type="submit" className={primaryButton}>
-                Continuar
-              </button>
-            </div>
-          </form>
-        </section>
-      ) : null}
-
-      {state.step === 2 ? (
-        <section aria-labelledby="paso-titulo">
-          <StepHeading ref={headingRef} title="Elegí un estilo">
-            Define los colores de las propuestas. En el editor podés cambiar cada color.
-          </StepHeading>
-          <ul className="mt-8 grid grid-cols-2 gap-3 lg:grid-cols-4">
-            {styleList.map((style) => (
-              <li key={style.id}>
-                <button
-                  type="button"
-                  aria-pressed={state.styleId === style.id}
-                  className={`${tileClass} ${state.styleId === style.id ? "border-accent" : "border-line"}`}
-                  onClick={() => setState((value) => ({ ...value, styleId: style.id, stylePicked: true, step: 3 }))}
-                >
-                  <StyleSwatch style={style} />
-                  <span className="mt-3 flex flex-wrap items-center gap-2 text-sm font-semibold">
-                    {style.name}
-                    {type && recommendedStyle(type) === style.id ? (
-                      <span className="rounded-full bg-ok-bg px-2 py-0.5 text-xs font-semibold text-accent-strong">
-                        Sugerido
-                      </span>
-                    ) : null}
-                  </span>
-                  <span className="mt-1 text-xs leading-5 text-muted">{style.description}</span>
-                </button>
-              </li>
-            ))}
-          </ul>
-          <div className="mt-8">
-            <BackButton onClick={() => go(1)} />
-          </div>
-        </section>
-      ) : null}
-
-      {state.step === 3 ? (
-        <section aria-labelledby="paso-titulo">
-          <StepHeading ref={headingRef} title="¿Dónde lo vas a usar?">
-            Cada formato se descarga en PNG, SVG y PDF, en su tamaño real.
-          </StepHeading>
-          <ul className="mt-8 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
-            {formatList.map((format) => (
-              <li key={format.id}>
-                <button
-                  type="button"
-                  aria-pressed={state.formatId === format.id}
-                  className={`${tileClass} ${state.formatId === format.id ? "border-accent" : "border-line"}`}
-                  onClick={() => setState((value) => ({ ...value, formatId: format.id, step: 4 }))}
-                >
-                  <span className="flex h-20 w-full items-center justify-center rounded-2xl bg-background">
-                    <span
-                      aria-hidden="true"
-                      className="block rounded-[3px] border-2 border-accent bg-card"
-                      style={shapeStyle(format.widthMm, format.heightMm)}
-                    />
-                  </span>
-                  <span className="mt-3 text-sm font-semibold leading-snug">{format.use}</span>
-                  <span className="mt-1 text-xs leading-5 text-muted">
-                    {format.name} · {format.size}
-                  </span>
-                </button>
-              </li>
-            ))}
-          </ul>
-          <div className="mt-8">
-            <BackButton onClick={() => go(2)} />
-          </div>
-        </section>
-      ) : null}
-
-      {state.step === 4 ? (
-        <section aria-labelledby="paso-titulo" aria-busy={loading}>
-          <StepHeading ref={headingRef} title="Elegí tu propuesta">
-            Son diseños reales con tu código. Elegí uno y cambiá lo que quieras en el editor.
-          </StepHeading>
-          <div className="mt-5 flex flex-wrap gap-2 text-sm">
-            <SummaryChip label="Estilo" value={styleSpec(state.styleId).name} onClick={() => go(2)} />
-            <SummaryChip label="Formato" value={formatSpec(state.formatId).name} onClick={() => go(3)} />
-          </div>
-
-          {!loading && proposals.status === "error" ? (
-            <div className="mt-8 rounded-3xl border border-danger/30 bg-danger-bg p-5 text-sm text-danger" role="alert">
-              <p className="font-semibold">{proposals.message}</p>
-              <div className="mt-4 flex flex-wrap gap-3">
-                <button type="button" className={primaryButton} onClick={retry}>
-                  Reintentar
-                </button>
-                <button
-                  type="button"
-                  className="inline-flex h-12 items-center rounded-full border border-line bg-card px-5 font-semibold text-foreground hover:border-accent"
-                  onClick={() => go(3)}
-                >
-                  Cambiar formato
-                </button>
-              </div>
-            </div>
-          ) : null}
-
-          {loading ? (
-            <>
-              <p className="sr-only" role="status">
-                Armando las propuestas…
-              </p>
-              <ul className="mt-8 grid grid-cols-2 gap-3 lg:grid-cols-3" aria-hidden="true">
-                {[0, 1, 2, 3, 4, 5].map((index) => (
-                  <li key={index} className="rounded-3xl border border-line bg-card p-3">
-                    <div
-                      className="w-full animate-pulse rounded-lg bg-line/60 motion-reduce:animate-none"
-                      style={{ aspectRatio: aspect(state.formatId) }}
-                    />
-                    <div className="mt-3 h-4 w-24 rounded-full bg-line/60" />
-                  </li>
-                ))}
-              </ul>
-            </>
-          ) : null}
-
-          {!loading && proposals.status === "ready" ? (
-            <ul className="mt-8 grid grid-cols-2 gap-3 lg:grid-cols-3">
-              {proposals.proposals.map((card) => (
-                <li key={card.id}>
+      <div key={state.step} className="guided-step">
+        {state.step === 0 ? (
+          <section aria-labelledby="paso-titulo">
+            <StepHeading ref={headingRef} title="¿Qué querés compartir?">
+              {priceNote ?? "Elegí una opción."}
+            </StepHeading>
+            <ul className="mt-7 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+              {qrContentTypes.map((item) => (
+                <li key={item.id}>
                   <button
                     type="button"
-                    className="group flex h-full w-full flex-col rounded-3xl border border-line bg-card p-3 text-left transition-colors hover:border-accent"
-                    onClick={() => customize(card)}
+                    aria-pressed={type === item.id}
+                    className={`${cardBase} min-h-36 items-start p-4 ${type === item.id ? cardSelected : cardIdle}`}
+                    onClick={() => pickType(item.id)}
                   >
-                    {/* eslint-disable-next-line @next/next/no-img-element -- data: URL drawn by the export engine */}
-                    <img
-                      src={card.preview}
-                      alt={`Propuesta ${card.name}`}
-                      className="block h-auto w-full rounded-lg border border-line/70"
-                      style={{ aspectRatio: aspect(state.formatId) }}
-                    />
-                    <span className="mt-3 flex flex-wrap items-center justify-between gap-2">
-                      <span className="text-sm font-semibold">{card.name}</span>
-                      <span className="text-sm font-semibold text-accent group-hover:text-accent-strong">
-                        Personalizar →
-                      </span>
+                    <span className="flex size-12 items-center justify-center rounded-2xl bg-ok-bg text-accent-strong">
+                      <TypeIcon type={item.id} />
                     </span>
+                    <span className="mt-3 text-base font-semibold leading-snug">{item.name}</span>
+                    <span className="mt-1 text-sm leading-5 text-muted">{TYPE_EXAMPLES[item.id]}</span>
+                    {type === item.id ? <SelectedMark /> : null}
                   </button>
                 </li>
               ))}
             </ul>
-          ) : null}
+            <p className="mt-8 text-sm text-muted">
+              ¿Preferís diseñar desde cero?{" "}
+              <Link href="/crear" className="font-semibold text-accent underline-offset-4 hover:underline">
+                Abrir el editor avanzado
+              </Link>
+            </p>
+          </section>
+        ) : null}
 
-          <div className="mt-8">
-            <BackButton onClick={() => go(3)} />
+        {state.step === 1 && state.content ? (
+          <section aria-labelledby="paso-titulo">
+            <StepHeading ref={headingRef} title={DATA_TITLES[state.content.type]} />
+            <div className="mt-6 grid gap-5 lg:grid-cols-[minmax(0,1fr)_18rem] lg:items-start">
+              <form
+                id="guiado-datos"
+                className="flex flex-col gap-5 rounded-3xl border border-line bg-card p-5 sm:p-6"
+                noValidate
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  submitData();
+                }}
+              >
+                <QrContentFields
+                  value={state.content}
+                  error={error}
+                  onChange={(content) => {
+                    setError(null);
+                    setState((value) => ({ ...value, content }));
+                  }}
+                />
+                {state.content.type !== "vcard" ? (
+                  <div className="border-t border-line pt-5">
+                    <label htmlFor="guiado-nombre" className="text-sm font-semibold">
+                      {state.content.type === "event" ? "Nombre del evento" : "Nombre de tu negocio o marca"}{" "}
+                      <span className="font-normal text-muted">(opcional)</span>
+                    </label>
+                    <input
+                      id="guiado-nombre"
+                      className="mt-1.5 h-12 w-full rounded-xl border border-line bg-background px-3 text-base"
+                      type="text"
+                      autoComplete="organization"
+                      maxLength={PROPOSAL_NAME_MAX}
+                      value={state.name}
+                      onChange={(event) => setState((value) => ({ ...value, name: event.target.value }))}
+                    />
+                  </div>
+                ) : null}
+              </form>
+              <CodePreview value={built?.ok ? built.value : null} />
+            </div>
+          </section>
+        ) : null}
+
+        {state.step === 2 ? (
+          <section aria-labelledby="paso-titulo">
+            <StepHeading ref={headingRef} title="Elegí un estilo">
+              Después podés cambiar cada color.
+            </StepHeading>
+            <ul className="mt-7 grid grid-cols-2 gap-3 lg:grid-cols-4">
+              {styleList.map((style) => {
+                const active = state.styleId === style.id;
+                const preview = stylePreviews.key === contentKey ? stylePreviews.previews[style.id] : undefined;
+                return (
+                  <li key={style.id}>
+                    <button
+                      type="button"
+                      aria-pressed={active}
+                      className={`${cardBase} p-3 ${active ? cardSelected : cardIdle}`}
+                      onClick={() => setState((value) => ({ ...value, styleId: style.id, stylePicked: true, step: 3 }))}
+                    >
+                      <span
+                        className="flex w-full items-center justify-center overflow-hidden rounded-2xl bg-background"
+                        style={{ aspectRatio: "105 / 148" }}
+                      >
+                        {preview ? (
+                          // eslint-disable-next-line @next/next/no-img-element -- data: URL drawn by the export engine
+                          <img src={preview} alt="" className="block h-full w-full object-cover" />
+                        ) : (
+                          <StyleSwatch style={style} />
+                        )}
+                      </span>
+                      <span className="mt-3 flex flex-wrap items-center gap-2 px-1 text-base font-semibold">
+                        {style.name}
+                        {type && recommendedStyle(type) === style.id ? (
+                          <span className="rounded-full bg-ok-bg px-2 py-0.5 text-xs font-semibold text-accent-strong">
+                            Sugerido
+                          </span>
+                        ) : null}
+                      </span>
+                      <span className="mt-0.5 px-1 pb-1 text-sm leading-5 text-muted max-sm:hidden">{style.description}</span>
+                      {active ? <SelectedMark /> : null}
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          </section>
+        ) : null}
+
+        {state.step === 3 ? (
+          <section aria-labelledby="paso-titulo">
+            <StepHeading ref={headingRef} title="¿Dónde lo vas a usar?" />
+            {(["print", "screen"] as const).map((medium) => (
+              <div key={medium} className="mt-7">
+                <h2 className="text-sm font-semibold uppercase tracking-[0.14em] text-muted">
+                  {medium === "print" ? "Para imprimir" : "Para redes"}
+                </h2>
+                <ul className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+                  {formatList
+                    .filter((format) => format.medium === medium)
+                    .map((format) => {
+                      const active = state.formatId === format.id;
+                      return (
+                        <li key={format.id}>
+                          <button
+                            type="button"
+                            aria-pressed={active}
+                            className={`${cardBase} p-3 ${active ? cardSelected : cardIdle}`}
+                            onClick={() => setState((value) => ({ ...value, formatId: format.id, step: 4 }))}
+                          >
+                            <span className="flex h-28 w-full items-center justify-center rounded-2xl bg-background">
+                              <FormatShape format={format} tone={styleSpec(state.styleId).tones[0]} />
+                            </span>
+                            <span className="mt-3 px-1 text-base font-semibold leading-snug">{format.use}</span>
+                            <span className="mt-0.5 px-1 pb-1 text-sm leading-5 text-muted">
+                              {format.name} · {format.size}
+                            </span>
+                            {active ? <SelectedMark /> : null}
+                          </button>
+                        </li>
+                      );
+                    })}
+                </ul>
+              </div>
+            ))}
+          </section>
+        ) : null}
+
+        {state.step === 4 ? (
+          <section aria-labelledby="paso-titulo" aria-busy={loading}>
+            <StepHeading ref={headingRef} title="Elegí tu diseño">
+              Tocá uno para verlo en grande. Después podés cambiar todo.
+            </StepHeading>
+            <div className="mt-4 flex gap-2 overflow-x-auto pb-1 text-sm [-webkit-overflow-scrolling:touch]">
+              <SummaryChip label="Estilo" value={styleSpec(state.styleId).name} onClick={() => go(2)} />
+              <SummaryChip label="Formato" value={formatSpec(state.formatId).name} onClick={() => go(3)} />
+            </div>
+
+            {!loading && proposals.status === "error" ? (
+              <div className="mt-6 rounded-3xl border border-danger/30 bg-danger-bg p-5 text-danger" role="alert">
+                <p className="text-base font-semibold">{proposals.message}</p>
+                <div className="mt-4 flex flex-wrap gap-3">
+                  <button type="button" className={primaryButton} onClick={() => setAttempt((value) => value + 1)}>
+                    Reintentar
+                  </button>
+                  <button type="button" className={backButton} onClick={() => go(3)}>
+                    Cambiar formato
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="mt-5 grid gap-4 lg:grid-cols-[minmax(0,24rem)_minmax(0,1fr)] lg:items-start lg:gap-8">
+                <div className="max-lg:order-2 lg:sticky lg:top-24">
+                  <div
+                    className="flex items-center justify-center rounded-3xl border border-line bg-card p-4 sm:p-6"
+                    style={{ minHeight: "min(40vh, 24rem)" }}
+                  >
+                    {selected ? (
+                      // eslint-disable-next-line @next/next/no-img-element -- data: URL drawn by the export engine
+                      <img
+                        key={selected.id}
+                        src={selected.preview}
+                        alt={`Diseño ${selected.name} con tu código`}
+                        data-testid="diseno-elegido"
+                        className="guided-step block h-auto max-h-[38vh] w-auto max-w-full rounded-lg shadow-[0_16px_36px_rgba(20,34,31,0.2)] lg:max-h-[52vh]"
+                        style={{ aspectRatio: aspect(state.formatId) }}
+                      />
+                    ) : (
+                      <div className="flex flex-col items-center gap-3 text-muted" role="status">
+                        <span className="size-9 animate-spin rounded-full border-4 border-line border-t-accent motion-reduce:animate-none" />
+                        <span className="text-sm font-semibold">Armando tus diseños…</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <div className="min-w-0 max-lg:order-1">
+                  {/* On large screens the main action sits beside the preview, above the fold. */}
+                  <div className="mb-5 hidden items-center justify-between gap-5 rounded-3xl border border-accent/30 bg-ok-bg p-4 lg:flex">
+                    <p className="min-w-0 text-base">
+                      <span className="block text-sm text-muted">Diseño elegido</span>
+                      <span className="block truncate font-semibold">{selected ? selected.name : "Armando…"}</span>
+                    </p>
+                    <button
+                      type="button"
+                      data-testid="usar-diseno-escritorio"
+                      className={`${primaryButton} min-w-72 shrink-0`}
+                      disabled={!selected || opening}
+                      onClick={openDesign}
+                    >
+                      {opening ? "Abriendo el editor…" : "Usar este diseño"}
+                    </button>
+                  </div>
+                  <ul
+                    role="radiogroup"
+                    aria-label="Diseños"
+                    className="flex gap-2.5 overflow-x-auto px-0.5 pb-2 pt-0.5 [-webkit-overflow-scrolling:touch] sm:gap-3 lg:grid lg:grid-cols-3 lg:overflow-visible lg:p-0"
+                  >
+                    {loading
+                      ? [0, 1, 2, 3, 4, 5].map((index) => (
+                          <li key={index} aria-hidden="true" className="w-[27%] shrink-0 lg:w-auto">
+                            <div
+                              className="w-full animate-pulse rounded-2xl bg-line/60 motion-reduce:animate-none"
+                              style={{ aspectRatio: aspect(state.formatId) }}
+                            />
+                          </li>
+                        ))
+                      : ready.map((card) => {
+                          const active = selected?.id === card.id;
+                          return (
+                            <li key={card.id} className="w-[27%] shrink-0 lg:w-auto">
+                              <button
+                                type="button"
+                                role="radio"
+                                aria-checked={active}
+                                aria-label={`Diseño ${card.name}`}
+                                className={`${cardBase} rounded-2xl p-1.5 sm:p-2 ${active ? cardSelected : cardIdle}`}
+                                onClick={() => setState((value) => ({ ...value, proposalId: card.id }))}
+                              >
+                                {/* eslint-disable-next-line @next/next/no-img-element -- data: URL drawn by the export engine */}
+                                <img
+                                  src={card.preview}
+                                  alt=""
+                                  className="block h-auto w-full rounded-lg"
+                                  style={{ aspectRatio: aspect(state.formatId) }}
+                                />
+                                <span className="mt-1.5 block truncate px-1 pb-0.5 text-center text-xs font-semibold sm:text-sm">
+                                  {card.name}
+                                </span>
+                                {active ? <SelectedMark /> : null}
+                              </button>
+                            </li>
+                          );
+                        })}
+                  </ul>
+                </div>
+              </div>
+            )}
+          </section>
+        ) : null}
+      </div>
+
+      {primary || state.step > 0 ? (
+        <div className="fixed inset-x-0 bottom-0 z-30 border-t border-line bg-card/95 px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 backdrop-blur lg:static lg:mt-10 lg:border-0 lg:bg-transparent lg:p-0 lg:backdrop-blur-none">
+          <div className="mx-auto flex w-full max-w-5xl items-center gap-3">
+            {state.step > 0 ? (
+              <button type="button" className={backButton} onClick={() => go((state.step - 1) as GuidedStep)}>
+                <span aria-hidden="true">←</span>
+                <span className="ml-2 max-sm:sr-only">Atrás</span>
+              </button>
+            ) : null}
+            {primary ? (
+              <button
+                type={primary.submit ? "submit" : "button"}
+                form={primary.submit ? "guiado-datos" : undefined}
+                data-testid="accion-principal"
+                className={`${primaryButton} min-w-0 flex-1 lg:min-w-64 lg:flex-none ${state.step === 4 ? "lg:hidden" : ""}`}
+                disabled={primary.disabled}
+                onClick={primary.onClick}
+              >
+                {primary.label}
+              </button>
+            ) : null}
           </div>
-        </section>
+        </div>
       ) : null}
     </div>
   );
 }
 
-function loadState(): FlowState {
-  const fallback: FlowState = {
-    step: 0,
-    content: null,
-    name: "",
-    styleId: "clasico",
-    stylePicked: false,
-    formatId: DEFAULT_FORMAT_ID,
-  };
-  if (typeof window === "undefined") return fallback;
+function loadState(): GuidedState {
+  if (typeof window === "undefined") return readGuidedState(null);
   try {
-    const raw = window.sessionStorage.getItem(STORAGE_KEY);
-    if (!raw) return fallback;
-    const saved = JSON.parse(raw) as Record<string, unknown>;
-    const content = readQrContentInput(saved.content);
-    if (!content) return fallback;
-    const step = typeof saved.step === "number" && [0, 1, 2, 3, 4].includes(saved.step) ? (saved.step as Step) : 1;
-    return {
-      // Never land past the data step with data that no longer validates.
-      step: step > 1 && !buildQrContent(content).ok ? 1 : step,
-      content,
-      name: typeof saved.name === "string" ? saved.name.slice(0, PROPOSAL_NAME_MAX) : "",
-      styleId: isStyleId(saved.styleId) ? saved.styleId : recommendedStyle(content.type),
-      stylePicked: saved.stylePicked === true,
-      formatId: isFormatId(saved.formatId) ? saved.formatId : DEFAULT_FORMAT_ID,
-    };
+    return readGuidedState(window.sessionStorage.getItem(GUIDED_STORAGE_KEY));
   } catch {
-    return fallback;
+    return readGuidedState(null);
   }
 }
 
-type LoadResult =
-  | { ok: true; proposals: ProposalCard[] }
-  | { ok: false; field: string | null; message: string };
+type ProposalBody = {
+  content: QrContentInput;
+  name: string;
+  styleId: StyleId;
+  formatId: FormatId;
+  preview?: "styles";
+};
 
-async function loadProposals(
-  body: { content: QrContentInput; name: string; styleId: StyleId; formatId: FormatId },
+async function postProposals(
+  body: ProposalBody,
   signal: AbortSignal,
-): Promise<LoadResult> {
-  const failure = "No pudimos armar las propuestas. Revisá tu conexión y probá de nuevo.";
+): Promise<{ ok: boolean; status: number; payload: Record<string, unknown> }> {
   try {
     const response = await fetch("/api/studio/proposals", {
       method: "POST",
@@ -501,40 +593,43 @@ async function loadProposals(
       body: JSON.stringify(body),
       signal,
     });
-    const payload = (await response.json().catch(() => null)) as Record<string, unknown> | null;
-    if (response.status === 429) {
-      return { ok: false, field: null, message: "Pediste muchas propuestas seguidas. Esperá unos minutos y probá de nuevo." };
-    }
-    if (response.status === 422 && typeof payload?.message === "string") {
-      return { ok: false, field: typeof payload.field === "string" ? payload.field : null, message: payload.message };
-    }
-    if (!response.ok || !Array.isArray(payload?.proposals)) return { ok: false, field: null, message: failure };
-    const proposals: ProposalCard[] = [];
-    for (const item of payload.proposals as Record<string, unknown>[]) {
-      if (typeof item?.id !== "string" || typeof item.name !== "string" || typeof item.preview !== "string") continue;
-      if (!item.preview.startsWith("data:image/png;base64,") || typeof item.document !== "object") continue;
-      proposals.push({ id: item.id, name: item.name, preview: item.preview, document: item.document as DesignDocumentV8 });
-    }
-    return proposals.length > 0 ? { ok: true, proposals } : { ok: false, field: null, message: failure };
+    const payload = ((await response.json().catch(() => null)) ?? {}) as Record<string, unknown>;
+    return { ok: response.ok, status: response.status, payload };
   } catch {
-    return { ok: false, field: null, message: failure };
+    return { ok: false, status: 0, payload: {} };
   }
 }
 
-function sameQr(a: DesignDocumentV8, b: DesignDocumentV8): boolean {
-  const value = (document: DesignDocumentV8) => document.elements.find((element) => element.type === "qr")?.value ?? "";
-  return value(a) === value(b);
+type LoadResult =
+  | { ok: true; proposals: ProposalCard[] }
+  | { ok: false; field: string | null; message: string };
+
+async function loadProposals(body: ProposalBody, signal: AbortSignal): Promise<LoadResult> {
+  const failure = "No pudimos armar tus diseños. Revisá tu conexión y probá de nuevo.";
+  const { ok, status, payload } = await postProposals(body, signal);
+  if (status === 429) {
+    return { ok: false, field: null, message: "Pediste muchos diseños seguidos. Esperá unos minutos y probá de nuevo." };
+  }
+  if (status === 422 && typeof payload.message === "string") {
+    return { ok: false, field: typeof payload.field === "string" ? payload.field : null, message: payload.message };
+  }
+  if (!ok || !Array.isArray(payload.proposals)) return { ok: false, field: null, message: failure };
+  const proposals: ProposalCard[] = [];
+  for (const item of payload.proposals as Record<string, unknown>[]) {
+    if (typeof item?.id !== "string" || typeof item.name !== "string" || !isPreview(item.preview)) continue;
+    if (typeof item.document !== "object" || item.document === null) continue;
+    proposals.push({ id: item.id, name: item.name, preview: item.preview, document: item.document });
+  }
+  return proposals.length > 0 ? { ok: true, proposals } : { ok: false, field: null, message: failure };
+}
+
+function isPreview(value: unknown): value is string {
+  return typeof value === "string" && value.startsWith("data:image/png;base64,");
 }
 
 function aspect(formatId: FormatId): string {
   const format = formatSpec(formatId);
   return `${format.widthMm} / ${format.heightMm}`;
-}
-
-/** A small outline with the proportions of the sheet, at most 56 px on its long side. */
-function shapeStyle(widthMm: number, heightMm: number): { width: number; height: number } {
-  const scale = 56 / Math.max(widthMm, heightMm);
-  return { width: Math.round(widthMm * scale), height: Math.round(heightMm * scale) };
 }
 
 function StepHeading({
@@ -548,23 +643,29 @@ function StepHeading({
 }) {
   return (
     <header className="max-w-2xl">
-      <h1 id="paso-titulo" ref={ref} tabIndex={-1} className="text-3xl font-semibold text-foreground outline-none sm:text-4xl">
+      <h1
+        id="paso-titulo"
+        ref={ref}
+        tabIndex={-1}
+        className="text-3xl font-semibold leading-tight text-foreground outline-none sm:text-4xl"
+      >
         {title}
       </h1>
-      {children ? <p className="mt-3 text-base leading-relaxed text-muted">{children}</p> : null}
+      {children ? <p className="mt-2 text-base leading-relaxed text-muted">{children}</p> : null}
     </header>
   );
 }
 
-function BackButton({ onClick }: { onClick: () => void }) {
+function SelectedMark() {
   return (
-    <button
-      type="button"
-      className="inline-flex h-12 items-center rounded-full px-2 text-sm font-semibold text-muted hover:text-foreground"
-      onClick={onClick}
+    <span
+      aria-hidden="true"
+      className="absolute right-2 top-2 flex size-6 items-center justify-center rounded-full bg-accent text-white shadow"
     >
-      ← Volver
-    </button>
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3.2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M5 12.5l4.5 4.5L19 7.5" />
+      </svg>
+    </span>
   );
 }
 
@@ -572,7 +673,7 @@ function SummaryChip({ label, value, onClick }: { label: string; value: string; 
   return (
     <button
       type="button"
-      className="inline-flex h-10 items-center gap-2 rounded-full border border-line bg-card px-4 hover:border-accent"
+      className="inline-flex h-10 shrink-0 items-center gap-2 whitespace-nowrap rounded-full border border-line bg-card px-4 hover:border-accent"
       onClick={onClick}
     >
       <span className="text-muted">{label}:</span>
@@ -582,20 +683,86 @@ function SummaryChip({ label, value, onClick }: { label: string; value: string; 
   );
 }
 
-/** The style's own colors on a tiny poster, so the choice shows what it does. */
+/** The code being built, big enough to try with a phone camera before going on. */
+function CodePreview({ value }: { value: string | null }) {
+  const [picture, setPicture] = useState<{ value: string; url: string } | null>(null);
+
+  useEffect(() => {
+    if (!value) return;
+    let cancelled = false;
+    QRCode.toDataURL(value, { margin: 2, width: 360, errorCorrectionLevel: "M", color: { dark: "#14221f", light: "#ffffff" } })
+      .then((url) => {
+        if (!cancelled) setPicture({ value, url });
+      })
+      .catch(() => {
+        if (!cancelled) setPicture(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [value]);
+
+  const shown = value && picture?.value === value ? picture.url : null;
+  return (
+    <aside className="rounded-3xl border border-line bg-card p-5 max-lg:flex max-lg:items-center max-lg:gap-4" aria-live="polite">
+      <div className="flex aspect-square w-28 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-dashed border-line bg-background lg:w-full">
+        {shown ? (
+          // eslint-disable-next-line @next/next/no-img-element -- data: URL generated in the browser
+          <img src={shown} alt="Tu código QR" className="block h-full w-full" />
+        ) : (
+          <span className="px-3 text-center text-xs leading-5 text-muted">Tu código aparece acá</span>
+        )}
+      </div>
+      <div className="min-w-0 lg:mt-4">
+        <p className="text-sm font-semibold">{shown ? "Tu código ya funciona" : "Tu código"}</p>
+        <p className="mt-1 break-words text-sm leading-5 text-muted">
+          {shown && value ? `${describeQrPayload(value)}. Probalo con la cámara del celular.` : "Completá los datos para verlo."}
+        </p>
+      </div>
+    </aside>
+  );
+}
+
+/** Fallback for the style cards while the real samples load: the style's colors on a tiny poster. */
 function StyleSwatch({ style }: { style: StyleSpec }) {
   const tone = style.tones[0];
   return (
+    <span aria-hidden="true" className="relative block h-full w-full" style={{ background: tone.paper }}>
+      <span className="absolute inset-x-0 top-0 block h-[28%]" style={{ background: tone.primary }} />
+      <span className="absolute left-[12%] top-[36%] block h-[4%] w-1/2 rounded-full" style={{ background: tone.ink }} />
+      <span className="absolute left-[12%] top-[44%] block h-[3%] w-1/4 rounded-full" style={{ background: tone.accent }} />
+      <span className="absolute bottom-[10%] left-1/2 block aspect-square w-[38%] -translate-x-1/2 rounded-md bg-white p-[5%]">
+        <span className="block size-full rounded-sm" style={{ background: "#14221f" }} />
+      </span>
+    </span>
+  );
+}
+
+/** The sheet's proportions with the chosen style's colors, at most 84 px on its long side. */
+function FormatShape({ format, tone }: { format: FormatSpec; tone: StyleTone }) {
+  const scale = 84 / Math.max(format.widthMm, format.heightMm);
+  const width = Math.round(format.widthMm * scale);
+  const height = Math.round(format.heightMm * scale);
+  const landscape = width > height * 1.15;
+  return (
     <span
       aria-hidden="true"
-      className="relative block h-24 w-full overflow-hidden rounded-2xl border border-line/70"
-      style={{ background: tone.paper }}
+      className="relative block overflow-hidden rounded-[4px] shadow-[0_4px_10px_rgba(20,34,31,0.18)]"
+      style={{ width, height, background: tone.paper }}
     >
-      <span className="absolute inset-x-0 top-0 block h-7" style={{ background: tone.primary }} />
-      <span className="absolute left-3 top-10 block h-1.5 w-1/2 rounded-full" style={{ background: tone.ink }} />
-      <span className="absolute left-3 top-14 block h-1.5 w-1/4 rounded-full" style={{ background: tone.accent }} />
-      <span className="absolute bottom-3 right-3 block size-8 rounded-[4px] bg-white p-1">
-        <span className="block size-full rounded-[2px]" style={{ background: "#14221f" }} />
+      <span
+        className="absolute block"
+        style={landscape ? { inset: "0 55% 0 0", background: tone.primary } : { inset: "0 0 68% 0", background: tone.primary }}
+      />
+      <span
+        className="absolute block rounded-[2px] bg-white p-[3px]"
+        style={
+          landscape
+            ? { right: "10%", top: "50%", height: "56%", aspectRatio: "1", transform: "translateY(-50%)" }
+            : { left: "50%", bottom: "12%", width: "44%", aspectRatio: "1", transform: "translateX(-50%)" }
+        }
+      >
+        <span className="block size-full rounded-[1px]" style={{ background: "#14221f" }} />
       </span>
     </span>
   );
@@ -628,12 +795,8 @@ function TypeIcon({ type }: { type: QrContentType }) {
         <circle cx="12" cy="10.5" r="2.3" />
       </>
     ),
-    review: <path d="M12 3.5l2.6 5.3 5.9.900-4.2 4.1 1 5.8-5.3-2.8-5.3 2.8 1-5.8-4.2-4.1 5.9-.9L12 3.5z" />,
-    menu: (
-      <>
-        <path d="M7 3.5v7a2.5 2.5 0 0 0 5 0v-7M9.5 3.5v17M17 20.5v-17c-2 1.5-3 4-3 7.5h3" />
-      </>
-    ),
+    review: <path d="M12 3.5l2.6 5.3 5.9.9-4.2 4.1 1 5.8-5.3-2.8-5.3 2.8 1-5.8-4.2-4.1 5.9-.9L12 3.5z" />,
+    menu: <path d="M7 3.5v7a2.5 2.5 0 0 0 5 0v-7M9.5 3.5v17M17 20.5v-17c-2 1.5-3 4-3 7.5h3" />,
     event: (
       <>
         <rect x="3.5" y="5" width="17" height="15.5" rx="2.5" />
@@ -650,15 +813,15 @@ function TypeIcon({ type }: { type: QrContentType }) {
       <>
         <rect x="3" y="5" width="18" height="14" rx="2.5" />
         <circle cx="9" cy="11" r="2" />
-        <path d="M5.8 16c.6-1.5 1.8-2.2 3.2-2.2s2.6.700 3.2 2.2M15 10h3M15 13.5h3" />
+        <path d="M5.8 16c.6-1.5 1.8-2.2 3.2-2.2s2.6.7 3.2 2.2M15 10h3M15 13.5h3" />
       </>
     ),
     text: <path d="M5 6.5h14M5 11h14M5 15.5h9" />,
   };
   return (
     <svg
-      width="22"
-      height="22"
+      width="26"
+      height="26"
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"

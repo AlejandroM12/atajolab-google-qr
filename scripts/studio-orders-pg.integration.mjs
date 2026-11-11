@@ -143,6 +143,34 @@ try {
     assert.equal(row.draftKeyHash, draftHash);
   }
 
+  // A Wi-Fi order keeps its password encrypted in the database and still renders with the real one.
+  {
+    const WIFI = "WIFI:T:WPA;S:Cafe Centro;P:clave-super-secreta;;";
+    const wifiDraft = parseOrderDraft(
+      {
+        version: 8,
+        idempotencyKey: createStudioOrderIdempotencyKey(),
+        email: "studio-v8-test@example.com",
+        document: withQr(createDocument("corporativo"), WIFI),
+      },
+      { studioDraftKey: draftKey },
+    );
+    assert.equal(wifiDraft.ok, true);
+    const wifiOrder = await savePendingOrder(wifiDraft.draft);
+    createdOrderIds.push(wifiOrder.publicId);
+    const raw = await prisma.order.findUnique({ where: { id: wifiOrder.publicId }, select: { artwork: true } });
+    const stored = JSON.stringify(raw.artwork);
+    assert.equal(stored.includes("clave-super-secreta"), false, "password must not be stored in clear text");
+    assert.equal(stored.includes("Cafe Centro"), false);
+    assert.match(raw.artwork.href, /^sealed:v1:/);
+    const read = await findOrder(wifiOrder.publicId);
+    assert.equal(read.artwork.href, WIFI);
+    assert.equal(read.artwork.document.elements.find((element) => element.type === "qr").value, WIFI);
+    // Links are public by nature and stay readable in the database.
+    const linkRow = await prisma.order.findUnique({ where: { id: created.publicId }, select: { artwork: true } });
+    assert.equal(linkRow.artwork.href, REVIEW_URL);
+  }
+
   // Snapshot immutability vs live document mutation
   const liveMutated = updateElement(dehydrated.document, dehydrated.document.elements[0].id, {});
   assert.ok(liveMutated);

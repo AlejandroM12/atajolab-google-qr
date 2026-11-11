@@ -18,37 +18,35 @@ export function InspirationGallery({
     <div className="flex min-w-0 flex-col gap-3">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <h2 className="text-sm font-semibold">Inspiración</h2>
-          <p className="mt-1 text-sm text-muted">Elegí un diseño y personalizalo a tu gusto.</p>
+          <h2 className="text-lg font-semibold">Ejemplos</h2>
+          <p className="mt-1 text-sm text-muted">Elegí uno y poné tus datos.</p>
         </div>
         {onClose ? (
-          <button type="button" className="shrink-0 text-sm font-semibold text-muted hover:text-foreground" onClick={onClose}>
+          <button
+            type="button"
+            className="inline-flex h-10 shrink-0 items-center rounded-full border border-line bg-card px-4 text-sm font-semibold hover:border-accent"
+            onClick={onClose}
+          >
             Cerrar
           </button>
         ) : null}
       </div>
-      <ul className="grid gap-3 sm:grid-cols-2">
+      <ul className="grid grid-cols-2 gap-3 lg:grid-cols-3">
         {inspirationDesigns.map((item) => (
           <li key={item.id}>
             <button type="button" className={cardButton} onClick={() => onPick(item.id)}>
-              <div
-                className="w-full rounded-xl bg-background p-1"
-                style={{ aspectRatio: "105 / 148" }}
-                aria-hidden="true"
-              >
-                {/* eslint-disable-next-line @next/next/no-img-element -- prebuilt same-origin WebP (app/previews), already sized */}
+              <span className="flex aspect-[4/5] w-full items-center justify-center rounded-xl bg-background p-3" aria-hidden="true">
+                {/* eslint-disable-next-line @next/next/no-img-element -- prebuilt same-origin WebP (app/previews) */}
                 <img
                   src={previews[item.id] ?? ""}
                   alt=""
-                  width={600}
-                  height={846}
                   loading="lazy"
                   decoding="async"
-                  className="h-full w-full rounded-lg object-contain"
+                  className="max-h-full w-auto max-w-full rounded-md shadow-[0_8px_18px_rgba(20,34,31,0.16)]"
                 />
-              </div>
+              </span>
               <span className="mt-3 text-sm font-semibold leading-snug">{item.name}</span>
-              <span className="mt-1 text-xs leading-5 text-muted">{item.description}</span>
+              <span className="mt-0.5 text-xs text-muted">{item.format}</span>
               <span className="mt-3 text-sm font-semibold text-accent">Usar este diseño</span>
             </button>
           </li>

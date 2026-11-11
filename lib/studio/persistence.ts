@@ -18,6 +18,7 @@ export const STUDIO_STORAGE_KEY = "atajolab.studio.v8";
 export type StorageLike = {
   getItem(key: string): string | null;
   setItem(key: string, value: string): void;
+  removeItem?(key: string): void;
 };
 
 export type LoadedDesign = {

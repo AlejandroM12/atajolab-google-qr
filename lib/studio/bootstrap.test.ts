@@ -19,9 +19,9 @@ function memoryStorage(seed?: Record<string, string>): StorageLike & { data: Rec
 }
 
 const clasico = createDocument("clasico");
-const taller = getInspiration("taller");
+const taller = getInspiration("resenas");
 assert.ok(taller);
-const cafeteria = getInspiration("cafeteria");
+const cafeteria = getInspiration("menu");
 assert.ok(cafeteria);
 
 // Explicit inspiration wins over a saved session (the reported production bug).
@@ -30,17 +30,17 @@ assert.ok(cafeteria);
     [STUDIO_STORAGE_KEY]: serializeDesign(clasico),
   });
   const boot = resolveStudioBootstrap({
-    search: "?inspiracion=taller",
+    search: "?inspiracion=resenas",
     storage,
   });
   assert.equal(boot.source, "inspiration");
   assert.equal(boot.started, true);
   assert.equal(boot.recovered, false);
-  assert.match(boot.saveLabel, /Automotor/);
+  assert.match(boot.saveLabel, /Reseñas de Google/);
   const title = boot.document.elements.find((el) => el.type === "text" && el.role === "titulo");
   assert.ok(title && title.type === "text");
-  assert.equal(title.text, "Auto Norte");
-  assert.notEqual(title.text, "Tu negocio");
+  assert.equal(title.text, "Tu opinión nos importa");
+  assert.equal(boot.document.elements.some((el) => el.type === "text" && el.text === "ESTUDIO AURA"), true);
 }
 
 // Switching inspiration IDs replaces the previous inspiration session.
@@ -49,13 +49,13 @@ assert.ok(cafeteria);
     [STUDIO_STORAGE_KEY]: serializeDesign(cloneDoc(cafeteria.document)),
   });
   const boot = resolveStudioBootstrap({
-    search: "inspiracion=taller",
+    search: "inspiracion=resenas",
     storage,
   });
   assert.equal(boot.source, "inspiration");
   const title = boot.document.elements.find((el) => el.type === "text" && el.role === "titulo");
   assert.ok(title && title.type === "text");
-  assert.equal(title.text, "Auto Norte");
+  assert.equal(title.text, "Tu opinión nos importa");
 }
 
 // Invalid inspiration falls through to the saved session.
@@ -111,17 +111,18 @@ assert.ok(cafeteria);
   assert.equal(boot.source, "session");
   assert.equal(boot.started, true);
   assert.deepEqual(boot.document, card);
-  assert.match(boot.saveLabel, /propuesta/);
+  assert.match(boot.saveLabel, /Tu diseño está listo/);
+  assert.equal(boot.previous, null);
   // Without a saved design the editor shows its start screen instead of an empty piece.
   assert.equal(resolveStudioBootstrap({ search: "?origen=guiado", storage: memoryStorage() }).started, false);
 }
 assert.equal(studioBootKey("?origen=guiado"), "session");
 
-assert.equal(studioBootKey("?inspiracion=taller"), "inspiration:taller");
+assert.equal(studioBootKey("?inspiracion=resenas"), "inspiration:resenas");
 assert.equal(studioBootKey("?inspiracion=nope"), "session");
 assert.equal(studioBootKey("?plantilla=vivo"), "template:vivo");
 assert.equal(studioBootKey(""), "session");
-assert.notEqual(studioBootKey("?inspiracion=taller"), studioBootKey("?inspiracion=cafeteria"));
+assert.notEqual(studioBootKey("?inspiracion=resenas"), studioBootKey("?inspiracion=menu"));
 
 console.log("studio bootstrap tests ok");
 

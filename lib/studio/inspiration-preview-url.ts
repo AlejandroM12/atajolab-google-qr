@@ -23,3 +23,10 @@ export function inspirationPreviewUrls(): Record<InspirationId, string> {
     inspirationDesigns.map((item) => [item.id, inspirationPreviewUrl(item.id)]),
   ) as Record<InspirationId, string>;
 }
+
+/** Pixel size of a gallery preview (600 px wide, see renderInspirationPreviewWebp). */
+export function inspirationPreviewSize(id: InspirationId): { width: number; height: number } {
+  const format = inspirationDesigns.find((item) => item.id === id)?.document.format;
+  if (!format) return { width: 600, height: 846 };
+  return { width: 600, height: Math.round((600 * format.heightMm) / format.widthMm) };
+}

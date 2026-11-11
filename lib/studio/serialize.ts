@@ -7,6 +7,7 @@ import {
   MAX_ELEMENTS,
   MAX_PARKED,
   STUDIO_VERSION,
+  studioFontList,
   type DesignDocumentV8,
   type ImageElement,
   type QrElement,
@@ -29,7 +30,7 @@ const TEMPLATES = new Set<TemplateId>([
   "corporativo",
   "creativo",
 ]);
-const FONTS = new Set<StudioFont>(["source", "sora", "fraunces"]);
+const FONTS = new Set<StudioFont>(studioFontList.map((font) => font.id));
 const ALIGNS = new Set<TextAlign>(["left", "center", "right"]);
 
 export type ParsedDesign = {

@@ -72,11 +72,11 @@ assert.equal(document.version, 8);
 assert.equal(document.format.widthMm, 105);
 assert.equal(document.format.heightMm, 148);
 assert.equal(document.background, "#f4f0e6");
-assert.equal(document.elements.length, 7);
+assert.equal(document.elements.length, 10);
 assert.equal(title.x, 10);
-assert.equal(title.text, "Dejá tu reseña");
-assert.equal(qr.width, 32);
-assert.equal(qr.height, 32);
+assert.equal(title.text, "Wi-Fi para clientes");
+assert.equal(qr.width, 44);
+assert.equal(qr.height, 44);
 assert.equal(document.elements.filter((element) => element.type === "qr").length, 1);
 assert.equal(document.elements.at(-1)?.type, "qr");
 
@@ -140,7 +140,7 @@ assert.equal(textOf(creative, "titulo").text, "Kiosco del parque");
 assert.equal(textOf(creative, "bajada").text, "Estamos en el centro");
 assert.equal(qrOf(creative).id, qr.id);
 assert.equal(qrOf(creative).value, "https://example.com/puesto");
-assert.equal(qrOf(creative).width, 50);
+assert.equal(qrOf(creative).width, 48);
 assert.equal(creative.elements.filter((element) => element.type === "qr").length, 1);
 assert.ok(creative.layouts?.corporativo);
 // Elements the user added stay on the sheet; nothing from the old composition is parked.
@@ -195,7 +195,7 @@ const typed = replacePresent(base, updateElement(document, title.id, { text: "Ho
 const flushed = flushDraft(typed, base.present);
 assert.equal(flushed.past.length, 1);
 assert.equal(textOf(flushed.present, "titulo").text, "Hola");
-assert.equal(textOf(undo(flushed).present, "titulo").text, "Dejá tu reseña");
+assert.equal(textOf(undo(flushed).present, "titulo").text, "Wi-Fi para clientes");
 
 const square = withGeometry(qr, { x: qr.x, y: qr.y, width: 40, height: 20, rotation: 0 });
 assert.equal(square.type, "qr");

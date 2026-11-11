@@ -76,3 +76,25 @@ h3 {
 .studio-shell {
   overflow-x: hidden;
 }
+
+/* Guided flow: each step (and each newly selected design) eases in. */
+@keyframes guided-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.guided-step {
+  animation: guided-in 220ms ease-out both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .guided-step {
+    animation: none;
+  }
+}

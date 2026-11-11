@@ -21,6 +21,7 @@ import {
 } from "@/lib/studio/order-idempotency";
 import { dispatchPurchaseAccessMail } from "@/lib/purchase-notify";
 import { logError } from "@/lib/log";
+import { openStudioArtwork, sealStudioArtwork } from "@/lib/studio/artwork-seal";
 
 export type StoredOrder = {
   publicId: string;
@@ -175,7 +176,8 @@ async function savePendingStudioV8Order(
             amountArs: free ? 0 : PIECE_PRICE_ARS,
             currency: PIECE_CURRENCY,
             artworkVersion: STUDIO_COMMERCIAL_ARTWORK_VERSION,
-            artwork: artwork as unknown as Prisma.InputJsonValue,
+            // Wi-Fi passwords and contact data inside the QR are encrypted at rest.
+            artwork: sealStudioArtwork(artwork, secret) as unknown as Prisma.InputJsonValue,
             deliveryKeyHash: hashDeliveryKey(deliveryKey),
             buyerEmail: draft.buyerEmail,
           },
@@ -305,7 +307,7 @@ export async function findOrder(publicId: string): Promise<StoredOrder | null> {
   });
   if (!row || row.currency !== PIECE_CURRENCY || !isOrderStatus(row.status)) return null;
 
-  const artwork = readArtworkSnapshot(row.artwork);
+  const artwork = readArtworkSnapshot(openStudioArtwork(row.artwork, orderAccessSecret()));
   if (!artwork) return null;
 
   return {
@@ -340,7 +342,7 @@ export async function findDownloadOrder(publicId: string): Promise<{
   });
   if (!row || !isOrderStatus(row.status)) return null;
 
-  const artwork = readArtworkSnapshot(row.artwork);
+  const artwork = readArtworkSnapshot(openStudioArtwork(row.artwork, orderAccessSecret()));
   if (!artwork) return null;
 
   return {

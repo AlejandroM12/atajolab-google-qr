@@ -7,18 +7,22 @@ import { studioClientKeyFromRequest, studioRequestTrusted } from "@/lib/studio/d
 import { compileStudioScene } from "@/lib/studio/export/compile";
 import { renderStudioPreviewPng } from "@/lib/studio/export/render";
 import { isFormatId } from "@/lib/studio/formats";
-import { isStyleId } from "@/lib/studio/proposal-options";
+import { isStyleId, styleList } from "@/lib/studio/proposal-options";
 import { buildProposals } from "@/lib/studio/proposals";
 import { sharedRateLimiter } from "@/lib/studio/rate-limits";
 
 const MAX_BODY_BYTES = 16_000;
-/** Cards are ~170 CSS px wide on phones and ~260 on desktop; 2x keeps text sharp. */
-const PREVIEW_WIDTH_PX = 520;
+/** The selected proposal is shown up to ~320 CSS px wide; 2x keeps text sharp. */
+const PREVIEW_WIDTH_PX = 640;
+/** Style cards are ~180 CSS px wide. */
+const STYLE_PREVIEW_WIDTH_PX = 360;
 
 /**
  * Design proposals for the guided flow: validates the content, lays it out on
  * every template and returns each document with a preview drawn by the export
- * engine. Nothing is stored; the QR content stays out of the logs.
+ * engine. With `preview: "styles"` it returns one sample per style instead, so the
+ * style step shows the user's own content. Nothing is stored; the QR content
+ * stays out of the logs.
  */
 export async function POST(request: Request) {
   if (!studioRequestTrusted(request)) return json(403, { error: "origin-rejected" });
@@ -41,6 +45,29 @@ export async function POST(request: Request) {
   } catch (error) {
     if (isDatabaseUnavailable(error)) return json(503, { error: "database-unavailable" });
     throw error;
+  }
+
+  if (input.preview === "styles") {
+    try {
+      const styles = styleList.flatMap((style) => {
+        const sample = buildProposals({ content, name: input.name as string, styleId: style.id, formatId: "a6" });
+        if (!sample.ok) return [];
+        const first = sample.proposals[0]!;
+        return [
+          {
+            styleId: style.id,
+            preview: `data:image/png;base64,${renderStudioPreviewPng(
+              compileStudioScene(first.document),
+              STYLE_PREVIEW_WIDTH_PX,
+            ).toString("base64")}`,
+          },
+        ];
+      });
+      return json(200, { styles });
+    } catch (error) {
+      logError("studio.proposals.render_failed", error);
+      return json(500, { error: "render-failed" });
+    }
   }
 
   const result = buildProposals({
