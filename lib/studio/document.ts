@@ -269,6 +269,12 @@ function applyPatch(element: StudioElement, patch: ElementPatch, sheet: Sheet): 
 
   const next = { ...element } as StudioElement;
   assignBox(next, patch);
+  if (next.type === "qr") {
+    // The QR is always square: the dimension being edited drives the other one, so shrinking
+    // only the width is not undone by the larger, untouched height.
+    if (patch.width !== undefined) next.height = patch.width;
+    else if (patch.height !== undefined) next.width = patch.height;
+  }
   if (next.type === "text") {
     if (patch.text !== undefined) next.text = patch.text;
     if (patch.font !== undefined) next.font = patch.font;

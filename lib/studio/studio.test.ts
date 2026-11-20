@@ -17,6 +17,7 @@ import type { IdFactory } from "@/lib/studio/ids";
 import { classifyImage, imageSrcIssue } from "@/lib/studio/images";
 import { commitStudioNumber, parseStudioNumber } from "@/lib/studio/number-input";
 import { loadSessionDesign, STUDIO_STORAGE_KEY, writeDesign, type StorageLike } from "@/lib/studio/persistence";
+import { validateForExport } from "@/lib/studio/export/validate";
 import { qrContrastIssue } from "@/lib/studio/qr-rules";
 import { parseDesign, serializeDesign } from "@/lib/studio/serialize";
 import { applySuggestedColors, applyTemplate, createBlankDocument, createDocument } from "@/lib/studio/templates";
@@ -38,6 +39,10 @@ function qrOf(document: DesignDocumentV8): QrElement {
   const element = document.elements.find((item) => item.type === "qr");
   if (!element || element.type !== "qr") throw new Error("missing qr");
   return element;
+}
+
+function replaceQr(source: DesignDocumentV8, next: QrElement): DesignDocumentV8 {
+  return { ...source, elements: source.elements.map((item) => (item.type === "qr" ? next : item)) };
 }
 
 class MemoryStorage implements StorageLike {
@@ -212,6 +217,31 @@ const rotated = withGeometry(qr, { x: 0, y: 0, width: 90, height: 90, rotation: 
 if (rotated.type === "qr") {
   assert.equal(rotated.width, rotated.height);
   assert.ok(rotated.width < 90);
+}
+// Inspector edits one field at a time: width 50 -> 40 must give 40 x 40 without moving X/Y.
+{
+  const big = qrOf(updateElement(document, qr.id, { x: 20, y: 30, width: 50, height: 50 }));
+  assert.deepEqual([big.x, big.y, big.width, big.height], [20, 30, 50, 50]);
+  const next = updateElement(replaceQr(document, big), qr.id, { width: 40 });
+  const smaller = qrOf(next);
+  assert.deepEqual([smaller.x, smaller.y, smaller.width, smaller.height], [20, 30, 40, 40]);
+  const byHeight = qrOf(updateElement(replaceQr(document, big), qr.id, { height: 35 }));
+  assert.deepEqual([byHeight.x, byHeight.y, byHeight.width, byHeight.height], [20, 30, 35, 35]);
+  // Minimum and sheet limits still apply.
+  const min = qrOf(updateElement(replaceQr(document, big), qr.id, { width: 10 }));
+  assert.equal(min.width, 22);
+  assert.equal(min.height, 22);
+  const edge = qrOf(updateElement(replaceQr(document, big), qr.id, { x: 90 }));
+  assert.ok(edge.x + edge.width <= document.format.widthMm);
+  assert.equal(edge.width, edge.height);
+  // Other element types keep independent width/height.
+  const wide = textOf(updateElement(document, title.id, { width: 40 }), "titulo");
+  assert.equal(wide.width, 40);
+  assert.equal(wide.height, title.height);
+  // Exported document keeps the resized square and stays valid.
+  const exported = replaceQr(document, smaller);
+  assert.equal(validateForExport(exported).issues.some((issue) => issue.code === "qr-size"), false);
+  assert.equal(validateForExport(exported).issues.some((issue) => issue.code === "out-of-bounds"), false);
 }
 assert.equal(updateElement(document, qr.id, { foreground: "#ffffff", background: "#000000" }), document);
 assert.equal(qrContrastIssue("#14221f", "#ffffff"), null);
