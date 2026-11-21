@@ -1,7 +1,9 @@
-import { formatArs, PIECE_PRICE_ARS } from "@/lib/pricing";
+import { faqDownloadAnswer, faqPriceAnswer } from "@/lib/commercial-copy";
+
+export type FaqEntry = { question: string; answer: string; kind?: "price" | "download" };
 
 /** Answers describe what the code does today. Update them when behavior changes. */
-export const FAQ_ITEMS: Array<{ question: string; answer: string }> = [
+const BASE_FAQ: FaqEntry[] = [
   {
     question: "¿Qué puede abrir el QR?",
     answer:
@@ -14,7 +16,8 @@ export const FAQ_ITEMS: Array<{ question: string; answer: string }> = [
   },
   {
     question: "¿Cuánto cuesta?",
-    answer: `${formatArs(PIECE_PRICE_ARS)} por cartel, pago único con Mercado Pago. No hay suscripción.`,
+    kind: "price",
+    answer: "",
   },
   {
     question: "¿Qué recibo?",
@@ -23,8 +26,8 @@ export const FAQ_ITEMS: Array<{ question: string; answer: string }> = [
   },
   {
     question: "¿Cuándo puedo descargar los archivos?",
-    answer:
-      "Apenas Mercado Pago aprueba el pago. La página del pedido se actualiza sola. Si pagaste en efectivo, la aprobación puede demorar más.",
+    kind: "download",
+    answer: "",
   },
   {
     question: "Cerré el navegador o cambié de celular. ¿Cómo descargo de nuevo?",
@@ -42,3 +45,11 @@ export const FAQ_ITEMS: Array<{ question: string; answer: string }> = [
       "Con el PDF podés ir a cualquier imprenta o imprimirlo en casa y recortarlo. Para que el QR se lea bien, imprimilo a tamaño real y sin estirarlo.",
   },
 ];
+
+/** The FAQ with the price and payment answers that match the real sales state. */
+export function getFaqItems(salesOpen: boolean): Array<{ question: string; answer: string }> {
+  return BASE_FAQ.map(({ question, answer, kind }) => ({
+    question,
+    answer: kind === "price" ? faqPriceAnswer(salesOpen) : kind === "download" ? faqDownloadAnswer(salesOpen) : answer,
+  }));
+}

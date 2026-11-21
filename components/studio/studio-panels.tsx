@@ -239,8 +239,8 @@ export function StudioDownloadPanel({
             <>
               <h2 className="text-sm font-semibold">Tu primer QR es gratis</h2>
               <p className="mt-1 text-xs leading-5 text-muted">
-                Descargalo completo en PNG, SVG y PDF, sin pagar. Es uno por navegador y por correo. Los
-                siguientes cuestan {formatPriceHint()}.
+                Descargalo completo en PNG, SVG y PDF, sin pagar. Es uno por navegador y por correo.
+                {checkoutEnabled ? ` Los siguientes cuestan ${formatPriceHint()}.` : ""}
               </p>
             </>
           ) : (

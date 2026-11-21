@@ -37,7 +37,7 @@ export const PUBLIC_PATHS = [
 ] as const;
 
 /** schema.org JSON-LD for the home page. Only facts the code guarantees. */
-export function homeStructuredData(origin: URL): Record<string, unknown> {
+export function homeStructuredData(origin: URL, options: { salesOpen?: boolean } = {}): Record<string, unknown> {
   const url = origin.href.replace(/\/$/, "");
   return {
     "@context": "https://schema.org",
@@ -62,13 +62,18 @@ export function homeStructuredData(origin: URL): Record<string, unknown> {
         description:
           "Pieza digital con código QR para enlaces, redes sociales, WhatsApp, Wi-Fi, contactos o reseñas de Google, en formatos para imprimir o publicar. Archivos PNG, SVG y PDF.",
         brand: { "@id": `${url}/#organization` },
-        offers: {
-          "@type": "Offer",
-          price: String(PIECE_PRICE_ARS),
-          priceCurrency: PIECE_CURRENCY,
-          availability: "https://schema.org/OnlineOnly",
-          url: `${url}/empezar`,
-        },
+        // A price is published only while it can be paid.
+        ...(options.salesOpen
+          ? {
+              offers: {
+                "@type": "Offer",
+                price: String(PIECE_PRICE_ARS),
+                priceCurrency: PIECE_CURRENCY,
+                availability: "https://schema.org/OnlineOnly",
+                url: `${url}/empezar`,
+              },
+            }
+          : {}),
       },
     ],
   };

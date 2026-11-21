@@ -1,7 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { ImageResponse } from "next/og";
-import { PIECE_PRICE_ARS, formatArs } from "@/lib/pricing";
 
 export const alt = "AtajoLab QR: códigos QR con diseño listo para usar";
 export const size = { width: 1200, height: 630 };
@@ -41,7 +40,7 @@ export default function OpenGraphImage() {
           </div>
         </div>
         <div style={{ display: "flex", fontSize: 30, color: "#5b544b" }}>
-          {`PNG, SVG y PDF · ${formatArs(PIECE_PRICE_ARS)}`}
+          PNG, SVG y PDF
         </div>
       </div>
     ),

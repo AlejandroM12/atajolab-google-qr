@@ -9,7 +9,9 @@ import { OrderAccessLink } from "@/components/order-access-link";
 import { OrderDownloads } from "@/components/order-downloads";
 import { OrderPaymentActions } from "@/components/order-payment-actions";
 import { premiumPhrases, premiumTemplates, signageFormatSpec, templateSpec } from "@/lib/artwork";
-import { formatArs, PIECE_CURRENCY, PIECE_PRICE_ARS } from "@/lib/pricing";
+import { SalesAware } from "@/components/sales-aware";
+import { orderFreeNote } from "@/lib/commercial-copy";
+import { formatArs } from "@/lib/pricing";
 import { orderDeliverable } from "@/lib/delivery";
 import type { PaymentView } from "@/lib/payments/checkout-policy";
 import type { StoredOrder } from "@/lib/orders";
@@ -144,9 +146,11 @@ function OrderLayout({
         </dl>
         <div className="mt-8 space-y-3 text-sm leading-relaxed text-muted">
           <p>
-            {free
-              ? `Ya podés descargar los archivos. Los siguientes QR cuestan ${formatArs(PIECE_PRICE_ARS)} ${PIECE_CURRENCY}.`
-              : viewCopy[view]}
+            {free ? (
+              <SalesAware fallback={orderFreeNote(false)}>{(salesOpen) => orderFreeNote(salesOpen)}</SalesAware>
+            ) : (
+              viewCopy[view]
+            )}
           </p>
           {notes}
           {!paymentsReady && order.status === "PENDING" ? (

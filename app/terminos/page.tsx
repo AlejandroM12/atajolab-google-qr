@@ -2,7 +2,8 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { LegalPage, LegalSection, LegalValue } from "@/components/legal-page";
 import { legal } from "@/lib/legal";
-import { formatArs, PIECE_PRICE_ARS } from "@/lib/pricing";
+import { SalesAware } from "@/components/sales-aware";
+import { termsPriceText } from "@/lib/commercial-copy";
 
 export const metadata: Metadata = {
   title: "Términos y condiciones",
@@ -47,8 +48,8 @@ export default function TermsPage() {
 
       <LegalSection title="3. Precio y pago">
         <p>
-          El precio es {formatArs(PIECE_PRICE_ARS)} en pesos argentinos por pieza, pago único. Condición fiscal del
-          vendedor: <LegalValue value={legal.taxCondition} />.
+          <SalesAware fallback={termsPriceText(false)}>{(salesOpen) => termsPriceText(salesOpen)}</SalesAware>{" "}
+          Condición fiscal del vendedor: <LegalValue value={legal.taxCondition} />.
         </p>
         <p>
           El pago se procesa con Mercado Pago. {legal.tradeName} no recibe ni guarda datos de tarjetas. El pedido se

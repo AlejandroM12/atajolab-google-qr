@@ -280,9 +280,13 @@ import { createHash } from "node:crypto";
   assert.equal(siteUrl({ APP_URL: "javascript:alert(1)" }).href, "https://qr.atajolab.dev/");
   assert.equal(siteUrl({}).href, "https://qr.atajolab.dev/");
   assert.equal(PUBLIC_PATHS.some((path) => path.startsWith("/pedido") || path.startsWith("/acceso")), false);
-  const data = jsonLd(homeStructuredData(new URL("https://qr.example.com")));
+  const data = jsonLd(homeStructuredData(new URL("https://qr.example.com"), { salesOpen: true }));
   assert.equal(data.includes("</script>"), false);
   assert.ok(data.includes('"priceCurrency":"ARS"'));
+  // A price is published only while it can be paid.
+  const closed = jsonLd(homeStructuredData(new URL("https://qr.example.com")));
+  assert.equal(closed.includes('"price"'), false);
+  assert.equal(closed.includes('"Offer"'), false);
   assert.equal(jsonLd({ x: "</script><script>" }).includes("</script>"), false);
 }
 

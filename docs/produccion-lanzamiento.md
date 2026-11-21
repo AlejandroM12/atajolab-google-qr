@@ -163,3 +163,12 @@ En los comandos, `APP=https://qr.atajolab.dev` y `OPS=<valor de MAIL_DISPATCH_SE
 8. **Autoguardado en sessionStorage**: cerrar la pestaña pierde el borrador (P2).
 9. **La aceptación de términos se exige en el servidor** (`acceptedTerms: true` en `POST /api/orders`) y queda en los logs (`order.terms-accepted`, con la versión de los textos), pero **no en la base**. Para evidencia durable, sumar `Order.termsAcceptedAt` (requiere una migración nueva).
 10. **Bloqueo de ventas por datos legales**: en producción `studioSalesOpen` mantiene cerrado el checkout mientras `lib/legal.ts` tenga `[COMPLETAR]`, aunque `STUDIO_CHECKOUT_ENABLED=true`.
+
+## Cómo se abren las ventas (y qué cambia solo en el sitio)
+
+Hoy está abierto solo el primer QR gratis (`FREE_FIRST_QR_ENABLED`). Las ventas se abren cuando se cumplen **las dos** condiciones de `studioSalesOpen()`:
+
+1. `STUDIO_CHECKOUT_ENABLED=true` y las credenciales de Mercado Pago (`MERCADOPAGO_*`) cargadas en el servidor.
+2. Los datos del vendedor completos en `lib/legal.ts` (CUIT, condición fiscal y domicilio legal; ver `legalDataComplete()`). Mientras haya un `[COMPLETAR: …]`, producción no vende.
+
+Los textos públicos de precio y pago (landing, preguntas frecuentes, términos, resumen del pedido, panel de descarga y datos estructurados) siguen ese mismo estado (`lib/commercial-copy.ts` y `components/sales-aware.tsx`): con las ventas cerradas no muestran precio ni ofrecen una compra, y al abrirse vuelven solos, sin tocar el código. No hay un interruptor aparte.

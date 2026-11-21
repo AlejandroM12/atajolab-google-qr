@@ -1,7 +1,8 @@
 import { connection } from "next/server";
 import { Suspense } from "react";
 import { freeFirstQrOpen } from "@/lib/free-first-qr";
-import { formatArs, PIECE_CURRENCY, PIECE_PRICE_ARS } from "@/lib/pricing";
+import { nextQrNote } from "@/lib/commercial-copy";
+import { studioSalesOpen } from "@/lib/studio/checkout-access";
 
 /** "Tu primer QR es gratis" note. Read per request so the server switch applies without a rebuild. */
 export function FreeFirstNote({ variant }: { variant: "hero" | "price" }) {
@@ -25,7 +26,7 @@ async function FreeFirstNoteContent({ variant }: { variant: "hero" | "price" }) 
   return (
     <p className="mb-4 text-sm leading-relaxed text-foreground/80">
       <span className="font-semibold text-accent-strong">Tu primer QR es gratis.</span> Uno por navegador y por
-      correo. Los siguientes cuestan {formatArs(PIECE_PRICE_ARS)} {PIECE_CURRENCY}.
+      correo. {nextQrNote(studioSalesOpen())}
     </p>
   );
 }
