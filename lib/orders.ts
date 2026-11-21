@@ -458,11 +458,20 @@ export async function applyVerifiedPayment(
 
   if (!enqueued) return;
 
-  try {
-    await (options?.dispatch ?? defaultPurchaseDispatch)(publicId);
-  } catch (error) {
-    logError("mail.purchase-dispatch-failed", error, { publicId });
+  if (options?.dispatch) {
+    try {
+      await options.dispatch(publicId);
+    } catch (error) {
+      logError("mail.purchase-dispatch-failed", error, { publicId });
+    }
+    return;
   }
+
+  // The purchase mail renders and attaches the three files, which takes seconds: do not hold the
+  // payment notification open for it. The durable queue (cron) retries anything that does not go out.
+  void defaultPurchaseDispatch(publicId).catch((error) => {
+    logError("mail.purchase-dispatch-failed", error, { publicId });
+  });
 }
 
 async function defaultPurchaseDispatch(orderPublicId: string): Promise<void> {

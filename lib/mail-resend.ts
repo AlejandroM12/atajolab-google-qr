@@ -2,6 +2,14 @@ import { parseBuyerEmail } from "@/lib/buyer-email";
 import type { MailSender } from "@/lib/mail";
 
 const RESEND_API = "https://api.resend.com";
+const SEND_TIMEOUT_MS = 8000;
+/** Attachments are base64-encoded in the request: give the upload more time. */
+const SEND_WITH_ATTACHMENTS_TIMEOUT_MS = 40_000;
+/**
+ * Resend accepts up to 40 MB per message after base64 encoding, and Gmail refuses to receive more than
+ * 25 MB. Base64 adds a third, so 15 MB of raw files stays below both with room for the HTML.
+ */
+export const MAIL_ATTACHMENT_BUDGET_BYTES = 15 * 1024 * 1024;
 const HEADER_BREAK = /[\u0000-\u001F\u007F]/;
 const DISPLAY_FROM = /^([^<>]+)<([^<>]+)>$/;
 
@@ -27,11 +35,14 @@ export function createResendSender(config: ResendConfig, fetchImpl: ResendFetch 
     async send(message) {
       const to = parseBuyerEmail(message.to);
       if (!to || message.subject.includes("\n") || message.subject.includes("\r")) return "refused";
+      const replyTo = message.replyTo ? parseBuyerEmail(message.replyTo) : null;
+      const attached = (message.attachments ?? []).reduce((sum, attachment) => sum + attachment.content.length, 0);
+      if (attached > MAIL_ATTACHMENT_BUDGET_BYTES) return "refused";
       try {
         const response = await fetchImpl(`${RESEND_API}/emails`, {
           method: "POST",
           redirect: "error",
-          signal: AbortSignal.timeout(8000),
+          signal: AbortSignal.timeout(message.attachments?.length ? SEND_WITH_ATTACHMENTS_TIMEOUT_MS : SEND_TIMEOUT_MS),
           headers: {
             authorization: `Bearer ${config.apiKey}`,
             "content-type": "application/json",
@@ -41,6 +52,17 @@ export function createResendSender(config: ResendConfig, fetchImpl: ResendFetch 
             to: [to],
             subject: message.subject,
             text: message.text,
+            ...(message.html ? { html: message.html } : {}),
+            ...(replyTo ? { reply_to: replyTo } : {}),
+            ...(message.attachments?.length
+              ? {
+                  attachments: message.attachments.map((attachment) => ({
+                    filename: attachment.filename,
+                    content: attachment.content.toString("base64"),
+                    content_type: attachment.contentType,
+                  })),
+                }
+              : {}),
           }),
         });
         await discard(response);

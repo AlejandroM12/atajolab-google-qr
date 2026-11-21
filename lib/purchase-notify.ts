@@ -6,10 +6,15 @@ import {
   issueAccessLink,
   linkCapOpen,
   MAX_ACTIVE_ACCESS_LINKS,
-  purchaseMail,
+  PURCHASE_ACCESS_LINK_TTL_MS,
   type AccessLinkRecord,
 } from "@/lib/access-link";
 import { isDatabaseUnavailable } from "@/lib/db-error";
+import { supportMailbox } from "@/lib/legal";
+import { logError } from "@/lib/log";
+import { PIECE_CURRENCY, PIECE_PRICE_ARS } from "@/lib/pricing";
+import { buildPurchaseEmail } from "@/lib/purchase-email";
+import { fitsInMail, loadPurchaseArtwork, renderPurchaseFiles, type PurchaseFile } from "@/lib/purchase-files";
 import { prisma } from "@/lib/db";
 import { createMailSender, type MailResult, type MailSender } from "@/lib/mail";
 import { orderArtworkLabel } from "@/lib/order-label";
@@ -27,7 +32,16 @@ export type PurchaseNotifyOrder = {
   status: string;
   buyerEmail: string | null;
   artwork: unknown;
+  amountArs?: number;
+  currency?: string;
+  paidAt?: Date | null;
 };
+
+/** Renders the files of a PAID order. Throws when they cannot be produced. */
+export type PurchaseFilesLoader = (orderId: string) => Promise<PurchaseFile[]>;
+
+/** Claims 1..N try to attach the files; later ones send the mail with the download button only. */
+export const MAIL_ATTACHMENT_ATTEMPTS = 3;
 
 export type MailNotificationRow = {
   id: string;
@@ -45,6 +59,8 @@ export type MailNotificationRow = {
 
 export type PurchaseNotifyStore = {
   findOrder(publicId: string): Promise<PurchaseNotifyOrder | null>;
+  /** Puts a finished or failed notification back in the queue for a controlled resend. */
+  requeue(orderId: string, now: Date): Promise<"requeued" | "busy">;
   countActiveLinks(orderId: string, now: Date): Promise<number>;
   saveLink(record: AccessLinkRecord): Promise<boolean>;
   revoke(tokenHashes: string[]): Promise<void>;
@@ -110,6 +126,8 @@ export async function dispatchPurchaseAccessMail(
     secret?: string;
     orderId?: string;
     limit?: number;
+    /** Renders the files to attach. Default: the real exporters, only with the real database store. */
+    loadFiles?: PurchaseFilesLoader | null;
   } = {},
 ): Promise<DispatchPurchaseResult> {
   const now = deps.now ?? new Date();
@@ -121,6 +139,7 @@ export async function dispatchPurchaseAccessMail(
   const sender = deps.sender ?? createMailSender();
   const secret = deps.secret ?? orderAccessSecret(process.env);
   const limit = Math.max(1, Math.min(deps.limit ?? 20, 50));
+  const loadFiles = deps.loadFiles !== undefined ? deps.loadFiles : deps.store ? null : renderStoredPurchaseFiles;
 
   await store.reclaimStale(now, new Date(now.getTime() - MAIL_NOTIFY_STALE_MS));
 
@@ -161,6 +180,7 @@ export async function dispatchPurchaseAccessMail(
       sender,
       origin,
       secret,
+      loadFiles,
     });
     tally[outcome] += 1;
   }
@@ -341,6 +361,7 @@ async function processClaimedNotification(
     sender: MailSender;
     origin: string | null;
     secret: string;
+    loadFiles: PurchaseFilesLoader | null;
   },
 ): Promise<"sent" | "held" | "retryable" | "failed" | "skipped"> {
   if (row.attempts > MAIL_NOTIFY_MAX_ATTEMPTS) {
@@ -380,26 +401,66 @@ async function processClaimedNotification(
     accessTokenHash: prepared.tokenHash,
   };
 
-  const mail = purchaseMail({
-    origin: deps.origin,
-    label: orderArtworkLabel(order.artwork),
-    publicId: row.orderId,
-    token: prepared.token,
-  });
-  if (!mail || !accessLinkUrl(deps.origin, prepared.token)) {
+  const accessUrl = accessLinkUrl(deps.origin, prepared.token);
+  if (!accessUrl) {
     await failAndRevoke(liveRow, deps.store, "mail-build");
     return "failed";
   }
 
-  let result: MailResult = "refused";
-  try {
-    result = await deps.sender.send({
-      to: order.buyerEmail,
+  // The files travel with the mail while the first attempts work; if rendering or the provider keeps
+  // failing, the mail still goes out with the download button, never losing the purchase notice.
+  const tryAttachments = deps.loadFiles !== null && row.attempts <= MAIL_ATTACHMENT_ATTEMPTS;
+  let files: PurchaseFile[] = [];
+  if (tryAttachments && deps.loadFiles) {
+    try {
+      files = await deps.loadFiles(row.orderId);
+    } catch (error) {
+      logError("mail.purchase-files-failed", error, { publicId: row.orderId, attempt: row.attempts });
+      await scheduleRetry(liveRow, deps.store, deps.now, "files-render");
+      return "retryable";
+    }
+  }
+
+  const compose = (withFiles: boolean) => {
+    const mail = buildPurchaseEmail({
+      origin: deps.origin!,
+      label: orderArtworkLabel(order.artwork),
+      publicId: row.orderId,
+      amountArs: order.amountArs ?? PIECE_PRICE_ARS,
+      currency: order.currency ?? PIECE_CURRENCY,
+      paidAt: order.paidAt ?? null,
+      accessUrl,
+      files: withFiles
+        ? files.map((file) => ({ format: file.format, filename: file.filename, bytes: file.content.length }))
+        : (["png", "pdf", "svg"] as const).map((format) => ({ format, filename: null, bytes: null })),
+      attached: withFiles,
+      supportEmail: supportMailbox(),
+    });
+    return {
+      to: order.buyerEmail!,
       subject: mail.subject,
       text: mail.text,
-    });
+      html: mail.html,
+      ...(supportMailbox() ? { replyTo: supportMailbox()! } : {}),
+      ...(withFiles ? { attachments: files } : {}),
+    };
+  };
+
+  const attach = files.length > 0 && fitsInMail(files);
+  let result: MailResult = "refused";
+  try {
+    result = await deps.sender.send(compose(attach));
   } catch {
     result = "retryable";
+  }
+  if (attach && result === "refused") {
+    // The provider rejected the message with its files (size, type): fall back to the download button.
+    logError("mail.purchase-attachments-refused", undefined, { publicId: row.orderId });
+    try {
+      result = await deps.sender.send(compose(false));
+    } catch {
+      result = "retryable";
+    }
   }
 
   if (result === "sent" || result === "held") {
@@ -415,6 +476,26 @@ async function processClaimedNotification(
 
   await failAndRevoke(liveRow, deps.store, "provider-refused");
   return "failed";
+}
+
+async function renderStoredPurchaseFiles(orderId: string): Promise<PurchaseFile[]> {
+  const artwork = await loadPurchaseArtwork(orderId);
+  if (!artwork) throw new Error("purchase-artwork-unreadable");
+  return renderPurchaseFiles(artwork, orderId);
+}
+
+/**
+ * Controlled resend of the purchase mail (operator action). Only a PAID order with a mail address qualifies;
+ * nothing is charged and the access link is a fresh one. Mail that is still queued or being sent is left alone.
+ */
+export async function resendPurchaseMail(
+  orderId: string,
+  deps: { now?: Date; store?: PurchaseNotifyStore } = {},
+): Promise<"requeued" | "busy" | "not-payable"> {
+  const store = deps.store ?? prismaPurchaseNotifyStore();
+  const order = await store.findOrder(orderId);
+  if (!order || order.status !== "PAID" || !order.buyerEmail) return "not-payable";
+  return store.requeue(orderId, deps.now ?? new Date());
 }
 
 async function ensureAccessToken(
@@ -449,7 +530,7 @@ async function ensureAccessToken(
     return { ok: false, fatal: false, error: "link-cap" };
   }
 
-  const issued = issueAccessLink(row.orderId, deps.now);
+  const issued = issueAccessLink(row.orderId, deps.now, PURCHASE_ACCESS_LINK_TTL_MS);
   const saved = await deps.store.saveLink(issued.record);
   if (!saved) return { ok: false, fatal: false, error: "link-save" };
 
@@ -501,6 +582,7 @@ type PrismaLike = {
     updateMany: typeof prisma.mailNotification.updateMany;
     update: typeof prisma.mailNotification.update;
     findUnique: typeof prisma.mailNotification.findUnique;
+    create: typeof prisma.mailNotification.create;
   };
 };
 
@@ -509,8 +591,24 @@ function prismaPurchaseNotifyStore(client: PrismaLike = prisma): PurchaseNotifyS
     async findOrder(publicId) {
       return client.order.findUnique({
         where: { id: publicId },
-        select: { status: true, buyerEmail: true, artwork: true },
+        select: { status: true, buyerEmail: true, artwork: true, amountArs: true, currency: true, paidAt: true },
       });
+    },
+    async requeue(orderId, now) {
+      const reset = await client.mailNotification.updateMany({
+        where: { orderId, kind: PURCHASE_ACCESS_KIND, status: { in: ["SENT", "FAILED"] } },
+        data: { status: "PENDING", attempts: 0, nextAttemptAt: now, lastError: null },
+      });
+      if (reset.count === 1) return "requeued";
+      const existing = await client.mailNotification.findUnique({
+        where: { orderId_kind: { orderId, kind: PURCHASE_ACCESS_KIND } },
+        select: { id: true },
+      });
+      if (existing) return "busy";
+      await client.mailNotification.create({
+        data: { orderId, kind: PURCHASE_ACCESS_KIND, status: "PENDING", nextAttemptAt: now },
+      });
+      return "requeued";
     },
     async countActiveLinks(orderId, now) {
       return client.downloadAccessLink.count({

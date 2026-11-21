@@ -2,12 +2,13 @@ import assert from "node:assert/strict";
 import {
   ACCESS_TOKEN_PATTERN,
   hashAccessToken,
-  purchaseMail,
   recoveryMail,
   type AccessLinkRecord,
 } from "./access-link.ts";
 import { orderArtworkLabel } from "./order-label.ts";
+import { buildPurchaseEmail } from "./purchase-email.ts";
 import type { MailMessage, MailResult, MailSender } from "./mail.ts";
+import type { PurchaseFile } from "./purchase-files.ts";
 import {
   artworkFilename,
   studioCommercialFilename,
@@ -19,6 +20,7 @@ import {
   mailNotifyBackoffMs,
   openAccessToken,
   PURCHASE_ACCESS_KIND,
+  resendPurchaseMail,
   runMailDispatchJob,
   sealAccessToken,
   type MailNotificationRow,
@@ -108,6 +110,18 @@ function memoryNotify(order: PurchaseNotifyOrder | null, seed: MailNotificationR
   const store: PurchaseNotifyStore = {
     async findOrder() {
       return order;
+    },
+    async requeue(orderId, moment) {
+      for (const row of notes.values()) {
+        if (row.orderId !== orderId) continue;
+        if (row.status !== "SENT" && row.status !== "FAILED") return "busy";
+        row.status = "PENDING";
+        row.attempts = 0;
+        row.nextAttemptAt = moment;
+        row.lastError = null;
+        return "requeued";
+      }
+      return "busy";
     },
     async countActiveLinks(orderId, moment) {
       let count = 0;
@@ -257,16 +271,52 @@ function memoryRecovery(orders: RecoveryCandidate[]) {
 {
   assert.equal(orderArtworkLabel(v8Artwork("Café Studio Sur")), "Café Studio Sur");
   assert.equal(orderArtworkLabel(v7Artwork("Panadería Norte")), "Panadería Norte");
-  const mail = purchaseMail({
+  const mail = buildPurchaseEmail({
     origin,
     label: "Café Studio Sur",
     publicId,
-    token: "a".repeat(43),
+    amountArs: 4900,
+    currency: "ARS",
+    paidAt: new Date("2026-11-21T15:30:00Z"),
+    accessUrl: `${origin}/acceso/${"a".repeat(43)}`,
+    files: [
+      { format: "png", filename: "studio-clasico-cafe.png", bytes: 220_000 },
+      { format: "pdf", filename: "studio-clasico-cafe.pdf", bytes: 90_000 },
+      { format: "svg", filename: "studio-clasico-cafe.svg", bytes: 30_000 },
+    ],
+    attached: true,
+    supportEmail: "ayuda@example.com",
   });
-  assert.ok(mail);
-  assert.equal(mail.text.includes("ORDER_ACCESS_SECRET"), false);
-  assert.equal(mail.text.includes("draftKey"), false);
-  assert.equal(mail.text.includes("asset-private"), false);
+  for (const body of [mail.text, mail.html]) {
+    assert.equal(body.includes("ORDER_ACCESS_SECRET"), false);
+    assert.equal(body.includes("draftKey"), false);
+    assert.equal(body.includes("asset-private"), false);
+    assert.equal(body.includes("Café Studio Sur"), true);
+    assert.match(body, /4\.900 ARS/, "the amount is shown");
+    for (const name of ["studio-clasico-cafe.png", "studio-clasico-cafe.pdf", "studio-clasico-cafe.svg"]) {
+      assert.equal(body.includes(name), true, name);
+    }
+  }
+  assert.equal(mail.html.includes("/brand/atajolab-logo-email.png"), true);
+  assert.equal(mail.html.includes('name="viewport"'), true);
+  assert.equal(mail.html.includes("Descargar mis archivos"), true);
+  assert.equal(mail.text.includes("vence en 7 días"), true);
+  // Text is escaped in the HTML, never injected.
+  const hostile = buildPurchaseEmail({
+    origin,
+    label: '<img src=x onerror=alert(1)>"',
+    publicId,
+    amountArs: 4900,
+    currency: "ARS",
+    paidAt: null,
+    accessUrl: `${origin}/acceso/${"a".repeat(43)}`,
+    files: [{ format: "png", filename: null, bytes: null }],
+    attached: false,
+    supportEmail: null,
+  });
+  assert.equal(hostile.html.includes("<img src=x"), false);
+  assert.equal(hostile.html.includes("&lt;img src=x"), true);
+  assert.equal(hostile.text.includes("Tus tres archivos están listos para descargar"), true);
 }
 
 {
@@ -589,6 +639,156 @@ function memoryRecovery(orders: RecoveryCandidate[]) {
     artworkFilename("tarjeta-resena", "Café del Centro", "pdf"),
     "tarjeta-resena-cafe-del-centro.pdf",
   );
+}
+
+
+// Purchase mail: HTML + text, the three files attached, fresh access link, sent once.
+function fakeFiles(sizes = [200_000, 80_000, 30_000]): PurchaseFile[] {
+  return [
+    { format: "png", filename: "studio-clasico-cafe.png", content: Buffer.alloc(sizes[0]!, 1), contentType: "image/png" },
+    { format: "pdf", filename: "studio-clasico-cafe.pdf", content: Buffer.alloc(sizes[1]!, 2), contentType: "application/pdf" },
+    { format: "svg", filename: "studio-clasico-cafe.svg", content: Buffer.alloc(sizes[2]!, 3), contentType: "image/svg+xml" },
+  ];
+}
+
+{
+  const paid = memoryNotify(
+    { status: "PAID", buyerEmail: buyer, artwork: v8Artwork("Café Studio Sur"), amountArs: 4900, currency: "ARS", paidAt: now },
+    [pendingRow()],
+  );
+  const outbox = sender("sent");
+  const result = await dispatchPurchaseAccessMail({
+    now,
+    originHref: origin,
+    sender: outbox,
+    store: paid.store,
+    secret,
+    orderId: publicId,
+    loadFiles: async () => fakeFiles(),
+  });
+  assert.equal(result.sent, 1);
+  const message = outbox.messages[0]!;
+  assert.ok(message.html && message.html.includes("<html"), "html part");
+  assert.ok(message.text.length > 0, "text alternative");
+  assert.deepEqual(
+    message.attachments?.map((file) => file.filename),
+    ["studio-clasico-cafe.png", "studio-clasico-cafe.pdf", "studio-clasico-cafe.svg"],
+  );
+  assert.equal(message.text.includes("Adjuntamos a este correo"), true);
+  // The link lives for the purchase window, not 30 minutes.
+  const expires = [...paid.links.values()][0]!.expiresAt.getTime();
+  assert.equal(expires - now.getTime(), 7 * 24 * 60 * 60 * 1000);
+
+  // A second dispatch for the same order sends nothing: the notification is already SENT.
+  const again = await dispatchPurchaseAccessMail({
+    now: new Date(now.getTime() + 60_000),
+    originHref: origin,
+    sender: outbox,
+    store: paid.store,
+    secret,
+    orderId: publicId,
+    loadFiles: async () => fakeFiles(),
+  });
+  assert.equal(again.claimed, 0);
+  assert.equal(outbox.calls, 1, "no duplicate mail");
+
+  // Controlled resend: back in the queue, a new mail with a fresh link, nobody is charged.
+  assert.equal(await resendPurchaseMail(publicId, { now, store: paid.store }), "requeued");
+  assert.equal(await resendPurchaseMail(publicId, { now, store: paid.store }), "busy", "already queued");
+  const resent = await dispatchPurchaseAccessMail({
+    now,
+    originHref: origin,
+    sender: outbox,
+    store: paid.store,
+    secret,
+    orderId: publicId,
+    loadFiles: async () => fakeFiles(),
+  });
+  assert.equal(resent.sent, 1);
+  assert.equal(outbox.calls, 2);
+}
+
+{
+  // Only PAID orders can be resent.
+  const unpaid = memoryNotify({ status: "PENDING", buyerEmail: buyer, artwork: v8Artwork("x") }, [pendingRow()]);
+  assert.equal(await resendPurchaseMail(publicId, { now, store: unpaid.store }), "not-payable");
+}
+
+{
+  // Files too big for one mail: the message still goes out, with the download button only.
+  const paid = memoryNotify({ status: "PAID", buyerEmail: buyer, artwork: v8Artwork("Grande") }, [pendingRow()]);
+  const outbox = sender("sent");
+  const result = await dispatchPurchaseAccessMail({
+    now,
+    originHref: origin,
+    sender: outbox,
+    store: paid.store,
+    secret,
+    orderId: publicId,
+    loadFiles: async () => fakeFiles([9 * 1024 * 1024, 5 * 1024 * 1024, 3 * 1024 * 1024]),
+  });
+  assert.equal(result.sent, 1);
+  assert.equal(outbox.messages[0]?.attachments, undefined);
+  assert.equal(outbox.messages[0]?.text.includes("/acceso/"), true);
+  assert.equal(outbox.messages[0]?.text.includes("Tus tres archivos están listos para descargar"), true);
+}
+
+{
+  // The provider refuses the message with attachments: send once more without them.
+  const paid = memoryNotify({ status: "PAID", buyerEmail: buyer, artwork: v8Artwork("Rechazo") }, [pendingRow()]);
+  let calls = 0;
+  const outbox = sender(() => (++calls === 1 ? "refused" : "sent"));
+  const result = await dispatchPurchaseAccessMail({
+    now,
+    originHref: origin,
+    sender: outbox,
+    store: paid.store,
+    secret,
+    orderId: publicId,
+    loadFiles: async () => fakeFiles(),
+  });
+  assert.equal(result.sent, 1);
+  assert.equal(outbox.messages.length, 2);
+  assert.ok(outbox.messages[0]?.attachments);
+  assert.equal(outbox.messages[1]?.attachments, undefined);
+  assert.equal(paid.notes.get("note-1")?.status, "SENT");
+}
+
+{
+  // Rendering fails: no mail yet, the notification is retried, the order is untouched, later claims fall back.
+  const paid = memoryNotify({ status: "PAID", buyerEmail: buyer, artwork: v8Artwork("Falla") }, [pendingRow()]);
+  const outbox = sender("sent");
+  let moment = now;
+  const failing = async (): Promise<PurchaseFile[]> => {
+    throw new Error("render exploded");
+  };
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
+    const result = await dispatchPurchaseAccessMail({
+      now: moment,
+      originHref: origin,
+      sender: outbox,
+      store: paid.store,
+      secret,
+      orderId: publicId,
+      loadFiles: failing,
+    });
+    assert.equal(result.retryable, 1, "attempt " + attempt);
+    assert.equal(paid.notes.get("note-1")?.status, "PENDING");
+    assert.equal(paid.notes.get("note-1")?.lastError, "files-render");
+    moment = new Date(moment.getTime() + 25 * 60 * 60 * 1000);
+  }
+  assert.equal(outbox.calls, 0);
+  const last = await dispatchPurchaseAccessMail({
+    now: moment,
+    originHref: origin,
+    sender: outbox,
+    store: paid.store,
+    secret,
+    orderId: publicId,
+    loadFiles: failing,
+  });
+  assert.equal(last.sent, 1, "after repeated failures the mail goes out with the button");
+  assert.equal(outbox.messages[0]?.attachments, undefined);
 }
 
 console.log("purchase notify checks passed");

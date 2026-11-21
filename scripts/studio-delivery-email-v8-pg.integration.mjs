@@ -213,7 +213,20 @@ try {
   assert.ok(purchase);
   assert.equal(String(purchase.text).includes(designLabel), true);
   assert.equal(String(purchase.text).includes(created.publicId), true);
-  assert.equal(String(purchase.text).includes("PNG, SVG y PDF"), true);
+  // HTML part, plus the three rendered files from the stored order (real exporters, real asset store).
+  assert.equal(String(purchase.html).includes("Descargar mis archivos"), true);
+  assert.equal(String(purchase.html).includes(put.asset.id), false);
+  assert.deepEqual(
+    purchase.attachments.map((file) => file.filename.split(".").pop()),
+    ["png", "pdf", "svg"],
+  );
+  for (const file of purchase.attachments) {
+    assert.equal(file.bytes > 1000, true, file.filename);
+    const body = await readFile(path.join(mailDir, file.file));
+    if (file.filename.endsWith(".png")) assert.equal(body.subarray(1, 4).toString("latin1"), "PNG");
+    if (file.filename.endsWith(".pdf")) assert.equal(body.subarray(0, 5).toString("latin1"), "%PDF-");
+    if (file.filename.endsWith(".svg")) assert.equal(body.toString("utf8").includes("<svg"), true);
+  }
   assert.equal(String(purchase.text).includes(put.asset.id), false);
   assert.equal(String(purchase.text).includes("draftKey"), false);
   assert.equal(String(purchase.text).includes(originalDeliveryKey), false);

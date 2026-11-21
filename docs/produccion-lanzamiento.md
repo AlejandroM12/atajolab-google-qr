@@ -175,3 +175,11 @@ Hoy está abierto solo el primer QR gratis (`FREE_FIRST_QR_ENABLED`). La venta d
 3. Los términos, la privacidad y los reembolsos publicados fueron revisados para cobrar (identificación del vendedor según la Ley 24.240: CUIT, condición fiscal y domicilio en `lib/legal.ts` cuando existan).
 
 Los textos públicos de precio y pago (landing, preguntas frecuentes, términos, resumen del pedido, panel de descarga y datos estructurados) siguen el estado real de la compra (`purchasesAvailable()` en `lib/payments/availability.ts`): sin venta abierta o con Mercado Pago sin configurar no muestran precio ni ofrecen una compra, y cuando se puede pagar vuelven solos. Las descargas pagas siguen exigiendo un pago aprobado y verificado contra la API de Mercado Pago (`PAID`).
+
+## Correo de compra
+
+Cuando un pedido pasa a PAID se encola una sola notificación (`MailNotification`, única por pedido) y el job de correo la envía: HTML + texto, con el PNG, el PDF y el SVG del diseño comprado adjuntos (los mismos exportadores y nombres que la página del pedido) y un botón con un enlace de acceso de respaldo.
+
+- **Enlace:** de un solo uso y vence a los 7 días (el de "Recuperar descargas" sigue siendo de 30 minutos). El GET del enlace no lo consume; lo canjea el botón de la página de confirmación.
+- **Adjuntos:** hasta 15 MB en total (Resend admite 40 MB codificado y Gmail 25 MB). Si no entran, o el proveedor rechaza el mensaje con adjuntos, sale el mismo correo solo con el botón. Si el render de los archivos falla se reintenta; desde el 4.º intento sale con el botón.
+- **Reenvío controlado (sin cobrar):** `POST /api/mail/resend` con `Authorization: Bearer $MAIL_DISPATCH_SECRET` y cuerpo `{"publicId":"…"}`. Solo pedidos PAID con correo; si el correo está en cola o enviándose responde 409. Genera un enlace nuevo.

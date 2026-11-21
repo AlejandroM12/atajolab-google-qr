@@ -3,7 +3,7 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { createMailSender } from "./mail.ts";
-import { createResendSender, readResendConfig, type ResendFetch } from "./mail-resend.ts";
+import { createResendSender, MAIL_ATTACHMENT_BUDGET_BYTES, readResendConfig, type ResendFetch } from "./mail-resend.ts";
 import { recoveryAcknowledgement, requestRecovery, type RecoveryCandidate, type RecoveryStore } from "./recovery.ts";
 
 const apiKey = `re_${"a".repeat(8)}_${"b".repeat(24)}`;
@@ -272,6 +272,81 @@ function memory(orders: RecoveryCandidate[]) {
     assert.equal(logged.some((entry) => JSON.stringify(entry).includes(echoed)), false);
   } finally {
     console.error = original;
+    await rm(directory, { recursive: true, force: true });
+  }
+}
+
+// HTML, attachments and reply-to travel to Resend as the API expects; the size budget is enforced.
+{
+  const { calls, fetchImpl } = fakeResend({});
+  const resend = createResendSender({ apiKey, from }, fetchImpl);
+  const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 1, 2, 3]);
+  const outcome = await resend.send({
+    to: buyer,
+    subject: "Tu compra",
+    text: "texto",
+    html: "<p>hola</p>",
+    replyTo: "ayuda@comercio.test",
+    attachments: [{ filename: "diseno.png", content: png, contentType: "image/png" }],
+  });
+  assert.equal(outcome, "sent");
+  const body = calls[0]?.body as {
+    html: string;
+    text: string;
+    reply_to: string;
+    attachments: { filename: string; content: string; content_type: string }[];
+  };
+  assert.equal(body.html, "<p>hola</p>");
+  assert.equal(body.text, "texto");
+  assert.equal(body.reply_to, "ayuda@comercio.test");
+  assert.equal(body.attachments[0]?.filename, "diseno.png");
+  assert.equal(body.attachments[0]?.content_type, "image/png");
+  assert.deepEqual(Buffer.from(body.attachments[0]!.content, "base64"), png);
+
+  const tooBig = await resend.send({
+    to: buyer,
+    subject: "Tu compra",
+    text: "texto",
+    attachments: [{ filename: "enorme.png", content: Buffer.alloc(MAIL_ATTACHMENT_BUDGET_BYTES + 1), contentType: "image/png" }],
+  });
+  assert.equal(tooBig, "refused");
+  assert.equal(calls.length, 1, "an oversize message is not even sent");
+
+  // The provider rejecting the payload (413/422) is permanent; a 5xx is worth another try.
+  assert.equal(
+    await createResendSender({ apiKey, from }, fakeResend({ emailStatus: 413 }).fetchImpl).send({ to: buyer, subject: "x", text: "y" }),
+    "refused",
+  );
+  assert.equal(
+    await createResendSender({ apiKey, from }, fakeResend({ emailStatus: 503 }).fetchImpl).send({ to: buyer, subject: "x", text: "y" }),
+    "retryable",
+  );
+}
+
+// The local outbox keeps the attachments as files so a message can be inspected end to end.
+{
+  const directory = await mkdtemp(path.join(tmpdir(), "mail-attach-"));
+  try {
+    const local = createMailSender({ NODE_ENV: "development" }, directory);
+    const content = Buffer.from("pdf-bytes");
+    assert.equal(
+      await local.send({
+        to: buyer,
+        subject: "s",
+        text: "t",
+        html: "<b>h</b>",
+        attachments: [{ filename: "a b.pdf", content, contentType: "application/pdf" }],
+      }),
+      "held",
+    );
+    const line = JSON.parse((await readFile(path.join(directory, "mail-outbox.jsonl"), "utf8")).trim()) as {
+      attachments: { filename: string; bytes: number; file: string }[];
+      html: string;
+    };
+    assert.equal(line.html, "<b>h</b>");
+    assert.equal(line.attachments[0]?.bytes, content.length);
+    assert.deepEqual(await readFile(path.join(directory, line.attachments[0]!.file)), content);
+  } finally {
     await rm(directory, { recursive: true, force: true });
   }
 }

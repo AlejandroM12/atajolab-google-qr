@@ -1,6 +1,8 @@
 import { createHash, randomBytes } from "node:crypto";
 
 export const ACCESS_LINK_TTL_MS = 30 * 60 * 1000;
+/** The link in the purchase mail is opened hours or days later, so it lives longer than a recovery link. */
+export const PURCHASE_ACCESS_LINK_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 export const MAX_ACTIVE_ACCESS_LINKS = 3;
 export const ACCESS_TOKEN_PATTERN = /^[A-Za-z0-9_-]{43}$/;
 
@@ -19,14 +21,18 @@ export function hashAccessToken(token: string): string {
   return createHash("sha256").update(token).digest("hex");
 }
 
-export function issueAccessLink(orderId: string, now: Date): { token: string; record: AccessLinkRecord } {
+export function issueAccessLink(
+  orderId: string,
+  now: Date,
+  ttlMs: number = ACCESS_LINK_TTL_MS,
+): { token: string; record: AccessLinkRecord } {
   const token = createAccessToken();
   return {
     token,
     record: {
       tokenHash: hashAccessToken(token),
       orderId,
-      expiresAt: new Date(now.getTime() + ACCESS_LINK_TTL_MS),
+      expiresAt: new Date(now.getTime() + ttlMs),
       usedAt: null,
     },
   };
@@ -107,40 +113,6 @@ export function recoveryMail(
       lines.join("\n\n"),
       "",
       "Si no pediste este acceso, podés ignorar el mensaje.",
-    ].join("\n"),
-  };
-}
-
-/**
- * Proactive access mail after a purchase becomes PAID (v7 and Studio v8).
- * Includes a one-time access link — never draftKey, idempotencyKey, or asset ids.
- */
-export function purchaseMail(input: {
-  origin: string;
-  label: string;
-  publicId: string;
-  token: string;
-}): { subject: string; text: string } | null {
-  const url = accessLinkUrl(input.origin, input.token);
-  if (!url) return null;
-  const label = safeMailLabel(input.label);
-  const publicId = input.publicId.replace(/[\r\n]/g, "").trim();
-  if (!publicId) return null;
-  return {
-    subject: "Tu compra de AtajoLab está lista",
-    text: [
-      "Confirmamos tu compra en AtajoLab QR.",
-      "",
-      `Diseño: ${label}`,
-      `Pedido: ${publicId}`,
-      "",
-      "Usá este enlace para abrir tus descargas. Vence en 30 minutos y funciona una sola vez:",
-      url,
-      "",
-      "En la página del pedido vas a poder descargar PNG, SVG y PDF listos para imprimir.",
-      "Si cerrás el navegador, recuperá el acceso en /recuperar con el mismo correo de la compra.",
-      "",
-      "Si no reconocés esta compra, ignorá el mensaje.",
     ].join("\n"),
   };
 }
