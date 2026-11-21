@@ -1,0 +1,26 @@
+# PRUEBAS antes del cambio de DNS. Copiar como `sites/qr-staging.caddy` en /opt/atajolab/apps/agendia/deploy/sites/ y recargar Caddy:
+#   docker exec agendia-caddy-1 caddy reload --config /etc/caddy/Caddyfile
+# La app ve la IP del cliente SOLO por X-Forwarded-For, y la fija Caddy con la conexión real:
+# cualquier X-Forwarded-For (o X-Real-IP / CF-Connecting-IP) que mande el cliente se descarta.
+# Por eso la app usa RATE_LIMIT_TRUST_PROXY=xff con RATE_LIMIT_PROXY_HOPS=1.
+# Si el dominio pasara a estar detrás del proxy de Cloudflare, esto vería la IP de Cloudflare:
+# habría que confiar en sus rangos (ver docs/hetzner.md).
+167-233-65-236.sslip.io {
+	encode zstd gzip
+	reverse_proxy atajolab-qr:3000 {
+		header_up X-Forwarded-For {remote_host}
+		header_up -X-Real-IP
+		header_up -CF-Connecting-IP
+		health_uri /api/health
+		health_interval 30s
+		health_timeout 5s
+	}
+	log {
+		output stdout
+		# Los enlaces de acceso llevan el token en la ruta: no se registra.
+		format filter {
+			request>uri regexp "/acceso/[A-Za-z0-9_-]+" "/acceso/REDACTED"
+			wrap console
+		}
+	}
+}

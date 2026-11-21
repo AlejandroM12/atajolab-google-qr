@@ -1,0 +1,39 @@
+# AtajoLab QR en el VPS de Hetzner. Mismo patrón que Presupuestos: una app por carpeta en
+# /opt/atajolab/apps/<app>, sin publicar puertos, detrás del Caddy de Agendia (red agendia-edge).
+# La base de datos sigue siendo la de Neon (DATABASE_URL en .env); no hay Postgres local.
+# Uso: deploy/hetzner/ship.sh (construye, sube la imagen y levanta con rollback automático).
+name: atajolab-qr
+
+services:
+  app:
+    image: atajolab-qr:${TAG:-latest}
+    container_name: atajolab-qr
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      NODE_ENV: production
+    expose:
+      - "3000"
+    networks: [proxy]
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /app/.next/cache
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    mem_limit: 1100m
+    cpus: 1.5
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "5" }
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 8s
+      start_period: 40s
+      retries: 3
+
+networks:
+  proxy:
+    external: true
+    name: ${PROXY_NETWORK:-agendia-edge}

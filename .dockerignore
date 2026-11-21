@@ -1,0 +1,14 @@
+.git
+.github
+.next
+.data
+node_modules
+marketing
+e2e
+docs
+*.md
+.env
+.env.*
+!.env.example
+npm-debug.log*
+tsconfig.tsbuildinfo
