@@ -2,6 +2,8 @@ import QRCode from "qrcode";
 import { ButtonLink } from "@/components/button-link";
 import { Container } from "@/components/container";
 import { FreeFirstNote } from "@/components/landing/free-first-note";
+import { SalesAware } from "@/components/sales-aware";
+import { heroTrustLine } from "@/lib/commercial-copy";
 import { getInspiration, type InspirationId } from "@/lib/studio/inspiration";
 import { inspirationPreviewSize, inspirationPreviewUrl } from "@/lib/studio/inspiration-preview-url";
 
@@ -92,7 +94,7 @@ export function Hero() {
             </ButtonLink>
           </div>
           <p className="mt-5 text-sm font-semibold text-foreground/80">
-            Sin registrarte · Pago con Mercado Pago · Descarga digital
+            <SalesAware fallback={heroTrustLine(false)}>{(salesOpen) => heroTrustLine(salesOpen)}</SalesAware>
           </p>
         </div>
         <div className="relative mx-auto aspect-[10/9] w-full max-w-md lg:max-w-none" role="img" aria-label="Ejemplos de diseños: carta de un restaurante, perfil de Instagram y reseñas de Google">

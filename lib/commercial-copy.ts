@@ -40,3 +40,8 @@ export function orderFreeNote(salesOpen: boolean): string {
     ? `Ya podés descargar los archivos. Los siguientes QR cuestan ${priceLabel()}.`
     : "Ya podés descargar los archivos.";
 }
+
+/** Short trust line under the main button: the payment method is named only while there is something to pay. */
+export function heroTrustLine(salesOpen: boolean): string {
+  return salesOpen ? "Sin registrarte · Pago con Mercado Pago · Descarga digital" : "Sin registrarte · Descarga digital";
+}

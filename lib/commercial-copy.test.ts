@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import {
   faqDownloadAnswer,
   faqPriceAnswer,
+  heroTrustLine,
   nextQrNote,
   orderFreeNote,
   priceLabel,
@@ -21,10 +22,11 @@ const priceDigits = String(PIECE_PRICE_ARS).replace(/\B(?=(\d{3})+(?!\d))/g, "."
     faqDownloadAnswer(false),
     termsPriceText(false),
     orderFreeNote(false),
+    heroTrustLine(false),
     ...getFaqItems(false).flatMap((item) => [item.question, item.answer]),
   ].join(" ");
   assert.equal(closed.includes(priceDigits), false, "no price while sales are closed");
-  assert.equal(/Mercado Pago aprueba|pago único|cuestan/.test(closed), false, "no purchase wording while sales are closed");
+  assert.equal(/Mercado Pago|pago único|cuestan/.test(closed), false, "no purchase wording while sales are closed");
   assert.equal(nextQrNote(false), null);
   // The first free QR is always described.
   assert.match(faqPriceAnswer(false), /primer QR es gratis/);
@@ -40,6 +42,7 @@ const priceDigits = String(PIECE_PRICE_ARS).replace(/\B(?=(\d{3})+(?!\d))/g, "."
   assert.match(faqDownloadAnswer(true), /Mercado Pago aprueba el pago/);
   assert.ok(termsPriceText(true).includes(priceDigits));
   assert.ok(orderFreeNote(true).includes(priceDigits));
+  assert.match(heroTrustLine(true), /Mercado Pago/);
 }
 
 {
