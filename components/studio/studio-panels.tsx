@@ -18,6 +18,7 @@ import { cornerMaxMm, fontMaxMm, formatList, qrMaxMm, type FormatId, type Sheet 
 import { recoverableElements } from "@/lib/studio/canvas-space";
 import { elementLabel } from "@/lib/studio/document";
 import { formatArs, PIECE_CURRENCY, PIECE_PRICE_ARS } from "@/lib/pricing";
+import { accessProblem, closedProblem, type AccessState } from "@/lib/studio/get-qr";
 import { qrContrastIssue } from "@/lib/studio/qr-rules";
 import { templateList } from "@/lib/studio/templates";
 import {
@@ -201,6 +202,8 @@ export function StudioDownloadPanel({
   exportEnabled,
   checkoutEnabled,
   freeAvailable = false,
+  access,
+  onRetryAccess,
   prepareBusy,
   prepareProgress,
   orderBusy,
@@ -218,6 +221,9 @@ export function StudioDownloadPanel({
   checkoutEnabled: boolean;
   /** The server confirmed this browser can still get its free QR. */
   freeAvailable?: boolean;
+  /** What the server said this browser can get; explains the closed state. */
+  access: AccessState;
+  onRetryAccess: () => void;
   prepareBusy: boolean;
   prepareProgress: string | null;
   orderBusy: boolean;
@@ -343,12 +349,7 @@ export function StudioDownloadPanel({
         </section>
       ) : null}
       {!checkoutEnabled && !freeAvailable && blockingIssues.length === 0 ? (
-        <section className="rounded-3xl border border-line bg-card p-4">
-          <h2 className="text-sm font-semibold">Las descargas no están disponibles ahora</h2>
-          <p className="mt-1 text-sm leading-6 text-muted">
-            Tu diseño queda guardado en esta sesión. Probá de nuevo más tarde.
-          </p>
-        </section>
+        <UnavailableNotice access={access} onRetry={onRetryAccess} />
       ) : null}
     </div>
   );
@@ -771,4 +772,54 @@ function BlockingIssueList({
 
 function formatPriceHint(): string {
   return `${formatArs(PIECE_PRICE_ARS)} ${PIECE_CURRENCY}`;
+}
+
+/** Why nothing can be obtained right now, in the words of the real cause. */
+function UnavailableNotice({ access, onRetry }: { access: AccessState; onRetry: () => void }) {
+  if (access.kind === "checking") {
+    return (
+      <section className="rounded-3xl border border-line bg-card p-4" role="status">
+        <h2 className="text-sm font-semibold">Comprobando qué tenés disponible…</h2>
+      </section>
+    );
+  }
+  const problem =
+    access.kind === "error"
+      ? accessProblem(access.reason)
+      : access.kind === "closed"
+        ? closedProblem(access.reason)
+        : null;
+  if (!problem) return null;
+  return (
+    <section
+      className="rounded-3xl border border-line bg-card p-4"
+      data-testid="descarga-no-disponible"
+      data-kind={problem.kind}
+    >
+      <h2 className="text-sm font-semibold">{problem.title}</h2>
+      <p className="mt-1 text-sm leading-6 text-muted">{problem.message}</p>
+      <div className="mt-3 flex flex-wrap gap-2">
+        {problem.action === "retry" ? (
+          <button type="button" className={toolButton} onClick={onRetry}>
+            Reintentar
+          </button>
+        ) : null}
+        {problem.action === "reload" ? (
+          <button type="button" className={toolButton} onClick={() => window.location.reload()}>
+            Recargar la página
+          </button>
+        ) : null}
+        {problem.action === "recover" ? (
+          <Link href="/recuperar" className={toolButton}>
+            Recuperar mis descargas
+          </Link>
+        ) : null}
+        {problem.action === "support" || problem.action === "recover" ? (
+          <Link href="/contacto" className={toolButton}>
+            Contacto
+          </Link>
+        ) : null}
+      </div>
+    </section>
+  );
 }

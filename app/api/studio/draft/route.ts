@@ -17,12 +17,17 @@ import {
 } from "@/lib/free-first-qr";
 import { visitorFreeClaimUsed } from "@/lib/orders";
 import { logError } from "@/lib/log";
+import { credentialShape } from "@/lib/payments/checkout-policy";
+import { paymentAccessToken } from "@/lib/payments/mercadopago";
+import { studioSalesOpen } from "@/lib/studio/checkout-access";
 
 /**
  * Ensures a Studio draft session cookie exists.
  * The draftKey stays HttpOnly — never returned in the JSON body or stored in localStorage.
  * While the free-first promotion is on, it also issues the visitor cookie and reports
  * whether this browser can still get its free QR (the order route re-checks it).
+ * It also says whether paid orders are open and a payment credential is present,
+ * so the editor can explain what is available instead of failing at the end.
  */
 export async function POST(request: Request) {
   if (!studioRequestTrusted(request)) {
@@ -46,7 +51,8 @@ export async function POST(request: Request) {
     }
 
     let freeFirst = false;
-    if (freeFirstQrOpen()) {
+    const promo = freeFirstQrOpen();
+    if (promo) {
       let visitorKey = readVisitorKey(cookieHeader);
       if (!visitorKey) {
         visitorKey = createVisitorKey();
@@ -60,6 +66,10 @@ export async function POST(request: Request) {
         ok: true,
         created: session.created,
         freeFirst,
+        promo,
+        sales: studioSalesOpen(),
+        // Presence and shape only; the account is verified when a payment starts.
+        payments: credentialShape(paymentAccessToken()) === "ready",
       },
       { status: session.created ? 201 : 200, headers },
     );

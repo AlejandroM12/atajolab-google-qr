@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ChangeEvent, type ReactNode } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ChangeEvent, type ReactNode } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { InspirationGallery } from "@/components/studio/inspiration-gallery";
@@ -69,6 +69,12 @@ import {
   type TemplateId,
 } from "@/lib/studio/types";
 import { elementsCoveringQr, validateDesign } from "@/lib/studio/validation";
+import {
+  accessFromAnswer,
+  accessFromFailure,
+  readAccessAnswer,
+  type AccessState,
+} from "@/lib/studio/get-qr";
 import { trackEvent } from "@/lib/analytics";
 
 /** What gets ordered must carry valid QR content (link, Wi-Fi, contact or text) at a scannable size. */
@@ -89,6 +95,9 @@ export function StudioEditor({
   const router = useRouter();
   const orderingEnabled = checkoutEnabled || freeFirstEnabled;
   const [freeAvailable, setFreeAvailable] = useState(false);
+  const [access, setAccess] = useState<AccessState>(
+    orderingEnabled ? { kind: "checking" } : { kind: "closed", reason: "sales-closed" },
+  );
   const [session] = useState(loadInitial);
   const [started, setStarted] = useState(session.started);
   const [fromBlank, setFromBlank] = useState(false);
@@ -135,21 +144,43 @@ export function StudioEditor({
     trackEvent("editor_opened");
   }, []);
 
-  useEffect(() => {
+  const checkAccess = useCallback(() => {
     if (!orderingEnabled) return;
     void fetch("/api/studio/draft", {
       method: "POST",
       credentials: "same-origin",
       headers: { accept: "application/json" },
     })
-      .then((response) => (response.ok ? response.json() : null))
-      .then((body: { freeFirst?: unknown } | null) => {
-        setFreeAvailable(freeFirstEnabled && body?.freeFirst === true);
+      .then(async (response) => {
+        if (!response.ok) {
+          setFreeAvailable(false);
+          setAccess(accessFromFailure(response.status));
+          return;
+        }
+        const answer = readAccessAnswer(await response.json().catch(() => null));
+        if (!answer) {
+          setFreeAvailable(false);
+          setAccess(accessFromFailure(500));
+          return;
+        }
+        setFreeAvailable(freeFirstEnabled && answer.free);
+        setAccess(accessFromAnswer(answer));
       })
       .catch(() => {
-        /* Draft cookie is best-effort on first paint; prepare flow retries. */
+        // The answer is unknown: say so instead of claiming that downloads are off.
+        setFreeAvailable(false);
+        setAccess(accessFromFailure(null));
       });
   }, [orderingEnabled, freeFirstEnabled]);
+
+  useEffect(() => {
+    checkAccess();
+  }, [checkAccess]);
+
+  const retryAccess = useCallback(() => {
+    setAccess({ kind: "checking" });
+    checkAccess();
+  }, [checkAccess]);
 
   useEffect(() => {
     if (!prepareReady) return;
@@ -642,7 +673,10 @@ export function StudioEditor({
         | { publicId?: unknown; error?: unknown }
         | null;
       if (!response.ok) {
-        if (body?.error === "free-already-used") setFreeAvailable(false);
+        if (body?.error === "free-already-used") {
+          setFreeAvailable(false);
+          setAccess({ kind: "closed", reason: "free-used" });
+        }
         setError(studioOrderErrorMessage(typeof body?.error === "string" ? body.error : ""));
         setOrderBusy(false);
         return;
@@ -1088,6 +1122,8 @@ export function StudioEditor({
             exportEnabled={exportEnabled}
             checkoutEnabled={checkoutEnabled}
             freeAvailable={freeAvailable}
+            access={access}
+            onRetryAccess={retryAccess}
             prepareBusy={prepareBusy}
             prepareProgress={prepareProgress}
             orderBusy={orderBusy}
