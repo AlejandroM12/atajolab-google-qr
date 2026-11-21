@@ -8,6 +8,7 @@ import { compositionChecked, pieceComposes } from "@/lib/print/layout";
 import { STUDIO_COMMERCIAL_ARTWORK_VERSION } from "@/lib/studio/commercial-artwork";
 import { studioSalesOpen } from "@/lib/studio/checkout-access";
 import { readJsonBody } from "@/lib/http/body";
+import { standbyHost } from "@/lib/standby-host";
 import { logWarn } from "@/lib/log";
 import { ROUTE_LIMITS, consumeBuckets, ipBucket, rateLimitedResponse } from "@/lib/rate-limit/policies";
 import { studioClientKeyFromRequest, studioRequestTrusted } from "@/lib/studio/draft-session";
@@ -19,6 +20,8 @@ export async function POST(
   request: Request,
   context: { params: Promise<{ publicId: string }> },
 ) {
+  // The standby host (Render) starts no payments; the service is on the VPS.
+  if (standbyHost()) return paymentError(503, "standby-host");
   const { publicId } = await context.params;
   if (!studioRequestTrusted(request)) return paymentError(403, "origin-rejected");
   const body = await readJsonBody(request, 2000);

@@ -1,3 +1,4 @@
+import { standbyHost } from "@/lib/standby-host";
 import { parseOrderDraft } from "@/lib/order-draft";
 import { isDatabaseUnavailable } from "@/lib/db-error";
 import { freeClaimTaken, savePendingOrder, type FreeOrderClaim } from "@/lib/orders";
@@ -29,6 +30,9 @@ const MAX_BODY_CHARS = 320_000;
 const MAX_STUDIO_V8_BODY_CHARS = 400_000;
 
 export async function POST(request: Request) {
+  // The standby host (Render) takes no new orders of any version; the service is on the VPS.
+  if (standbyHost()) return orderError(503, "standby-host");
+
   const contentType = request.headers.get("content-type") ?? "";
   if (!contentType.toLowerCase().startsWith("application/json")) {
     return orderError(400, "invalid-body");

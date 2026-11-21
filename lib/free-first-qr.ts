@@ -1,5 +1,6 @@
 import { createHash, randomBytes } from "node:crypto";
 import { ipScopedLimit, type Bucket } from "@/lib/rate-limit/policies";
+import { standbyHost } from "@/lib/standby-host";
 
 /**
  * "Tu primer QR es gratis": one free Studio v8 order per browser and per email.
@@ -28,6 +29,7 @@ function flagOn(value: string | undefined): boolean {
  * owner's decision; sales keep their own seller-data rule (studioSalesOpen).
  */
 export function freeFirstQrOpen(env: NodeJS.ProcessEnv = process.env): boolean {
+  if (standbyHost(env)) return false;
   return flagOn(env.FREE_FIRST_QR_ENABLED);
 }
 

@@ -65,3 +65,26 @@ docker inspect -f '{{.State.Health.Status}} reinicios={{.RestartCount}}' atajola
 tail -f /opt/atajolab/apps/atajolab-qr/logs/cron.log
 curl -s -H "authorization: Bearer $MAIL_DISPATCH_SECRET" https://qr.atajolab.dev/api/health   # estado de operador
 ```
+
+## Render en espera
+
+Render es respaldo en frío. En Render (`RENDER=true`) `lib/standby-host.ts` cierra todo lo comercial: crear pedidos de cualquier versión, iniciar pagos y el primer QR gratis responden 503 / cerrado, aunque las variables digan lo contrario. Siguen funcionando las páginas, las descargas, el webhook y la reconciliación, que son idempotentes sobre la misma base. En el VPS no cambia nada (`RENDER` no está definido).
+
+Para devolver el servicio a Render basta definir `RENDER_ACTIVE=true` en su entorno (el cambio de variable redespliega solo) y cambiar el DNS (ver Rollback). Sin ese interruptor Render no vende ni cobra.
+
+## Si Hetzner falla
+
+1. **Contenedor caído o colgado:** `restart: unless-stopped` más `cron.sh watch` (reinicia si queda `unhealthy`). A mano: `docker restart atajolab-qr`; versión mala: `rollback.sh app`.
+2. **Caddy o el VPS caído:** `ssh deploy@167.233.65.236 'docker ps'`; todo está con `unless-stopped` y Docker habilitado al arranque, así que un reinicio del VPS levanta solo (hay un reinicio pendiente por kernel: conviene hacerlo en una ventana tranquila).
+3. **VPS perdido o inalcanzable por más de ~15 min:** servicio en Render: definir `RENDER_ACTIVE=true` en Render, esperar el redeploy, y cambiar el DNS `qr` a `CNAME atajolab-google-qr.onrender.com`. La base (Neon) es la misma, no hay nada que reconciliar. Mantener en Render las variables vigentes (credenciales de Mercado Pago, Resend, secretos): si se rotan en el VPS, rotarlas también ahí.
+4. **Reconstruir en otro VPS:** `ship.sh` desde este repo (imagen + compose), recrear el `.env` desde el gestor de secretos y publicar `qr.caddy`.
+
+## Backups
+
+- **Base de datos:** vive en Neon. `backup-db.sh` hace un `pg_dump` diario comprimido en `/opt/atajolab/backups/atajolab-qr` (14 días; verifica que el volcado esté completo). Cron sugerido: `40 3 * * * /opt/atajolab/apps/atajolab-qr/backup-db.sh >> /opt/atajolab/apps/atajolab-qr/logs/backup.log 2>&1`. La copia queda en el mismo disco del VPS: conviene copiarla fuera (rclone, como Presupuestos) para que sobreviva a perder el servidor.
+- **Secretos:** el `.env` no está en el repo ni en la imagen; guardar una copia en el gestor de contraseñas. `ORDER_ACCESS_SECRET` no se rota.
+- **Código:** GitHub; la imagen se reconstruye con `ship.sh`.
+
+## Monitoreo y espacio
+
+Hoy: healthcheck de Docker, `cron.sh watch` y los logs. No hay alertas externas: conviene un monitor de uptime sobre `https://qr.atajolab.dev/api/health` (503 si falla la base) y definir `ALERT_WEBHOOK_URL`. El VPS no tiene swap y quedan ~2 GB de RAM libres: conviene 2 GB de swap. Las imágenes viejas ocupan espacio (`docker image prune` de las `atajolab-qr:*` anteriores a las dos últimas).

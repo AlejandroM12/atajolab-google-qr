@@ -1,3 +1,5 @@
+import { standbyHost } from "@/lib/standby-host";
+
 /**
  * Studio v8 commercial checkout (order create + Mercado Pago preference).
  *
@@ -6,6 +8,7 @@
  * Already-PAID v8 orders keep downloads/reconcile/webhooks (those paths ignore this flag).
  */
 export function studioCheckoutAllowed(env: NodeJS.ProcessEnv = process.env): boolean {
+  if (standbyHost(env)) return false;
   const flag = (env.STUDIO_CHECKOUT_ENABLED ?? "").trim().toLowerCase();
   return flag === "1" || flag === "true" || flag === "yes" || flag === "on";
 }
