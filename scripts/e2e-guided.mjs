@@ -340,7 +340,16 @@ async function waitForDesigns(page) {
     await shot(page, "desktop-9-descargar");
     await dialog.getByRole("button", { name: "Descargar gratis" }).click();
     await page.waitForURL(/\/pedido\//, { timeout: 30000 });
-    await page.getByText("Descargar mis archivos").waitFor({ timeout: 20000 });
+    await page.getByTestId("descargas").waitFor({ timeout: 20000 });
+    await page.getByRole("heading", { name: "¡Tu diseño está listo!" }).waitFor();
+    assert.equal(await page.getByTestId("estado-pedido").getAttribute("data-state"), "free");
+    // Order details are folded away; the three files are big targets.
+    assert.equal(await page.locator("details", { hasText: "Detalles del pedido" }).first().getAttribute("open"), null);
+    await assertNoSideScroll(page, "order page");
+    for (const label of ["PNG", "PDF", "SVG"]) {
+      const box = await page.getByRole("link", { name: new RegExp("Descargar " + label) }).boundingBox();
+      assert.ok(box && box.height >= 64, label + " download button is large");
+    }
     await shot(page, "desktop-10-pedido");
     const { PNG } = await import("pngjs");
     const { default: jsQR } = await import("jsqr");

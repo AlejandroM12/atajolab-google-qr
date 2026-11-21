@@ -4,7 +4,10 @@ import { cookies } from "next/headers";
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
 import { Container } from "@/components/container";
+import { OrderSkeleton, PreviewSkeleton } from "@/components/order-skeleton";
 import { OrderSummary } from "@/components/order-summary";
+import { ScenePreview } from "@/components/scene-preview";
+import type { StoredOrder } from "@/lib/orders";
 import { DIGITAL_DOWNLOADS_ENABLED } from "@/lib/delivery";
 import { applyVerifiedPayment, findOrder, findOrderAccessHashes, findPaymentRecord } from "@/lib/orders";
 import { digitalDeliveryAllowed, orderAccessCookieName, readOrderAccess } from "@/lib/payments/access";
@@ -41,7 +44,7 @@ export default function OrderPage({
   return (
     <main>
       <Container className="py-10 sm:py-14">
-        <Suspense fallback={<p className="text-sm text-muted">Cargando el pedido…</p>}>
+        <Suspense fallback={<OrderSkeleton />}>
           <OrderLoader params={params} searchParams={searchParams} />
         </Suspense>
       </Container>
@@ -107,26 +110,36 @@ async function OrderLoader({
     extraHashes: hashes.slice(1),
   });
 
-  const studioPreviewSvg =
-    order.artwork.version === STUDIO_COMMERCIAL_ARTWORK_VERSION
-      ? await renderStudioOrderPreviewSvg({
-          orderId: order.publicId,
-          artwork: order.artwork,
-        })
-      : null;
+  // The preview is drawn while the rest of the page is already on screen.
+  const studioPreview =
+    order.artwork.version === STUDIO_COMMERCIAL_ARTWORK_VERSION ? (
+      <Suspense fallback={<PreviewSkeleton />}>
+        <StudioPreview order={order} />
+      </Suspense>
+    ) : null;
 
   return (
     <OrderSummary
       order={order}
       sandboxReady={paymentsReady}
       downloads={downloads}
-      studioPreviewSvg={studioPreviewSvg}
+      studioPreview={studioPreview}
       view={paymentView({
         orderStatus: order.status,
         hint,
         externalStatus: order.externalPaymentStatus,
       })}
     />
+  );
+}
+
+async function StudioPreview({ order }: { order: StoredOrder }) {
+  if (order.artwork.version !== STUDIO_COMMERCIAL_ARTWORK_VERSION) return null;
+  const svg = await renderStudioOrderPreviewSvg({ orderId: order.publicId, artwork: order.artwork });
+  return svg ? (
+    <ScenePreview svg={svg} />
+  ) : (
+    <p className="px-4 py-10 text-center text-sm text-muted">No pudimos mostrar la vista previa, pero tus archivos están intactos.</p>
   );
 }
 
