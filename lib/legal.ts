@@ -2,9 +2,10 @@
  * Commercial and legal identity shown on /terminos, /privacidad, /reembolsos,
  * /arrepentimiento and /contacto.
  *
- * Values still wrapped in `pending(...)` render visibly as "[COMPLETAR: …]"
- * and keep production sales closed (`legalDataComplete()`), because the
- * seller must be identified before selling (Ley 24.240). Nothing here was
+ * Values still wrapped in `pending(...)` render visibly as "[COMPLETAR: …]".
+ * They are informational: they never enable or disable the shop or the checkout
+ * (see `studioSalesOpen`). The seller must be identified before charging
+ * (Ley 24.240), so complete them before turning sales on. Nothing here was
  * invented: replace them with the real data.
  */
 

@@ -52,7 +52,7 @@ Ya cargados: titular, correo y horario de atención, jurisdicción, conservació
 | `RATE_LIMIT_PROXY_HOPS` | `1` |
 | `ALERT_WEBHOOK_URL` | webhook https de Slack/Discord (recomendado) |
 | `NEXT_PUBLIC_PLAUSIBLE_DOMAIN` | opcional; requiere cuenta en Plausible y rebuild |
-| `STUDIO_CHECKOUT_ENABLED` | vacío hasta terminar el checklist; después `true`. Con datos legales incompletos la venta sigue cerrada aunque esté en `true` (`studioSalesOpen` en el health de operador) |
+| `STUDIO_CHECKOUT_ENABLED` | vacío hasta terminar el checklist; después `true`. Es el único interruptor de la venta: los datos legales pendientes (`[COMPLETAR]`) no la cierran |
 | `ALLOW_REMOTE_DATABASE` | `1` (la app rechaza bases remotas fuera de Render; Render define `RENDER=true`, pero dejalo explícito) |
 | `RATE_LIMIT_HASH_SECRET` | opcional; clave del hash de IP (si falta, usa `ORDER_ACCESS_SECRET`) |
 | `STUDIO_EXPORT_ENABLED` | vacío (si lo activás, regala archivos sin pago) |
@@ -162,13 +162,16 @@ En los comandos, `APP=https://qr.atajolab.dev` y `OPS=<valor de MAIL_DISPATCH_SE
 7. **Editor sin teclado**: no hay lista de capas ni movimiento con flechas (accesibilidad, P2).
 8. **Autoguardado en sessionStorage**: cerrar la pestaña pierde el borrador (P2).
 9. **La aceptación de términos se exige en el servidor** (`acceptedTerms: true` en `POST /api/orders`) y queda en los logs (`order.terms-accepted`, con la versión de los textos), pero **no en la base**. Para evidencia durable, sumar `Order.termsAcceptedAt` (requiere una migración nueva).
-10. **Bloqueo de ventas por datos legales**: en producción `studioSalesOpen` mantiene cerrado el checkout mientras `lib/legal.ts` tenga `[COMPLETAR]`, aunque `STUDIO_CHECKOUT_ENABLED=true`.
+10. **Datos legales y venta separados.** Los `[COMPLETAR]` de `lib/legal.ts` ya no cierran el checkout: se muestran en las páginas legales y en el health de operador (`legalDataComplete`, solo informativo). Antes de activar `STUDIO_CHECKOUT_ENABLED`, el operador decide si los términos publicados alcanzan para cobrar (Ley 24.240: identificar al vendedor); no hay un bloqueo técnico que lo haga por él.
 
 ## Cómo se abren las ventas (y qué cambia solo en el sitio)
 
-Hoy está abierto solo el primer QR gratis (`FREE_FIRST_QR_ENABLED`). Las ventas se abren cuando se cumplen **las dos** condiciones de `studioSalesOpen()`:
+Hoy está abierto solo el primer QR gratis (`FREE_FIRST_QR_ENABLED`). La venta de QR adicionales se abre con **un solo interruptor**, `STUDIO_CHECKOUT_ENABLED=true`, y no depende de los datos legales de `lib/legal.ts`.
 
-1. `STUDIO_CHECKOUT_ENABLED=true` y las credenciales de Mercado Pago (`MERCADOPAGO_*`) cargadas en el servidor.
-2. Los datos del vendedor completos en `lib/legal.ts` (CUIT, condición fiscal y domicilio legal; ver `legalDataComplete()`). Mientras haya un `[COMPLETAR: …]`, producción no vende.
+Antes de activarlo (checklist del operador, no un bloqueo automático):
 
-Los textos públicos de precio y pago (landing, preguntas frecuentes, términos, resumen del pedido, panel de descarga y datos estructurados) siguen ese mismo estado (`lib/commercial-copy.ts` y `components/sales-aware.tsx`): con las ventas cerradas no muestran precio ni ofrecen una compra, y al abrirse vuelven solos, sin tocar el código. No hay un interruptor aparte.
+1. Mercado Pago configurado: `MERCADOPAGO_ENV`, `MERCADOPAGO_ACCESS_TOKEN`, `MERCADOPAGO_WEBHOOK_SECRET` y `MERCADOPAGO_NOTIFICATION_URL`. El health de operador debe mostrar `paymentsCredentialShape: "ready"` y `webhookSecretSet: true`.
+2. Simulación de notificación desde el panel de Mercado Pago con respuesta 200, y una compra real controlada (pedido PAID, descarga y correo).
+3. Términos, privacidad y reembolsos revisados: completar CUIT, condición fiscal y domicilio en `lib/legal.ts` cuando existan, y confirmar con tu contador que los textos publicados alcanzan para cobrar.
+
+Los textos públicos de precio y pago (landing, preguntas frecuentes, términos, resumen del pedido, panel de descarga y datos estructurados) siguen el estado real de la compra (`purchasesAvailable()` en `lib/payments/availability.ts`): con el interruptor apagado o Mercado Pago sin configurar no muestran precio ni ofrecen una compra, y cuando se puede pagar vuelven solos. Las descargas pagas siguen exigiendo un pago aprobado y verificado contra la API de Mercado Pago (`PAID`); `[COMPLETAR]` nunca las habilita ni las bloquea.

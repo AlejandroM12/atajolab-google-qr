@@ -1,5 +1,3 @@
-import { legalDataComplete } from "@/lib/legal";
-
 /**
  * Studio v8 commercial checkout (order create + Mercado Pago preference).
  *
@@ -13,15 +11,12 @@ export function studioCheckoutAllowed(env: NodeJS.ProcessEnv = process.env): boo
 }
 
 /**
- * New sales need the flag AND, in production, complete seller data in
- * lib/legal.ts (Ley 24.240 requires identifying the seller). Turning the flag
- * on with "[COMPLETAR]" placeholders keeps checkout closed.
+ * New sales need the commercial switch (`STUDIO_CHECKOUT_ENABLED`) and nothing else here.
+ * The seller's legal data (`lib/legal.ts`) is deliberately not part of this decision: pending
+ * "[COMPLETAR]" fields are shown on the legal pages but never disable checkout. Whether the
+ * published terms are adequate to take payments is an operator decision made before turning
+ * the switch on, not a technical lock. Payment safety lives in `lib/payments`.
  */
-export function studioSalesOpen(
-  env: NodeJS.ProcessEnv = process.env,
-  legalComplete: boolean = legalDataComplete(),
-): boolean {
-  if (!studioCheckoutAllowed(env)) return false;
-  if (env.NODE_ENV === "production" && !legalComplete) return false;
-  return true;
+export function studioSalesOpen(env: NodeJS.ProcessEnv = process.env): boolean {
+  return studioCheckoutAllowed(env);
 }

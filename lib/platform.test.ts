@@ -66,13 +66,12 @@ import { createHash } from "node:crypto";
   assert.equal(isGoogleBusinessShareLink("https://g.page/r/CQpXgZ1aBcDeEAE/review"), false);
 }
 
-// --- Sales stay closed in production while seller data is incomplete -----------------------
+// --- Sales follow only the commercial switch, never the seller's legal data ----------------
 {
   const on = { STUDIO_CHECKOUT_ENABLED: "true" };
-  assert.equal(studioSalesOpen({ ...on, NODE_ENV: "production" }, false), false);
-  assert.equal(studioSalesOpen({ ...on, NODE_ENV: "production" }, true), true);
-  assert.equal(studioSalesOpen({ ...on, NODE_ENV: "development" }, false), true);
-  assert.equal(studioSalesOpen({ NODE_ENV: "production" }, true), false);
+  assert.equal(studioSalesOpen({ ...on, NODE_ENV: "production" }), true);
+  assert.equal(studioSalesOpen({ ...on, NODE_ENV: "development" }), true);
+  assert.equal(studioSalesOpen({ NODE_ENV: "production" }), false);
 }
 
 // --- Rate-limit keys: keyed hash, and spoofed headers cannot move the bucket -------------

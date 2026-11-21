@@ -13,7 +13,7 @@ export type AccessAnswer = {
   free: boolean;
   /** The "first QR free" promotion is running. */
   promo: boolean;
-  /** New paid orders are open (flag on and seller data complete). */
+  /** New paid orders are open (checkout switch on). */
   sales: boolean;
   /** A Mercado Pago credential is configured for the current environment. */
   payments: boolean;

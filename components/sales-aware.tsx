@@ -1,9 +1,9 @@
 import { connection } from "next/server";
 import { Suspense, type ReactNode } from "react";
-import { studioSalesOpen } from "@/lib/studio/checkout-access";
+import { purchasesAvailable } from "@/lib/payments/availability";
 
 /**
- * Renders its children with the real sales state, read on each request so the server
+ * Renders its children with the real purchase state (switch on and Mercado Pago ready), read on each request so the server
  * switch applies without a rebuild. The fallback (prerendered shell) must be the
  * "sales closed" version: it never offers a purchase or shows a price.
  */
@@ -23,5 +23,5 @@ export function SalesAware({
 
 async function SalesAwareContent({ children }: { children: (salesOpen: boolean) => ReactNode }) {
   await connection();
-  return <>{children(studioSalesOpen())}</>;
+  return <>{children(await purchasesAvailable())}</>;
 }

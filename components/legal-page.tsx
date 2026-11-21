@@ -30,7 +30,7 @@ export function LegalPage({
           {!legalDataComplete() ? (
             <p role="note" className="mt-6 rounded-2xl bg-warning-bg px-4 py-3 text-sm leading-relaxed text-warning">
               Borrador: faltan datos del titular del comercio. Los campos marcados como “COMPLETAR” se van a
-              reemplazar antes de habilitar las ventas.
+              reemplazar con los datos definitivos.
             </p>
           ) : null}
           {intro ? <div className="mt-6 text-lg leading-relaxed text-muted">{intro}</div> : null}

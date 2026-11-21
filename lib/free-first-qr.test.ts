@@ -27,12 +27,11 @@ assert.equal(freeFirstQrOpen(env({ FREE_FIRST_QR_ENABLED: "false" })), false);
 assert.equal(freeFirstQrOpen(env({ FREE_FIRST_QR_ENABLED: "true" })), true);
 assert.equal(freeFirstQrOpen(env({ FREE_FIRST_QR_ENABLED: "on", NODE_ENV: "production" })), true);
 
-// The promo works without a legal address, while sales keep requiring complete seller data.
+// Neither the promo nor the sales depend on the legal address: pending legal data closes nothing.
 if (isPending(legal.address)) {
   assert.equal(freeFirstQrOpen(env({ FREE_FIRST_QR_ENABLED: "true", NODE_ENV: "production" })), true);
-  assert.equal(studioSalesOpen(env({ STUDIO_CHECKOUT_ENABLED: "true", NODE_ENV: "production" })), false);
+  assert.equal(studioSalesOpen(env({ STUDIO_CHECKOUT_ENABLED: "true", NODE_ENV: "production" })), true);
 }
-assert.equal(studioSalesOpen(env({ STUDIO_CHECKOUT_ENABLED: "true", NODE_ENV: "production" }), false), false);
 
 // Daily cap and per-IP buckets.
 assert.equal(freeFirstQrDailyLimit(env({})), 100);

@@ -76,11 +76,12 @@ export async function operatorHealth(request: Request, env: NodeJS.ProcessEnv = 
       orderAccessSecretSet: (env.ORDER_ACCESS_SECRET?.trim().length ?? 0) >= 32,
       cleanupSecretSet: (env.STUDIO_CLEANUP_SECRET?.trim().length ?? 0) >= 16,
       studioCheckoutEnabled: studioCheckoutAllowed(env),
-      // false while legal data is incomplete in production, even with the flag on.
+      // Same as studioCheckoutEnabled: legal data does not affect it.
       studioSalesOpen: studioSalesOpen(env),
       rateLimitTrustProxy: readRateLimitTrustProxy(env),
       alertWebhookSet: Boolean(env.ALERT_WEBHOOK_URL?.trim()),
       analyticsSet: Boolean(env.NEXT_PUBLIC_PLAUSIBLE_DOMAIN?.trim()),
+      // Informational only: pending legal fields do not close the checkout.
       legalDataComplete: legalDataComplete(),
       legalPending: pendingLegalFields(),
     },
