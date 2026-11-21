@@ -7,13 +7,16 @@
 #   3) instala las tareas programadas (mail cada 2 min, limpieza cada hora, vigilancia cada 5)
 #   4) espera el DNS, fuerza el certificado y verifica de punta a punta
 # Se niega a seguir si Mercado Pago no está en modo producción.
+# Uso: cutover.sh [--prepare]   (--prepare hace 0-3 y termina antes de esperar el DNS)
+# Corre en tu PC (por SSH) o en el VPS, desde cualquier carpeta.
 set -euo pipefail
 HOST="${HOST:-deploy@167.233.65.236}"
 KEY="${SSH_KEY:-$HOME/.ssh/atajolab_prod}"
 IP=167.233.65.236
 DIR=/opt/atajolab/apps/atajolab-qr
 SITES=/opt/atajolab/apps/agendia/deploy/sites
-SSH=(ssh -i "$KEY" -o BatchMode=yes "$HOST")
+# En el VPS (existe $DIR) los comandos corren acá; en tu PC, por SSH.
+if [ -d "$DIR" ]; then SSH=(bash -c); else SSH=(ssh -i "$KEY" -o BatchMode=yes "$HOST"); fi
 ops() { "${SSH[@]}" "docker exec atajolab-qr node -e \"
   fetch('http://127.0.0.1:3000/api/health',{headers:{authorization:'Bearer '+process.env.MAIL_DISPATCH_SECRET}})
   .then(async r=>console.log(await r.text())).catch(e=>console.log(JSON.stringify({error:e.message})))\""; }
@@ -44,6 +47,11 @@ echo ">> 3. tareas programadas"
 CRON
 ) | crontab -"
 
+if [ "${1:-}" = "--prepare" ]; then
+  echo ">> preparado. Falta el cambio de DNS (ver docs/hetzner.md); después volvé a correr cutover.sh (es idempotente)."
+  exit 0
+fi
+
 cat <<MSG
 
 >> 4. CAMBIO DE DNS (Cloudflare, zona atajolab.dev). Reemplazá el registro actual:
@@ -53,7 +61,7 @@ cat <<MSG
    Esperando a que resuelva al VPS (hasta 30 min)...
 MSG
 for i in $(seq 1 180); do
-  got=$(nslookup qr.atajolab.dev 1.1.1.1 2>/dev/null | awk '/^Address/ && !/#/ {print $2}' | tr '\n' ' ')
+  got=$(curl -s --max-time 10 -H 'accept: application/dns-json' 'https://cloudflare-dns.com/dns-query?name=qr.atajolab.dev&type=A' | grep -o '"data":"[0-9.]*"' | tr -d '"data:' | tr '\n' ' ')
   case "$got" in *"$IP"*) break;; esac
   sleep 10
 done

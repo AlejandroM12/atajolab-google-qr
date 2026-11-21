@@ -42,7 +42,7 @@ Si algún día el dominio pasa por el proxy de Cloudflare (nube naranja), Caddy 
 ## Cambio de tráfico (Render → Hetzner)
 
 1. Cargar en `/opt/atajolab/apps/atajolab-qr/.env` las credenciales **de producción** de Mercado Pago (`MERCADOPAGO_ACCESS_TOKEN`, `MERCADOPAGO_WEBHOOK_SECRET`, `MERCADOPAGO_ENV=production`) y comprobar que `ORDER_ACCESS_SECRET`, `RESEND_API_KEY` y `MAIL_DISPATCH_SECRET` sean los de Render. `cutover.sh` se niega a seguir si `MERCADOPAGO_ENV` no es `production`.
-2. `deploy/hetzner/cutover.sh`: pasa `APP_URL` a `https://qr.atajolab.dev`, abre la venta, publica el sitio en Caddy, instala el cron y espera el DNS.
+2. `deploy/hetzner/cutover.sh --prepare` (hace todo menos esperar el DNS) y después `cutover.sh` sin argumento. Corre en tu PC o directamente en el VPS: pasa `APP_URL` a `https://qr.atajolab.dev`, abre la venta, publica el sitio en Caddy, instala el cron y espera el DNS.
 3. En Cloudflare (zona `atajolab.dev`) reemplazar `qr CNAME atajolab-google-qr.onrender.com` por `qr A 167.233.65.236` (solo DNS). Caddy emite el certificado de Let's Encrypt en cuanto el dominio resuelve al VPS.
 4. Probar el webhook: en Mercado Pago > Tus integraciones > Notificaciones > "Simular notificación" apuntando a `https://qr.atajolab.dev/api/payments/mercadopago`; debe responder 200 (con una firma que no coincida respondería 401). Mirar `docker logs atajolab-qr`.
 

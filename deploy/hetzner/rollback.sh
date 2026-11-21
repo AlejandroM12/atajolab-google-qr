@@ -6,7 +6,8 @@ set -euo pipefail
 HOST="${HOST:-deploy@167.233.65.236}"
 KEY="${SSH_KEY:-$HOME/.ssh/atajolab_prod}"
 DIR=/opt/atajolab/apps/atajolab-qr
-SSH=(ssh -i "$KEY" -o BatchMode=yes "$HOST")
+# En el VPS (existe $DIR) los comandos corren acá; en tu PC, por SSH.
+if [ -d "$DIR" ]; then SSH=(bash -c); else SSH=(ssh -i "$KEY" -o BatchMode=yes "$HOST"); fi
 case "${1:-}" in
   app)
     prev=$("${SSH[@]}" "cat $DIR/.previous 2>/dev/null || true")
