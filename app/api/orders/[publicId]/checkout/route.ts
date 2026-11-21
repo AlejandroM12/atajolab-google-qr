@@ -40,9 +40,10 @@ export async function POST(
     const stored = await findOrder(publicId);
     // Studio v8 uses the same preference flow as v1–v7 when STUDIO_CHECKOUT_ENABLED is on.
     // When off, refuse new checkout links; already-PAID delivery ignores this gate.
-    if (stored?.artwork.version === STUDIO_COMMERCIAL_ARTWORK_VERSION) {
-      if (!studioSalesOpen()) return paymentError(409, "checkout-unavailable");
-    } else if (
+    // New payments need open sales for every artwork version.
+    if (!studioSalesOpen()) return paymentError(409, "checkout-unavailable");
+    if (
+      stored?.artwork.version !== STUDIO_COMMERCIAL_ARTWORK_VERSION &&
       stored?.artwork &&
       compositionChecked(stored.artwork) &&
       !pieceComposes(stored.artwork)

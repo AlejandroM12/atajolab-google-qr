@@ -64,7 +64,8 @@ export async function POST(request: Request) {
 
   const salesOpen = studioSalesOpen();
   const promoOpen = studioV8 && freeFirstQrOpen();
-  if (studioV8 && !salesOpen && !promoOpen) {
+  // Every artwork version obeys the commercial state; only the free first QR (v8) is open without sales.
+  if (!salesOpen && !promoOpen) {
     return orderError(403, "studio-checkout-disabled");
   }
 
@@ -126,7 +127,7 @@ export async function POST(request: Request) {
       }
     }
 
-    const created = await savePendingOrder(parsed.draft, { free, allowPaid: !studioV8 || salesOpen });
+    const created = await savePendingOrder(parsed.draft, { free, allowPaid: salesOpen });
     if (studioV8) {
       logInfo("order.terms-accepted", { publicId: created.publicId, termsVersion: legal.lastUpdated });
     }
