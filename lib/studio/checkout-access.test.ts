@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { canDownloadOrderFiles } from "@/lib/delivery";
 import { legalDataComplete, pendingLegalFields } from "@/lib/legal";
 import { purchasesAvailable } from "@/lib/payments/availability";
-import { studioCheckoutAllowed, studioSalesOpen } from "@/lib/studio/checkout-access";
+import { studioCheckoutAllowed, studioSalesConfirmed, studioSalesOpen } from "@/lib/studio/checkout-access";
 
 assert.equal(studioCheckoutAllowed({}), false);
 assert.equal(studioCheckoutAllowed({ STUDIO_CHECKOUT_ENABLED: "" }), false);
@@ -23,9 +23,15 @@ assert.equal(studioCheckoutAllowed({ STUDIO_CHECKOUT_ENABLED: "on" }), true);
 const legalIsIncomplete = !legalDataComplete();
 assert.equal(legalIsIncomplete, pendingLegalFields().length > 0);
 for (const nodeEnv of ["production", "development", "test"]) {
-  assert.equal(studioSalesOpen({ STUDIO_CHECKOUT_ENABLED: "true", NODE_ENV: nodeEnv }), true, nodeEnv);
+  const both = { STUDIO_CHECKOUT_ENABLED: "true", STUDIO_SALES_CONFIRMED: "true", NODE_ENV: nodeEnv };
+  assert.equal(studioSalesOpen(both), true, nodeEnv);
   assert.equal(studioSalesOpen({ NODE_ENV: nodeEnv }), false, nodeEnv);
+  // Going live needs the checkout switch and the operator's confirmation, in any environment.
+  assert.equal(studioSalesOpen({ STUDIO_CHECKOUT_ENABLED: "true", NODE_ENV: nodeEnv }), false, nodeEnv);
+  assert.equal(studioSalesOpen({ STUDIO_SALES_CONFIRMED: "true", NODE_ENV: nodeEnv }), false, nodeEnv);
 }
+assert.equal(studioSalesConfirmed({ STUDIO_SALES_CONFIRMED: "on" }), true);
+assert.equal(studioSalesConfirmed({}), false);
 
 // Structural guard: no commercial or payment code reads the legal-data state.
 function sourceFiles(path: string): string[] {
@@ -56,6 +62,7 @@ assert.equal(canDownloadOrderFiles("FREE"), true);
   const saved = { ...process.env };
   try {
     delete process.env.STUDIO_CHECKOUT_ENABLED;
+    process.env.STUDIO_SALES_CONFIRMED = "true";
     process.env.MERCADOPAGO_ACCESS_TOKEN = "APP_USR-test-token";
     process.env.MERCADOPAGO_ENV = "production";
     assert.equal(await purchasesAvailable(), false, "switch off");

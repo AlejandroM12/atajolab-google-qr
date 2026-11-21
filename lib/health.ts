@@ -3,7 +3,7 @@ import { legalDataComplete, pendingLegalFields } from "@/lib/legal";
 import { createMailSender } from "@/lib/mail";
 import { credentialShape } from "@/lib/payments/checkout-policy";
 import { rateLimitClientKeyFromRequest, readRateLimitTrustProxy } from "@/lib/client-ip";
-import { studioCheckoutAllowed, studioSalesOpen } from "@/lib/studio/checkout-access";
+import { studioCheckoutAllowed, studioSalesConfirmed, studioSalesOpen } from "@/lib/studio/checkout-access";
 
 const DB_TIMEOUT_MS = 3000;
 
@@ -76,7 +76,8 @@ export async function operatorHealth(request: Request, env: NodeJS.ProcessEnv = 
       orderAccessSecretSet: (env.ORDER_ACCESS_SECRET?.trim().length ?? 0) >= 32,
       cleanupSecretSet: (env.STUDIO_CLEANUP_SECRET?.trim().length ?? 0) >= 16,
       studioCheckoutEnabled: studioCheckoutAllowed(env),
-      // Same as studioCheckoutEnabled: legal data does not affect it.
+      studioSalesConfirmed: studioSalesConfirmed(env),
+      // Checkout switch AND operator confirmation; legal data does not affect it.
       studioSalesOpen: studioSalesOpen(env),
       rateLimitTrustProxy: readRateLimitTrustProxy(env),
       alertWebhookSet: Boolean(env.ALERT_WEBHOOK_URL?.trim()),

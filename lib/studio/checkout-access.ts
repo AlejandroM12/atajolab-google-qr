@@ -11,12 +11,21 @@ export function studioCheckoutAllowed(env: NodeJS.ProcessEnv = process.env): boo
 }
 
 /**
- * New sales need the commercial switch (`STUDIO_CHECKOUT_ENABLED`) and nothing else here.
- * The seller's legal data (`lib/legal.ts`) is deliberately not part of this decision: pending
- * "[COMPLETAR]" fields are shown on the legal pages but never disable checkout. Whether the
- * published terms are adequate to take payments is an operator decision made before turning
- * the switch on, not a technical lock. Payment safety lives in `lib/payments`.
+ * The operator's explicit go-live confirmation: STUDIO_SALES_CONFIRMED=true. It is set by hand after
+ * the controlled purchase works and the published terms were reviewed to take payments. It is a
+ * deliberate decision, not a check on the seller's legal data.
+ */
+export function studioSalesConfirmed(env: NodeJS.ProcessEnv = process.env): boolean {
+  const flag = (env.STUDIO_SALES_CONFIRMED ?? "").trim().toLowerCase();
+  return flag === "1" || flag === "true" || flag === "yes" || flag === "on";
+}
+
+/**
+ * New sales need the checkout switch (`STUDIO_CHECKOUT_ENABLED`) and the operator's confirmation
+ * (`STUDIO_SALES_CONFIRMED`). The seller's legal data (`lib/legal.ts`) is deliberately not part of
+ * this decision: pending "[COMPLETAR]" fields are shown on the legal pages but never disable
+ * checkout. Payment safety lives in `lib/payments`.
  */
 export function studioSalesOpen(env: NodeJS.ProcessEnv = process.env): boolean {
-  return studioCheckoutAllowed(env);
+  return studioCheckoutAllowed(env) && studioSalesConfirmed(env);
 }

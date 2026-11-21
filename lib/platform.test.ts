@@ -68,10 +68,13 @@ import { createHash } from "node:crypto";
 
 // --- Sales follow only the commercial switch, never the seller's legal data ----------------
 {
-  const on = { STUDIO_CHECKOUT_ENABLED: "true" };
+  const on = { STUDIO_CHECKOUT_ENABLED: "true", STUDIO_SALES_CONFIRMED: "true" };
   assert.equal(studioSalesOpen({ ...on, NODE_ENV: "production" }), true);
   assert.equal(studioSalesOpen({ ...on, NODE_ENV: "development" }), true);
   assert.equal(studioSalesOpen({ NODE_ENV: "production" }), false);
+  // The checkout switch alone is not enough: the operator confirms the go-live separately.
+  assert.equal(studioSalesOpen({ STUDIO_CHECKOUT_ENABLED: "true", NODE_ENV: "production" }), false);
+  assert.equal(studioSalesOpen({ STUDIO_SALES_CONFIRMED: "true", NODE_ENV: "production" }), false);
 }
 
 // --- Rate-limit keys: keyed hash, and spoofed headers cannot move the bucket -------------
